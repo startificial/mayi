@@ -2,6 +2,12 @@
 
 Oct 17, 2026 · @JJ
 
+See the [Go implementation plan](docs/implementation-plan.md) for the proposed architecture, delivery phases and verification strategy, and the [requirement delivery matrix](docs/requirement-matrix.md) for coverage of every requirement below.
+
+Engineering follows [AGENTS.md](AGENTS.md), the [canonical repository structure](docs/repository-structure.md), and the [dependency license policy](docs/dependency-policy.md). CI checks architecture boundaries, license evidence, formatting, tests and static analysis. Run `go run ./tools/checks`, `go test -race ./...` and `go vet ./...` locally with the pinned Go toolchain.
+
+The [ports-and-adapters CI rules](docs/architecture-enforcement.md) define the enforced boundaries and their limits. Run `go run ./tools/checks -only architecture` to check architecture independently.
+
 ## The problems
 
 A platform that lets users, third-party clients and AI agents act on its resources needs one authorization server that solves eight separate problems. Each is independent: solving one does not solve the others.

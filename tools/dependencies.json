@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "toolchain": {
+    "name": "go",
+    "version": "go1.27.0",
+    "licenses": [
+      "BSD-3-Clause"
+    ],
+    "source": "https://github.com/golang/go/blob/go1.27.0/LICENSE",
+    "review": "2026-10-17: official Go distribution root BSD-3-Clause license inspected; CI verifies the exact toolchain and license digest. Embedded third-party notices must also be reviewed when distributing the toolchain itself.",
+    "files": [
+      {
+        "path": "LICENSE",
+        "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+      }
+    ]
+  },
+  "modules": [],
+  "actions": [
+    {
+      "name": "actions/checkout",
+      "version": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "licenses": [
+        "Apache-2.0",
+        "ISC",
+        "MIT"
+      ],
+      "source": "https://github.com/actions/checkout/blob/3d3c42e5aac5ba805825da76410c181273ba90b1/LICENSE",
+      "review": "2026-10-17: root license and 24 upstream cached runtime dependency license records inspected; other labels for http-client/concat-map resolved from included MIT text. All upstream .licenses records retained.",
+      "files": [
+        {
+          "path": "tools/license-evidence/checkout.txt",
+          "sha256": "fd23735d5c5d532574ba2a2ef3b0be5a6fd4ae7574b846b5ba157708e207b6b8"
+        }
+      ]
+    },
+    {
+      "name": "actions/setup-go",
+      "version": "924ae3a1cded613372ab5595356fb5720e22ba16",
+      "licenses": [
+        "0BSD",
+        "Apache-2.0",
+        "ISC",
+        "MIT"
+      ],
+      "source": "https://github.com/actions/setup-go/blob/924ae3a1cded613372ab5595356fb5720e22ba16/LICENSE",
+      "review": "2026-10-17: root license and 46 upstream cached runtime dependency license records inspected; other labels for http-client/concat-map resolved from included MIT text. All upstream .licenses records retained.",
+      "files": [
+        {
+          "path": "tools/license-evidence/setup-go.txt",
+          "sha256": "1a98fce65f5554207d635379eae87f05506362c9a9d05566503c419d206290cc"
+        }
+      ]
+    }
+  ]
+}
