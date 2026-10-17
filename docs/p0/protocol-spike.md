@@ -47,7 +47,7 @@ The [23 pinned specifications](../../specs/manifest.yaml), [profiles](../../spec
 From the repository root, using the reviewed Go 1.27.0 compiler:
 
 ```sh
-go mod download
+go mod download all
 go run ./tools/checks
 go test -race -count=1 ./...
 go vet ./...

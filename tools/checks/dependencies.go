@@ -164,7 +164,7 @@ func validateModules(modules []goModule, approved []dependency, allowed map[stri
 			return fmt.Errorf("unreviewed module %s: add exact-version license evidence", key)
 		}
 		if mod.Dir == "" {
-			return fmt.Errorf("%s: source missing; run go mod download", key)
+			return fmt.Errorf("%s: source missing; run go mod download all", key)
 		}
 		if err := validateEvidence(dep, allowed, mod.Dir); err != nil {
 			return err

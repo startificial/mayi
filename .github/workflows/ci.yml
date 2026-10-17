@@ -33,7 +33,7 @@ jobs:
           check-latest: false
           cache: false
       - name: Download dependency source for license verification
-        run: go mod download
+        run: go mod download all
       - name: Enforce dependency license policy
         run: go run ./tools/checks -only licenses
       - name: Enforce ports and adapters
