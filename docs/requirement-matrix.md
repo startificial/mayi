@@ -2,15 +2,15 @@
 
 October 17, 2026 · Planned coverage, not implementation evidence
 
-This matrix covers all 156 requirements in [the README](../README.md): 110 MUSTs, 35 SHOULDs and 11 MAYs. It accompanies [the implementation plan](implementation-plan.md). Owners are component responsibilities, not named staff. Phase P6 is the first production gate; earlier phases are limited previews. All full requirements remain **Planned**; initial P0 work is in progress as documented below, without marking protocol or production behavior Verified.
+This matrix covers all 156 requirements in [the README](../README.md): 110 MUSTs, 35 SHOULDs and 11 MAYs. It accompanies [the implementation plan](implementation-plan.md). Owners are component responsibilities, not named staff. Phase P6 is the first production gate; earlier phases are limited previews. All full requirements remain **Planned**; P0 architecture/protocol work is complete as documented below, without marking protocol or production behavior Verified.
 
 The phase is the intended delivery or final acceptance phase. Cross-cutting work starts earlier; later flows must inherit existing controls. MUST acceptance conditions incorporate the interpretation decisions in the plan, which P0 must resolve. P7 schedules recommended extensions; P8 contains optional profiles. A MAY promoted earlier remains optional in the requirements baseline.
 
 During implementation, append evidence links to exact tests, CI artifacts, conformance runs and review results before changing a row to Verified. A test title or a dependency feature claim is not evidence.
 
-## Initial P0 evidence
+## P0 evidence
 
-The [P0 report](p0/protocol-spike.md) links the pinned specification manifest, accepted interpretation profiles, issuer/revocation/grant/exchange ADRs, initial threat model and executable issuance contract fixtures. This provides partial groundwork for OPS-9, ADM-1/2, CORE-1/5, GRANT-2/6 and LIFE-2/3. It does not complete those requirements: no protocol adapter, durable database, actual KMS signer, resource SDK or external security review has been verified.
+The [P0 report](p0/protocol-spike.md) links the pinned specification manifest, accepted interpretation profiles, issuer/revocation/grant/exchange ADRs, initial threat model and executable issuance contract fixtures. This provides partial groundwork for OPS-9, ADM-1/2, CORE-1/2/5/6/8, CLI client assertion authentication, GRANT-2/6, LIFE-2/3, BIND and OIDC. The report now includes actual PostgreSQL/RLS/race/failure tests, a real OpenBao Transit signer, a service-owned Fosite callback and DPoP/OIDC/exchange hook evidence. These prototypes do not complete full production requirements: the server listener, resource SDK, login/consent, production operations and external security/conformance review remain planned.
 
 ## CORE
 

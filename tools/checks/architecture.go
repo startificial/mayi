@@ -22,7 +22,7 @@ func sourceLayer(path string) string {
 	for _, prefix := range []string{
 		"internal/domain", "internal/services", "internal/adapters/inbound/web",
 		"internal/adapters/inbound", "internal/adapters/outbound", "internal/app",
-		"cmd/mayi", "pkg/resource", "tools/checks", "tests", "examples",
+		"cmd/mayi", "pkg/resource", "tools/checks", "tools/p0", "tests", "examples",
 	} {
 		if within(path, prefix) {
 			return prefix
@@ -54,7 +54,7 @@ func importAllowed(source, imported string, test bool) bool {
 	if !isLocal {
 		external := strings.Contains(strings.Split(imported, "/")[0], ".") || imported == "C"
 		switch layer {
-		case "internal/domain", "internal/services", "internal/adapters/inbound/web", "tools/checks", "cmd/mayi", "pkg/resource":
+		case "internal/domain", "internal/services", "internal/adapters/inbound/web", "tools/checks", "tools/p0", "cmd/mayi", "pkg/resource":
 			if external {
 				return false
 			}
@@ -97,6 +97,8 @@ func importAllowed(source, imported string, test bool) bool {
 		return sourceLayer(local) != ""
 	case "tools/checks":
 		return within(local, "tools/checks")
+	case "tools/p0":
+		return false // Service runner is standard-library-only, with no application imports.
 	}
 	return false
 }

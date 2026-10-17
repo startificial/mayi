@@ -39,13 +39,15 @@ type Credential struct {
 	IssuedAt                                time.Time
 	ExpiresAt                               time.Time
 	FamilyDeadline                          time.Time
+	OriginCode, FamilyID, ParentIssuanceID  string
 	Consumed                                bool
 }
 type GrantState struct {
-	Revision      grants.Revision
-	CurrentScopes []string
-	Revoked       bool
-	PolicyVersion uint64
+	Revision              grants.Revision
+	CurrentScopes         []string
+	Revoked               bool
+	PolicyVersion         uint64
+	AuthorizationDeadline time.Time
 }
 type Material struct{ ID, RefreshSecret, RefreshHash string }
 type Issuance struct {
@@ -130,7 +132,7 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 		if err != nil {
 			return err
 		}
-		var deadlines []time.Time
+		deadlines := []time.Time{state.AuthorizationDeadline}
 		if cmd.Kind == RefreshToken {
 			deadlines = append(deadlines, credential.FamilyDeadline)
 		}

@@ -1,6 +1,6 @@
 # Canonical repository structure
 
-Mayi uses a modular monolith with ports and adapters. This is the target layout; the initial P0 domain/service contract, crypto adapter and composition packages now exist alongside documentation and CI tooling. No command/HTTP server or production storage/signer exists yet. Add feature directories when implementing their contents. Keep a single root Go module, `github.com/startificial/mayi`.
+Mayi uses a modular monolith with ports and adapters. This is the target layout; the P0 domain/service contracts, Fosite token callback, PostgreSQL adapter, remote signer/proof adapters and composition packages now exist alongside documentation and CI tooling. There is no HTTP listener or production deployment yet. Add feature directories when implementing their contents. Keep a single root Go module, `github.com/startificial/mayi`.
 
 ```text
 .
@@ -70,6 +70,9 @@ Mayi uses a modular monolith with ports and adapters. This is the target layout;
 │   └── testdata/                   Synthetic fixtures, no production credentials
 ├── tools/
 │   ├── checks/                     Standard-library-only policy checker and tests
+│   ├── p0/                         Standard-library-only isolated service/test runner
+│   ├── services.json               Exact service source pins, hashes and notices
+│   ├── forbidden-packages.json     Unsafe/unneeded package reachability denylist
 │   ├── dependencies.json           Exact-version license evidence
 │   └── license-policy.json         Machine-readable SPDX allowlist
 ├── specs/                          Pinned specifications and capability profiles
@@ -133,3 +136,5 @@ Keep domain/service tests next to their code; place database and end-to-end suit
 `go run ./tools/checks` enforces the [architecture CI rules](architecture-enforcement.md) and dependency license policy. The architecture gate analyzes source, public API type references, and the local production import graph, including generated/build-tagged source. It requires service-owned ports and adapter assertions, prevents hidden global wiring and ambient effects in pure layers, and checks the SDK's transitive isolation. Unit tests deliberately introduce violations and exercise legitimate constructor, sentinel-error, embedded-asset and generated-helper patterns. Authorization semantics, transport limits, transaction guarantees and service reuse still require behavior tests and review.
 
 Do not create empty directories to mirror the diagram. The first production slice should introduce only its command, composition root, domain/service packages, and required adapters. A new layer or public package requires updating this document and its CI checks together.
+
+`tools/p0/**` is an explicit tooling boundary: it may use the standard library, process execution and network I/O to build reviewed test services. It cannot import application layers or external Go libraries. The architecture checker enforces this exception independently of production composition rules.

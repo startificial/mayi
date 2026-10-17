@@ -8,6 +8,14 @@
     "BSD-3-Clause",
     "PostgreSQL",
     "ISC",
-    "MPL-2.0"
+    "MPL-2.0",
+    "CC0-1.0",
+    "Unicode-DFS-2016",
+    "TCL",
+    "Spencer-94",
+    "Unlicense",
+    "Zlib",
+    "WTFPL",
+    "FSFUL"
   ]
 }

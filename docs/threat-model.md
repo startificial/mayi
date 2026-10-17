@@ -21,13 +21,13 @@ Scope: standalone authorization server, browser login/consent, upstream identity
 
 | Threat | Control / failure rule | Evidence now; remaining work |
 | --- | --- | --- |
-| Tenant/issuer confusion or guessed object IDs | Trusted scope plus scoped port lookup, exact stored ownership checks, composite SQL keys | P0 denial/call-order tests; SQL/routing/key isolation in P1. |
+| Tenant/issuer confusion or guessed object IDs | Trusted scope plus scoped port lookup, exact stored ownership checks, composite SQL keys | P0 denial/call-order tests; real SQL/RLS isolation now tested; routing and published key isolation remain P1. |
 | Consent expansion inflates old credentials | Exact revision and predecessor ceiling, current policy intersection | P0 immutable-revision and refresh-successor attenuation tests. |
-| Code/refresh races mint duplicates | One serialized transaction, unique consumed state and issuance IDs; authenticated replay commits invalidation | P0 transaction-double concurrency/replay tests; multi-connection PostgreSQL/crash proof in P1/P2. |
-| Attacker triggers victim revocation | Verify authenticated client, resource, sender key and S256 before replay mutation | P0 wrong-client/key/verifier/tenant tests. Real client authentication and DPoP signature/replay validators remain P2/P3. |
-| Signer/storage/audit fails after state write | No response before commit; atomic rollback, no credential leaks or best-effort cleanup | P0 injected signer/audit/commit/cancellation failures and response-order fixture; real KMS/DB failure proof pending. |
+| Code/refresh races mint duplicates | One serialized transaction, unique consumed state and issuance IDs; authenticated replay commits invalidation | P0 memory and real multi-connection PostgreSQL concurrency/replay tests, plus backend termination/rollback/retry; whole-cluster recovery remains P6. |
+| Attacker triggers victim revocation | Verify authenticated client, resource, sender key and S256 before replay mutation | P0 wrong-client/key/verifier/tenant tests. Fosite client assertion/replay and real DPoP signature/SQL replay prototypes now run; production endpoint composition remains P2/P3. |
+| Signer/storage/audit fails after state write | No response before commit; atomic rollback, no credential leaks or best-effort cleanup | P0 injected signer/audit/commit/cancellation failures and response-order fixture; actual Transit credential revocation, audit-trigger and deferred commit failures now tested. |
 | Stale authorization during policy/revoke change | Policy/grant/family locks or equivalent compare-and-swap through commit; online status after revocation acknowledgement | P0 version mismatch/revoked-root tests; live resource and distributed consistency tests pending. |
-| Captured bearer token is replayed | Short lives, exact audience, holder-key proof and atomic proof replay state | P0 exact audience/key-context checks only; cryptographic DPoP and online status are pending. |
+| Captured bearer token is replayed | Short lives, exact audience, holder-key proof and atomic proof replay state | P0 cryptographic DPoP/nonce/ath and SQL replay checks now run; full resource middleware/online status remains P2/P3. |
 | Malicious gateway expands authority | Declared resource-recipient edge, narrow scope map, preserved actors/ancestry and expiry; no generic rebinding | ADR 0004; P4 implementation and topology fixtures pending. |
 | CIMD/JWKS/IdP metadata fetch reaches internal service | Restricted egress: HTTPS, DNS/IP validation on actual connection, bounded redirects/time/size; reject token-supplied key URLs | Design only; constrained egress adapter and DNS-rebinding tests in P3. |
 | Login/consent injection or confused redirect | Validated redirect snapshots, strict parsing, nonce/state/S256, CSP/frame protections, no unsafe error redirects | P0 S256 and original-redirect contract; browser/HTTP tests pending. |
@@ -42,3 +42,7 @@ The initial threat model trusts the database and KMS administration boundary. Ho
 The strict profile trades availability for current authorization: status/replay-authority outages deny access. Long operations, stream termination, region failover and upstream deprovisioning require explicit consistency contracts; the initial contract does not promise to undo requests already authorized.
 
 Before the P0 exit gate, choose and exercise the protocol integration, prove a real KMS signing path, and inspect the exact admitted dependency graph. Before production, complete tenant/transaction/adversarial/conformance tests and an external security review with tracked remediation (SEC-12). This initial model is published review input, not security certification.
+
+## P0 infrastructure limits
+
+The local source-built OpenBao dev server demonstrates the remote signing API and non-exportable key configuration. It is not a hardware boundary and does not resist a privileged host operator reading memory. Production TLS, credentials, seal/storage, HA and key administration remain P1/P6. The PostgreSQL proof terminates a backend and tests transactional retry, not a whole-cluster/zone-loss recovery. The exchange service only plans a disabled one-hop profile; no subject-token validator or exchange token issuance is enabled. See ADR 0005 and the P0 evidence report.

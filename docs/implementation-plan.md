@@ -4,15 +4,15 @@ October 17, 2026 · Proposed architecture and delivery plan
 
 Build Mayi as a standalone Go authorization server with a durable grant model, explicit tenant boundaries, and a companion resource-server enforcement library. Use an existing Go OAuth and OIDC implementation for protocol machinery. Own the policy, persistence, delegation, revocation, federation, and operational behavior that distinguish this project.
 
-The repository contains [the requirements README](../README.md), architecture documentation, a Go module, CI policy checks and the initial [P0 contract implementation](p0/protocol-spike.md). P0 is in progress: domain/service prototypes, S256 verification and transaction-double tests exist; the protocol server, real storage and production signer are not implemented. Its 156 requirements comprise 110 MUSTs, 35 SHOULDs, and 11 MAYs. [The requirement matrix](requirement-matrix.md) assigns every one a delivery phase, implementation owner, and acceptance condition. Everything in that matrix is planned, not implemented or verified.
+The repository contains [the requirements README](../README.md), architecture documentation, a Go module, CI policy checks and the initial [P0 contract implementation](p0/protocol-spike.md). P0 is complete: Fosite is selected, and real PostgreSQL/OpenBao tests prove the transaction/signing boundaries. Production process setup, discovery, login/consent and full protocol delivery remain P1 onward. Its 156 requirements comprise 110 MUSTs, 35 SHOULDs, and 11 MAYs. [The requirement matrix](requirement-matrix.md) assigns every one a delivery phase, implementation owner, and acceptance condition. Everything in that matrix is planned, not implemented or verified.
 
-[AGENTS.md](../AGENTS.md), the [canonical repository structure](repository-structure.md), and the [dependency policy](dependency-policy.md) govern implementation. Allowed software licenses are MIT, Apache-2.0, 0BSD, BSD-2-Clause, BSD-3-Clause, PostgreSQL, ISC and MPL-2.0. Named libraries remain candidates until their exact versions and transitive dependencies pass admission.
+[AGENTS.md](../AGENTS.md), the [canonical repository structure](repository-structure.md), and the [dependency policy](dependency-policy.md) govern implementation. Allowed software licenses are MIT, Apache-2.0, 0BSD, BSD-2-Clause, BSD-3-Clause, PostgreSQL, ISC, MPL-2.0, CC0-1.0, Unicode-DFS-2016, TCL, Spencer-94, Unlicense, Zlib, WTFPL and FSFUL. New libraries remain candidates until their exact versions and transitive dependencies pass admission; the selected P0 components are now inventoried.
 
 The recommended first release supports all README MUSTs. Earlier milestones are development previews with explicitly smaller capability sets. SHOULDs have scheduled follow-up work; MAYs remain separate optional projects. Do not call a preview README-complete or claim certification from a dependency's certification.
 
 ## 1. Decisions to make first
 
-The P0 baseline decisions for issuers, online revocation, grant revisions and gateway exchange are recorded in [ADRs 0001–0004](adr/0001-tenant-issuers.md). Library selection remains open in the [spike report](p0/protocol-spike.md). Record subsequent changes as architecture decisions with consequences and tests.
+The P0 baseline decisions for issuers, online revocation, grant revisions and gateway exchange are recorded in [ADRs 0001–0004](adr/0001-tenant-issuers.md). Fosite selection is accepted in [ADR 0005](adr/0005-fosite-and-local-transit.md), with evidence and limits in the [spike report](p0/protocol-spike.md). Record subsequent changes as architecture decisions with consequences and tests.
 
 | Decision | Proposed default | Reason and consequence |
 | --- | --- | --- |
@@ -24,7 +24,7 @@ The P0 baseline decisions for issuers, online revocation, grant revisions and ga
 | Access tokens | RFC 9068 JWTs, single audience; optional opaque format | Both formats use the same authorization and online revocation decision. JWTs are not implicitly offline credentials. |
 | Authentication | Upstream OIDC first; local sessions; step-up delegated to configured capable IdPs | Avoids building password enrollment, recovery, and MFA infrastructure in the first release. Self-hosting can use a local upstream IdP. |
 | Grants | Durable root authorization plus immutable permission revisions and issuance ceilings | Consent expansion does not expand credentials already issued. Revoking the root invalidates every revision and descendant. |
-| Protocol implementation | Evaluate Fosite first against a fixed acceptance spike; compare ZITADEL OIDC | Select on extension and transaction hooks, not feature counts alone. |
+| Protocol implementation | Fosite v0.49.0 selected by ADR 0005 after the P0 comparison | Explicit protocol handlers delegate to service-owned transaction and signing ports. |
 | Drafts | Pinned revisions and fixtures; upgrades are explicit changes | A dependency update must not silently change the public authorization contract. |
 | Browser UI | Go-rendered login, consent, connected apps, and initial admin UI | Minimizes first-release frontend and token-storage complexity. |
 
@@ -362,7 +362,7 @@ Treat keys, observability, audit, tenant isolation and negative tests as part of
 ### First implementation backlog
 
 1. **Pin the contract.** Add `specs/manifest.yaml`, the threat model, capability profiles, and ADRs for tenant issuers, online revocation, grant revisions, and gateway binding. Resolve the interpretation table.
-2. **Choose the protocol adapter.** Run the same fixed P0 fixtures against Fosite and ZITADEL OIDC. Produce a versioned gap report and select one.
+2. **Choose the protocol adapter.** Complete in P0: Fosite selected with executable hooks and a versioned comparison/gap report; ZITADEL rejected before full integration.
 3. **Create the service skeleton.** Extend the existing minimal Go module and CI checks with composition, services, adapters, configuration validation, HTTP limits, health/readiness endpoints, reviewed local PostgreSQL and migrations.
 4. **Implement storage invariants.** Add tenant keys, authorization roots/revisions, transaction-bound codes, families, lineage, replay entries and transactional outbox.
 5. **Integrate the signer.** Prove real KMS signing, public-key conversion/JWKS, overlap rotation and failure behavior.

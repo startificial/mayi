@@ -182,3 +182,27 @@ func TestActionPins(t *testing.T) {
 		})
 	}
 }
+
+func TestForbiddenPackageBoundary(t *testing.T) {
+	prefixes := []string{"golang.org/x/crypto/openpgp", "github.com/docker/docker"}
+	for _, path := range []string{"golang.org/x/crypto/openpgp", "golang.org/x/crypto/openpgp/packet", "github.com/docker/docker/client [test]"} {
+		if !forbiddenPackage(path, prefixes) {
+			t.Errorf("unsafe path allowed: %s", path)
+		}
+	}
+	for _, path := range []string{"golang.org/x/crypto/sha3", "github.com/docker/dockerish"} {
+		if forbiddenPackage(path, prefixes) {
+			t.Errorf("unrelated path rejected: %s", path)
+		}
+	}
+}
+func TestP0RunnerStaysStandardLibraryOnly(t *testing.T) {
+	if !importAllowed("tools/p0/main.go", "os/exec", false) {
+		t.Fatal("runner cannot start isolated services")
+	}
+	for _, path := range []string{"github.com/jackc/pgx/v5", modulePath + "/internal/services/tokens", modulePath + "/internal/app"} {
+		if importAllowed("tools/p0/main.go", path, false) {
+			t.Fatalf("runner imported application/dependency code: %s", path)
+		}
+	}
+}

@@ -218,6 +218,9 @@ func validateActions(workflows []string, approved []dependency) error {
 }
 
 func checkDependencies(root string) error {
+	if err := checkServices(root); err != nil {
+		return err
+	}
 	var policy licensePolicy
 	var deps inventory
 	if err := readJSON(filepath.Join(root, "tools/license-policy.json"), &policy); err != nil {
@@ -316,5 +319,8 @@ func checkDependencies(root string) error {
 	if err := validateModules(modules, deps.Modules, allowed); err != nil {
 		return err
 	}
-	return validateMPLNotices(root, deps.Modules)
+	if err := validateMPLNotices(root, deps.Modules); err != nil {
+		return err
+	}
+	return checkCompiledPackages(root)
 }

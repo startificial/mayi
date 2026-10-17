@@ -16,7 +16,7 @@ jobs:
   repository-checks:
     name: Architecture, licenses and Go checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 45
     env:
       GOTOOLCHAIN: local
       GOWORK: 'off'
@@ -51,3 +51,5 @@ jobs:
         run: go test -race -count=1 ./...
       - name: Vet
         run: go vet ./...
+      - name: Prove P0 against isolated PostgreSQL and OpenBao
+        run: go run ./tools/p0

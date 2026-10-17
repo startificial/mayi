@@ -191,7 +191,7 @@ func newFixture(t *testing.T, kind string) *fixture {
 		t.Fatal(err)
 	}
 	credential := tokens.Credential{Scope: scope, Hash: "original-hash", Kind: kind, ClientID: "client:web", Resource: "https://api.example/a", GrantID: "grant-1", Revision: 7, RedirectURI: "https://client.example/callback", IssuedAt: now, CeilingScopes: []string{"read", "write"}, PKCEChallenge: challenge, BindingThumbprint: "dpop-key", ExpiresAt: now.Add(60 * time.Second), FamilyDeadline: now.Add(2 * time.Minute)}
-	state := memoryState{credentials: map[string]tokens.Credential{credential.Hash: credential}, grant: tokens.GrantState{Revision: revision, CurrentScopes: []string{"read", "write"}, PolicyVersion: 1}}
+	state := memoryState{credentials: map[string]tokens.Credential{credential.Hash: credential}, grant: tokens.GrantState{Revision: revision, CurrentScopes: []string{"read", "write"}, PolicyVersion: 1, AuthorizationDeadline: now.Add(time.Hour)}}
 	f := &fixture{policy: &policy{version: 1}, store: &store{state: state}, signer: &signer{}, material: &material{}, now: now, cmd: tokens.Command{Caller: tokens.Caller{Scope: scope, ClientID: credential.ClientID, BindingThumbprint: credential.BindingThumbprint}, Kind: kind, CredentialHash: credential.Hash, Resource: credential.Resource, Verifier: verifier, Scopes: []string{"read"}}}
 	f.service, err = app.NewIssuance(f.policy, fixedClock{now}, f.signer, f.material, f.store, 5*time.Minute)
 	if err != nil {

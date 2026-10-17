@@ -24,6 +24,8 @@ func main() {
 			err = checkSpecifications(abs)
 		case "licenses":
 			err = checkDependencies(abs)
+		case "services":
+			err = checkServices(abs)
 		default:
 			err = fmt.Errorf("unknown check %q", *only)
 		}

@@ -80,3 +80,9 @@ CI cannot establish the following merely from imports, names or source layout:
 Keep these as service-level behavioral gates. Use denial tests whose protected-resource ports fail if called before successful authorization, foreign-tenant cases, meaningful input-validation cases, and transaction/concurrency tests. Do not replace them with checks for a function named `Authorize`, a magic annotation, or an arbitrary handler line limit.
 
 The workflow is a CI failure gate. Repository branch protection must separately require **Architecture, licenses and Go checks** to prevent merges after failure. This implementation does not change GitHub branch protection or push the working tree.
+
+## P0 service tooling and protocol boundary
+
+`tools/p0/**` is a dedicated standard-library-only tooling boundary. It can perform I/O and start reviewed local service processes, but it cannot import application layers or external Go modules. CI fixtures reject either kind of import. This does not relax the production composition boundary in `internal/app`.
+
+The Fosite token callback depends only on the token service and domain scope. Its committed service result becomes the response. The PostgreSQL adapter implements the service-owned unit-of-work, authorization and proof-replay ports with static assertions; the Transit and proof adapters likewise implement service-owned ports. No database handle crosses the inbound boundary. Tests prove authorization order, real policy/client/grant locks through remote signing, and no returned credential on transaction failure. These behavioral properties supplement the static architecture gate.

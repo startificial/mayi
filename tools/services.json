@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "artifacts": [
+    {
+      "name": "postgresql",
+      "version": "17.11",
+      "licenses": [
+        "PostgreSQL",
+        "TCL",
+        "Spencer-94",
+        "FSFUL"
+      ],
+      "source": "https://ftp.postgresql.org/pub/source/v17.11/postgresql-17.11.tar.bz2",
+      "sha256": "dd27f2b3c59e73ed14aa3324901242bf69a032a6347805f274e6260322d42979",
+      "review": "Source build without ICU/readline/compression/NLS, system timezone data. Generated configure is shipped by PostgreSQL; no Autoconf tool installed. Pre-existing platform compiler/make/Perl/Bison/Flex/shell are inherited infrastructure, not repository-installed dependencies. PostgreSQL 17 requires Bison/Flex even from release source. Generated configure uses FSFUL; The bundled X11 install-sh helper is not executed; platform mkdir/install are explicitly selected instead. It is not redistributed by Mayi. config.guess/config.sub and generated Bison parser headers grant additional permission to distribute under PostgreSQL terms; that branch is selected and full notice headers are retained. No additional generator is installed. Generated parser output uses the explicit permission for PostgreSQL distribution terms.",
+      "files": [
+        {
+          "path": "tools/license-evidence/postgresql.txt",
+          "sha256": "305215b0e120bcda7d4076ee48d8916b2c407fff10b6a85a2b2580a8edeaef07"
+        }
+      ]
+    },
+    {
+      "name": "openbao",
+      "version": "2.7.1",
+      "licenses": [
+        "Apache-2.0",
+        "BSD-2-Clause",
+        "BSD-3-Clause",
+        "CC0-1.0",
+        "ISC",
+        "MIT",
+        "MPL-2.0",
+        "Unicode-DFS-2016"
+      ],
+      "source": "https://api.github.com/repos/openbao/openbao/tarball/a5db72cef75c24b920ade02065b18dd8eb666bac",
+      "sha256": "a0a7d9fe3660fd26fd8e41553b08051d60bbffda67bba05b9db9c253a3f6ceca",
+      "review": "Unmodified exact source; build CGO_ENABLED=0 without ui tag. Dev in-memory server, no cloud seal/storage. All linked source modules and local upstream replacements reviewed, source links retained. No production/HSM certification.",
+      "files": [
+        {
+          "path": "tools/license-evidence/openbao-components.txt",
+          "sha256": "6394585d855232f97ac0462ff6991361e90a990fe680f4e606434052e9c92be1"
+        },
+        {
+          "path": "docs/p0/openbao-components.json",
+          "sha256": "46a071af0c15e287f143dfe86876a9b843a99d90489e8a95363418a8683ed200"
+        },
+        {
+          "path": "docs/p0/reedsolomon-source-equivalence.json",
+          "sha256": "d1e146103abe89442565ebafcf076745d69c9dcff1e30eb7142cd856690f810d"
+        }
+      ]
+    }
+  ]
+}

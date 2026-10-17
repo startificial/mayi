@@ -8,7 +8,7 @@ Engineering follows [AGENTS.md](AGENTS.md), the [canonical repository structure]
 
 The [ports-and-adapters CI rules](docs/architecture-enforcement.md) define the enforced boundaries and their limits. Run `go run ./tools/checks -only architecture` to check architecture independently.
 
-Implementation has started with the [P0 contract and protocol-spike report](docs/p0/protocol-spike.md): immutable grant ceilings, issuance ports, S256 verification and adversarial transaction fixtures. The protocol server and production adapters are not implemented yet.
+P0 is complete: [the protocol-spike report](docs/p0/protocol-spike.md) records Fosite selection, a service-owned protocol callback, real PostgreSQL transactions and OpenBao Transit signing, plus DPoP/OIDC/exchange hook evidence. No production HTTP server is enabled; later delivery phases and full README requirements remain planned.
 
 ## The problems
 

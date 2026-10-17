@@ -1,0 +1,201 @@
+{
+  "reviewed": "2026-10-17",
+  "source": "https://api.osv.dev/v1/querybatch",
+  "scope": "Exact complete selected Mayi module graph. Package reachability verified independently; this is not a service binary vulnerability certification.",
+  "findings": [
+    {
+      "module": "filippo.io/edwards25519",
+      "version": "v1.1.0",
+      "advisories": [
+        "GHSA-fw7p-63qq-7hpr",
+        "GO-2026-4503"
+      ],
+      "forbidden_package_prefix": "filippo.io/edwards25519",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    },
+    {
+      "module": "github.com/docker/cli",
+      "version": "v28.0.1+incompatible",
+      "advisories": [
+        "GHSA-p436-gjf2-799p",
+        "GO-2026-4610"
+      ],
+      "forbidden_package_prefix": "github.com/docker/cli",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    },
+    {
+      "module": "github.com/docker/docker",
+      "version": "v28.0.1+incompatible",
+      "advisories": [
+        "GHSA-pxq6-2prw-chj9",
+        "GHSA-rg2x-37c3-w2rh",
+        "GHSA-vp62-88p7-qqf5",
+        "GHSA-x86f-5xw2-fm2r",
+        "GO-2026-4883",
+        "GO-2026-4887",
+        "GO-2026-5617",
+        "GO-2026-5668",
+        "GO-2026-5746"
+      ],
+      "forbidden_package_prefix": "github.com/docker/docker",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    },
+    {
+      "module": "github.com/elazarl/goproxy",
+      "version": "v0.0.0-20221015165544-a0805db90819",
+      "advisories": [
+        "GHSA-4r8x-2p26-976p",
+        "GO-2023-1941"
+      ],
+      "forbidden_package_prefix": "github.com/elazarl/goproxy",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    },
+    {
+      "module": "github.com/jackc/pgproto3/v2",
+      "version": "v2.3.3",
+      "advisories": [
+        "GHSA-jqcq-xjh3-6g23",
+        "GO-2026-4518"
+      ],
+      "forbidden_package_prefix": "github.com/jackc/pgproto3/v2",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    },
+    {
+      "module": "github.com/jackc/pgx/v4",
+      "version": "v4.18.3",
+      "advisories": [
+        "GHSA-j88v-2chj-qfwx",
+        "GO-2026-5004"
+      ],
+      "forbidden_package_prefix": "github.com/jackc/pgx/v4",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    },
+    {
+      "module": "github.com/klauspost/compress",
+      "version": "v1.17.11",
+      "advisories": [
+        "GO-2026-5841"
+      ],
+      "forbidden_package_prefix": "github.com/klauspost/compress",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    },
+    {
+      "module": "github.com/moby/sys/user",
+      "version": "v0.3.0",
+      "advisories": [
+        "GHSA-mjcv-p78q-w5fw"
+      ],
+      "forbidden_package_prefix": "github.com/moby/sys/user",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    },
+    {
+      "module": "github.com/opencontainers/runc",
+      "version": "v1.2.5",
+      "advisories": [
+        "GHSA-9493-h29p-rfm2",
+        "GHSA-cgrx-mc8f-2prm",
+        "GHSA-qw9x-cqr3-wc7r",
+        "GHSA-xjvp-4fhw-gc47",
+        "GO-2025-4096",
+        "GO-2025-4097",
+        "GO-2025-4098",
+        "GO-2026-5761"
+      ],
+      "forbidden_package_prefix": "github.com/opencontainers/runc",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    },
+    {
+      "module": "github.com/rabbitmq/amqp091-go",
+      "version": "v1.9.0",
+      "advisories": [
+        "GHSA-27gv-rfvv-22mv",
+        "GHSA-33mj-cw25-m34h",
+        "GHSA-465g-fh3v-9jw4",
+        "GHSA-4v58-74mf-rjx3",
+        "GHSA-6c5v-hqjr-5xxp",
+        "GHSA-c5pq-fr2g-9jpf",
+        "GHSA-j497-x9hr-x34x",
+        "GHSA-r9c8-gcjp-xfwh",
+        "GHSA-rm6m-hrcw-jw33",
+        "GHSA-w6r9-248c-frg8",
+        "GHSA-xwwf-m8fg-p9q2",
+        "GO-2026-6372",
+        "GO-2026-6491",
+        "GO-2026-6492",
+        "GO-2026-6493",
+        "GO-2026-6494",
+        "GO-2026-6496",
+        "GO-2026-6498",
+        "GO-2026-6500",
+        "GO-2026-6502",
+        "GO-2026-6503"
+      ],
+      "forbidden_package_prefix": "github.com/rabbitmq/amqp091-go",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    },
+    {
+      "module": "github.com/yuin/goldmark",
+      "version": "v1.4.13",
+      "advisories": [
+        "GO-2026-5320"
+      ],
+      "forbidden_package_prefix": "github.com/yuin/goldmark",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    },
+    {
+      "module": "go.etcd.io/etcd/client/pkg/v3",
+      "version": "v3.5.9",
+      "advisories": [
+        "GO-2026-6107"
+      ],
+      "forbidden_package_prefix": "go.etcd.io/etcd/client/pkg/v3",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    },
+    {
+      "module": "go.mongodb.org/mongo-driver",
+      "version": "v1.17.3",
+      "advisories": [
+        "GHSA-cp6g-7hqx-qxhp",
+        "GO-2026-5327"
+      ],
+      "forbidden_package_prefix": "go.mongodb.org/mongo-driver",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    },
+    {
+      "module": "golang.org/x/crypto",
+      "version": "v0.58.0",
+      "advisories": [
+        "GO-2026-5932"
+      ],
+      "forbidden_package_prefix": "golang.org/x/crypto/openpgp",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    },
+    {
+      "module": "golang.org/x/image",
+      "version": "v0.0.0-20190802002840-cff245a6509b",
+      "advisories": [
+        "GHSA-44p7-9xx4-hf2g",
+        "GHSA-9phm-fm57-rhg8",
+        "GHSA-j3p8-6mrq-6g7h",
+        "GHSA-q675-qj96-32m9",
+        "GHSA-qgc7-mgm3-q253",
+        "GHSA-x92r-3vfx-4cv3",
+        "GO-2023-1572",
+        "GO-2023-1989",
+        "GO-2023-1990",
+        "GO-2024-2937",
+        "GO-2026-4815",
+        "GO-2026-4961",
+        "GO-2026-4962",
+        "GO-2026-5031",
+        "GO-2026-5032",
+        "GO-2026-5061",
+        "GO-2026-5062",
+        "GO-2026-5066",
+        "GO-2026-6222"
+      ],
+      "forbidden_package_prefix": "golang.org/x/image",
+      "disposition": "Not in the compiled production/test package graph. CI rejects import reachability; no advisory suppression."
+    }
+  ]
+}

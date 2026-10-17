@@ -12,4 +12,4 @@ This profile trusts the gateway to enforce the user's original request proof and
 
 Generic proof-of-possession exchange, cross-tenant exchange, arbitrary foreign issuers, browser clients presenting another resource's token and undeclared rebinding are disabled. RFC 8693 plus RFC 9449 alone does not define or prove this topology.
 
-Required P4 evidence: live root-status lookup; proof-key possession; recipient/audience checks; allowed-edge and scope-map tests; ancestor revocation; bounded actor chains; gateway-to-resource end-to-end interoperability and denial cases. P0 has not implemented this flow. This ADR resolves the trust model without advertising the capability.
+Required P4 evidence: live root-status lookup; proof-key possession; recipient/audience checks; allowed-edge and scope-map tests; ancestor revocation; bounded actor chains; gateway-to-resource end-to-end interoperability and denial cases. P0 demonstrates only a disabled one-hop planning/extension hook, with no exchange credential issuance or live subject-token adapter. This ADR resolves the trust model without advertising the capability.

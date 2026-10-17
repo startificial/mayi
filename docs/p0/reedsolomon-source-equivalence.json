@@ -1,0 +1,30 @@
+{
+  "licensed_commit": "c5f4bc9af094852b52e593a5f964647c43028c51",
+  "files": [
+    {
+      "path": "binary/binary.go",
+      "release_sha256": "8b9cb759c02c011a0b1b40c482dc6f0f917a99b855f18498b36522421e942e88",
+      "licensed_commit_sha256": "8b9cb759c02c011a0b1b40c482dc6f0f917a99b855f18498b36522421e942e88",
+      "identical": true
+    },
+    {
+      "path": "galois_field.go",
+      "release_sha256": "b8984e643ac441511af6e173ec7e3753c9155a3c69c0d54ef80c06b40fbe8e9d",
+      "licensed_commit_sha256": "b8984e643ac441511af6e173ec7e3753c9155a3c69c0d54ef80c06b40fbe8e9d",
+      "identical": true
+    },
+    {
+      "path": "polynomial.go",
+      "release_sha256": "25e74e0c4f204e67f9b8f5b96f0b3221aeb56365eaabee14121a9642329ff9ec",
+      "licensed_commit_sha256": "25e74e0c4f204e67f9b8f5b96f0b3221aeb56365eaabee14121a9642329ff9ec",
+      "identical": true
+    },
+    {
+      "path": "reedsolomon.go",
+      "release_sha256": "b4fdd14871c3bc0deb767bfa62231b540fe768ec61a111d3837358b1ca15a0f7",
+      "licensed_commit_sha256": "b4fdd14871c3bc0deb767bfa62231b540fe768ec61a111d3837358b1ca15a0f7",
+      "identical": true
+    }
+  ],
+  "license": "MIT License\n\nCopyright (c) 2026 yeqown\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\naUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE."
+}

@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "prefixes": [
+    "filippo.io/edwards25519",
+    "github.com/docker/cli",
+    "github.com/docker/docker",
+    "github.com/elazarl/goproxy",
+    "github.com/jackc/pgproto3/v2",
+    "github.com/jackc/pgx/v4",
+    "github.com/klauspost/compress",
+    "github.com/moby/sys/user",
+    "github.com/opencontainers/runc",
+    "github.com/rabbitmq/amqp091-go",
+    "github.com/yuin/goldmark",
+    "go.etcd.io/etcd/client/pkg/v3",
+    "go.mongodb.org/mongo-driver",
+    "golang.org/x/crypto/openpgp",
+    "golang.org/x/image",
+    "github.com/go-gl/glfw",
+    "github.com/BurntSushi/xgb"
+  ]
+}
