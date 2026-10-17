@@ -28,7 +28,22 @@ func ValidURI(s string) bool {
 			return false
 		}
 	}
-	authority, _, _ := strings.Cut(strings.TrimPrefix(s, "https://"), "/")
+	authority, path, _ := strings.Cut(strings.TrimPrefix(s, "https://"), "/")
+	// This P1 profile accepts URI path characters, not raw IRI or malformed
+	// escapes. Apply the same invariant to in-process and HTTP callers.
+	for i := 0; i < len(path); i++ {
+		c := path[i]
+		if c == '%' {
+			if i+2 >= len(path) || !strings.ContainsRune("0123456789abcdefABCDEF", rune(path[i+1])) || !strings.ContainsRune("0123456789abcdefABCDEF", rune(path[i+2])) {
+				return false
+			}
+			i += 2
+			continue
+		}
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("-._~!$&'()*+,;=:@/", rune(c))) {
+			return false
+		}
+	}
 	host, port, hasPort := strings.Cut(authority, ":")
 	if hasPort {
 		n, err := strconv.Atoi(port)

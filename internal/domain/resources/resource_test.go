@@ -3,6 +3,11 @@ package resources
 import "testing"
 
 func TestURIRejectsAmbiguousOrUnboundedTargets(t *testing.T) {
+	for _, uri := range []string{"https://api.example/%", "https://api.example/%zz", "https://api.example/%a", "https://api.example/\"quoted\"", "https://api.example/é"} {
+		if ValidURI(uri) {
+			t.Fatalf("invalid raw URI accepted: %q", uri)
+		}
+	}
 	for _, uri := range []string{"https://", "http://api.example", "https://user:secret@api.example", "https://api.example?x=y", "https://api.example#x", "https://api.example:0", "https://api.example:65536", "https://api.example:0443", "https://API.example", "https://api.example.", "https://api.example\\evil", "https://api.example\x01"} {
 		if ValidURI(uri) {
 			t.Fatalf("accepted %q", uri)
