@@ -1,6 +1,6 @@
 # Mayi threat model
 
-Status: Initial P0 design model · 2026-10-17 · External review pending
+Status: P0/P1 foundation model · 2026-10-17 · External review pending
 
 Scope: standalone authorization server, browser login/consent, upstream identity providers, gateways, workloads, PostgreSQL, signer, workers, administrator APIs and companion resource enforcement. The public internet, client metadata, user input, upstream assertions and tenant-controlled configuration are untrusted. A valid signature establishes provenance, not sufficient authorization. Tenant administrators control only their tenant's explicit policy surface.
 
@@ -44,5 +44,9 @@ The strict profile trades availability for current authorization: status/replay-
 Before the P0 exit gate, choose and exercise the protocol integration, prove a real KMS signing path, and inspect the exact admitted dependency graph. Before production, complete tenant/transaction/adversarial/conformance tests and an external security review with tracked remediation (SEC-12). This initial model is published review input, not security certification.
 
 ## P0 infrastructure limits
+
+The [P1 foundation](p1-foundation.md) adds startup-validated non-owner connections, checksummed explicit migrations, scoped management credentials, immutable issuer SQL enforcement, public-key rotation, request/body/header/concurrency limits and secret-free logging. Management service tests fail if denied/foreign actors access protected ports; real-service tests cover API/RLS/key isolation and atomic audit/outbox failure. Attempt-fenced outbox leases prevent stale acknowledgements, with at-least-once JSON output and downstream deduplication. These controls supplement the future protocol tests above.
+
+Configuration and provisioning are trusted local operator capabilities. Static bootstrap admin tokens are not OAuth user/admin tokens and do not provide step-up; rotate via configuration/restart and restrict the administration network. The loopback listener assumes a trusted local HTTPS proxy; spoofed Host/Forwarded headers cannot change issuers. PostgreSQL primary state is authoritative. Provider/pooler compatibility, upstream identities, distributed rate limiting, browser defenses, durable remote event receipt, full observability, upgrade/restore/zone drills and independent review remain outstanding before production.
 
 The local source-built OpenBao dev server demonstrates the remote signing API and non-exportable key configuration. It is not a hardware boundary and does not resist a privileged host operator reading memory. Production TLS, credentials, seal/storage, HA and key administration remain P1/P6. The PostgreSQL proof terminates a backend and tests transactional retry, not a whole-cluster/zone-loss recovery. The exchange service only plans a disabled one-hop profile; no subject-token validator or exchange token issuance is enabled. See ADR 0005 and the P0 evidence report.

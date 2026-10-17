@@ -8,7 +8,7 @@ Engineering follows [AGENTS.md](AGENTS.md), the [canonical repository structure]
 
 The [ports-and-adapters CI rules](docs/architecture-enforcement.md) define the enforced boundaries and their limits. Run `go run ./tools/checks -only architecture` to check architecture independently.
 
-P0 is complete: [the protocol-spike report](docs/p0/protocol-spike.md) records Fosite selection, a service-owned protocol callback, real PostgreSQL transactions and OpenBao Transit signing, plus DPoP/OIDC/exchange hook evidence. No production HTTP server is enabled; later delivery phases and full README requirements remain planned.
+P0 is complete: [the protocol-spike report](docs/p0/protocol-spike.md) records Fosite selection, real PostgreSQL transactions and OpenBao Transit signing. The [P1 foundation and runbook](docs/p1-foundation.md) add a standalone process, external PostgreSQL configuration, explicit migrations/provisioning, isolated tenant management, key publication/rotation and audit/outbox delivery. Start a disposable two-tenant stack with `go run ./tools/p0 -development`. Login, consent and usable OAuth/OIDC endpoints remain P2; this foundation is not a production authorization server or full README conformance claim.
 
 ## The problems
 

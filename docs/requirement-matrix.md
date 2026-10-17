@@ -1,6 +1,6 @@
 # Mayi requirement delivery matrix
 
-October 17, 2026 · Planned coverage, not implementation evidence
+October 17, 2026 · Delivery coverage and bounded implementation evidence
 
 This matrix covers all 156 requirements in [the README](../README.md): 110 MUSTs, 35 SHOULDs and 11 MAYs. It accompanies [the implementation plan](implementation-plan.md). Owners are component responsibilities, not named staff. Phase P6 is the first production gate; earlier phases are limited previews. All full requirements remain **Planned**; P0 architecture/protocol work is complete as documented below, without marking protocol or production behavior Verified.
 
@@ -11,6 +11,12 @@ During implementation, append evidence links to exact tests, CI artifacts, confo
 ## P0 evidence
 
 The [P0 report](p0/protocol-spike.md) links the pinned specification manifest, accepted interpretation profiles, issuer/revocation/grant/exchange ADRs, initial threat model and executable issuance contract fixtures. This provides partial groundwork for OPS-9, ADM-1/2, CORE-1/2/5/6/8, CLI client assertion authentication, GRANT-2/6, LIFE-2/3, BIND and OIDC. The report now includes actual PostgreSQL/RLS/race/failure tests, a real OpenBao Transit signer, a service-owned Fosite callback and DPoP/OIDC/exchange hook evidence. These prototypes do not complete full production requirements: the server listener, resource SDK, login/consent, production operations and external security/conformance review remain planned.
+
+## P1 foundation evidence
+
+ [the runbook](p1-foundation.md), [ADR 0006](adr/0006-external-postgres-and-foundation-operations.md) and [real-service tests](../tests/integration/foundation_test.go) cover supplied PostgreSQL, explicit migrations/checksums, owner/runtime separation, immutable issuers, two-tenant API/RLS/key isolation, actual rotated Transit signatures, atomic audit/outbox failure and lease retry fencing. [Management service tests](../internal/services/administration/service_test.go) assert denial before every protected management access. Delivery and HTTP boundary tests cover failed acknowledgement and credential parsing.
+
+This supplies partial evidence for ADM-1/2/3/4/5, CLI-7, RES-2, GRANT-1, LIFE-10/11 and OPS-1/4/6. It does not implement users, consent/grant endpoints, full admin UI/step-up, enforced token policy at live endpoints, production alerts, HA/restore or conformance. DISC-1 has a marked foundation preview only; DISC-2 remains disabled until P2. Full requirement rows remain Planned until their entire acceptance conditions have evidence.
 
 ## CORE
 

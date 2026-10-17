@@ -4,7 +4,7 @@ October 17, 2026 · Proposed architecture and delivery plan
 
 Build Mayi as a standalone Go authorization server with a durable grant model, explicit tenant boundaries, and a companion resource-server enforcement library. Use an existing Go OAuth and OIDC implementation for protocol machinery. Own the policy, persistence, delegation, revocation, federation, and operational behavior that distinguish this project.
 
-The repository contains [the requirements README](../README.md), architecture documentation, a Go module, CI policy checks and the initial [P0 contract implementation](p0/protocol-spike.md). P0 is complete: Fosite is selected, and real PostgreSQL/OpenBao tests prove the transaction/signing boundaries. Production process setup, discovery, login/consent and full protocol delivery remain P1 onward. Its 156 requirements comprise 110 MUSTs, 35 SHOULDs, and 11 MAYs. [The requirement matrix](requirement-matrix.md) assigns every one a delivery phase, implementation owner, and acceptance condition. Everything in that matrix is planned, not implemented or verified.
+The repository contains [the requirements README](../README.md), architecture documentation, a Go module and CI policy checks. [P0](p0/protocol-spike.md) selected Fosite and proved the transaction/signing boundaries. The [P1 foundation](p1-foundation.md) adds a standalone process, external PostgreSQL, management, public keys, preview discovery and audit/outbox. Login/consent and usable OAuth/OIDC flows remain P2. Its 156 requirements comprise 110 MUSTs, 35 SHOULDs, and 11 MAYs. [The requirement matrix](requirement-matrix.md) assigns every one a delivery phase, owner and acceptance condition; limited foundation evidence does not complete the production requirements.
 
 [AGENTS.md](../AGENTS.md), the [canonical repository structure](repository-structure.md), and the [dependency policy](dependency-policy.md) govern implementation. Allowed software licenses are MIT, Apache-2.0, 0BSD, BSD-2-Clause, BSD-3-Clause, PostgreSQL, ISC, MPL-2.0, CC0-1.0, Unicode-DFS-2016, TCL, Spencer-94, Unlicense, Zlib, WTFPL and FSFUL. New libraries remain candidates until their exact versions and transitive dependencies pass admission; the selected P0 components are now inventoried.
 
@@ -107,7 +107,7 @@ deploy/                      container, local stack and production deployment
 docs/                        plans, canonical structure, policy and architecture decisions
 ```
 
-The CI baseline pins Go 1.27.0 and uses only its standard library for policy checks. For the server, use `net/http` in inbound adapters and consider PostgreSQL via `pgx` in outbound adapters, with explicit SQL and generated bindings where helpful. Choose a maintained JOSE implementation and telemetry integration after exact-version license and security review. Do not implement signing primitives. CI rejects modules absent from the reviewed inventory; no external server module has been admitted yet.
+The CI baseline pins Go 1.27.0 and uses only its standard library for policy checks. The server uses `net/http`, PostgreSQL through the admitted `pgx` adapter, and the reviewed JOSE/Transit implementation. CI rejects modules absent from the reviewed inventory. P1 adds no dependency or tool version.
 
 ### Protocol library selection
 
@@ -354,6 +354,8 @@ Engineering ranges below are planning estimates for a team of three experienced 
 | P6 Production gate | Complete remaining MUST evidence, multi-zone deployment, benchmarks, recovery, security review/remediation, conformance and runbooks | All 110 MUSTs pass or the release is explicitly blocked; no unresolved critical/high security findings | 3–5 weeks |
 | P7 Recommended extensions | Device flow, PAR, RAR, mTLS, admin consent, pairwise subjects, SCIM/SAML, workload adapters, signals, FAPI, residency/air-gap hardening, certification and remaining SHOULDs | Each capability is enabled only with its own conformance and operations evidence | Prioritize after P0; roughly another 2–4+ months |
 | P8 Optional profiles | CIBA, software statements, attestation, signed metadata/introspection, JAR/JARM, client grant management, front-channel logout and OpenID Federation | Separate design, security review, demand and compatibility case for each | Not included in first-release estimate |
+
+P1 implementation/evidence and operator setup are in [the foundation runbook](p1-foundation.md). Its stable issuer/JWKS preview deliberately does not claim full RFC 8414 or OpenID discovery compliance before P2 supplies required live protocol behavior. The runtime supports a supplied PostgreSQL primary; managed-provider/pooler certification, production deployment, full telemetry/alerts and upgrade/restore drills remain explicit later gates. P0's isolated signing/storage proofs remain in CI alongside P1 tests.
 
 P0 through P6 totals roughly **21–31 weeks** if followed sequentially, or about **5–8 months** including some coordination overhead. Some work can overlap after interfaces stabilize, but security review, interoperability surprises and KMS/IdP integration can extend the range. The first useful limited preview is P2; it is not a production-complete OAuth/agent platform.
 

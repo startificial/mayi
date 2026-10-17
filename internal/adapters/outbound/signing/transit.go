@@ -45,7 +45,7 @@ type Transit struct {
 
 func New(ctx context.Context, c Config, client *http.Client) (*Transit, error) {
 	u, err := url.Parse(c.Address)
-	if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" || u.Host == "" ||
+	if err != nil || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Path != "" || u.Host == "" ||
 		(u.Scheme != "https" && !(c.AllowLoopbackHTTP && u.Scheme == "http" && (u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"))) ||
 		!regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}$`).MatchString(c.Key) || c.Version < 1 || !c.Scope.Valid() || c.Token == "" || client == nil || client.Timeout <= 0 || client.Timeout > 30*time.Second {
 		return nil, tokens.ErrUnavailable

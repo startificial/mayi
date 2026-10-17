@@ -1,0 +1,24 @@
+{
+  "public_origin": "https://auth.example.com",
+  "listen_address": "127.0.0.1:8080",
+  "runtime_role": "mayi_runtime",
+  "database_max_connections": 10,
+  "allow_insecure_loopback": false,
+  "transit_address": "https://bao.example.com",
+  "tenants": [
+    {
+      "id": "example",
+      "key_name": "mayi-example",
+      "key_versions": [1],
+      "initial_key_version": 1,
+      "transit_token_env": "MAYI_EXAMPLE_TRANSIT_TOKEN",
+      "administrators": [
+        {
+          "id": "operator",
+          "token_sha256": "REPLACE_WITH_SHA256_FROM_ADMIN_TOKEN_COMMAND",
+          "permissions": ["policy:read", "policy:write", "resources:read", "resources:write", "clients:read", "clients:write", "keys:write"]
+        }
+      ]
+    }
+  ]
+}

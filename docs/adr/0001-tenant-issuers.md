@@ -11,3 +11,5 @@ OAuth metadata for a path issuer follows RFC 8414's well-known path insertion ru
 Evidence: `internal/app/config_test.go` exercises stable distinct issuer derivation and rejects ambiguous/insecure configuration. `tests/contract/issuance_test.go` rejects tenant and issuer mismatches before reading grant payloads. PostgreSQL tenant constraints, key isolation, routing and discovery are P1 work and remain unverified.
 
 Related: ADM-1, ADM-2, DISC-1, DISC-2, RES-8; [RFC 8414](https://www.rfc-editor.org/rfc/rfc8414#section-3).
+
+P1 evidence: [real foundation tests](../../tests/integration/foundation_test.go) now exercise immutable SQL issuers, configured-origin routing, two separate tenant key sets, API/RLS isolation and changed-origin startup refusal. Public discovery is a marked foundation preview; complete OAuth/OpenID metadata remains P2. See [ADR 0006](0006-external-postgres-and-foundation-operations.md).

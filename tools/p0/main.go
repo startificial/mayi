@@ -17,9 +17,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -193,8 +195,7 @@ func verifyBuildModules(ctx context.Context, root, source string, env []string) 
 		version := m.Version
 		if m.Main || m.Replace != nil {
 			if m.Replace != nil {
-				rel, err := filepath.Rel(source, m.Replace.Dir)
-				if err != nil || !filepath.IsLocal(rel) {
+				if !localServiceReplacement(source, m.Replace.Dir) {
 					return fmt.Errorf("service replacement escapes source")
 				}
 			}
@@ -206,6 +207,21 @@ func verifyBuildModules(ctx context.Context, root, source string, env []string) 
 	}
 	return nil
 }
+
+// Go reports canonical module directories. macOS may spell the same TMPDIR as
+// /var or /private/var; resolve both before enforcing source-root containment.
+func localServiceReplacement(source, replacement string) bool {
+	root, err := filepath.EvalSymlinks(source)
+	if err != nil {
+		return false
+	}
+	dir, err := filepath.EvalSymlinks(replacement)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(root, dir)
+	return err == nil && filepath.IsLocal(rel)
+}
 func main() {
 	if err := mainRun(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -214,13 +230,19 @@ func main() {
 }
 func mainRun() error {
 	cache := flag.String("cache", filepath.Join(os.TempDir(), "mayi-p0-services"), "private service build cache")
+	development := flag.Bool("development", false, "keep an isolated local PostgreSQL/Transit stack running until interrupted")
 	flag.Parse()
 	root, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Minute)
-	defer cancel()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if !*development {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 40*time.Minute)
+		defer cancel()
+	}
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		return fmt.Errorf("unsupported P0 platform")
 	}
@@ -368,6 +390,9 @@ func mainRun() error {
 	}
 	if !ready {
 		return fmt.Errorf("OpenBao did not start; log %s", baolog.Name())
+	}
+	if *development {
+		return developmentStack(ctx, root, session, socket, url, pgdir, env)
 	}
 	fmt.Println("Running real PostgreSQL and OpenBao P0 tests")
 	testenv := make([]string, 0, len(env)+5)
