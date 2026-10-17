@@ -4,15 +4,15 @@ October 17, 2026 · Proposed architecture and delivery plan
 
 Build Mayi as a standalone Go authorization server with a durable grant model, explicit tenant boundaries, and a companion resource-server enforcement library. Use an existing Go OAuth and OIDC implementation for protocol machinery. Own the policy, persistence, delegation, revocation, federation, and operational behavior that distinguish this project.
 
-The repository contains [the requirements README](../README.md), architecture documentation, a minimal Go module, and CI policy checks. The authorization server and its deployment are not implemented. Its 156 requirements comprise 110 MUSTs, 35 SHOULDs, and 11 MAYs. [The requirement matrix](requirement-matrix.md) assigns every one a delivery phase, implementation owner, and acceptance condition. Everything in that matrix is planned, not implemented or verified.
+The repository contains [the requirements README](../README.md), architecture documentation, a Go module, CI policy checks and the initial [P0 contract implementation](p0/protocol-spike.md). P0 is in progress: domain/service prototypes, S256 verification and transaction-double tests exist; the protocol server, real storage and production signer are not implemented. Its 156 requirements comprise 110 MUSTs, 35 SHOULDs, and 11 MAYs. [The requirement matrix](requirement-matrix.md) assigns every one a delivery phase, implementation owner, and acceptance condition. Everything in that matrix is planned, not implemented or verified.
 
-[AGENTS.md](../AGENTS.md), the [canonical repository structure](repository-structure.md), and the [dependency policy](dependency-policy.md) govern implementation. Allowed software licenses are MIT, Apache-2.0, 0BSD, BSD-2-Clause, BSD-3-Clause, PostgreSQL and ISC. Named libraries remain candidates until their exact versions and transitive dependencies pass admission.
+[AGENTS.md](../AGENTS.md), the [canonical repository structure](repository-structure.md), and the [dependency policy](dependency-policy.md) govern implementation. Allowed software licenses are MIT, Apache-2.0, 0BSD, BSD-2-Clause, BSD-3-Clause, PostgreSQL, ISC and MPL-2.0. Named libraries remain candidates until their exact versions and transitive dependencies pass admission.
 
 The recommended first release supports all README MUSTs. Earlier milestones are development previews with explicitly smaller capability sets. SHOULDs have scheduled follow-up work; MAYs remain separate optional projects. Do not call a preview README-complete or claim certification from a dependency's certification.
 
 ## 1. Decisions to make first
 
-These are proposed defaults, sufficient to start implementation. Record changes as architecture decisions with consequences and tests.
+The P0 baseline decisions for issuers, online revocation, grant revisions and gateway exchange are recorded in [ADRs 0001–0004](adr/0001-tenant-issuers.md). Library selection remains open in the [spike report](p0/protocol-spike.md). Record subsequent changes as architecture decisions with consequences and tests.
 
 | Decision | Proposed default | Reason and consequence |
 | --- | --- | --- |
@@ -30,7 +30,7 @@ These are proposed defaults, sufficient to start implementation. Record changes 
 
 ### Clarifications to the README
 
-Preserve the README as the requirements source. Resolve these interpretations in phase P0 before treating them as implementation contracts.
+Preserve the README as the requirements source. The interpretations below are now resolved by the [P0 capability contracts](../specs/profiles.md); acceptance still requires the relevant implementation tests.
 
 | Requirements | Implementation interpretation |
 | --- | --- |
@@ -55,7 +55,7 @@ The relevant protocol distinctions are covered by [RFC 8252](https://www.rfc-edi
 
 ### Specification baseline
 
-Primary sources checked for this plan show several changes from the README. P0 should save exact document URLs, revision or commit, content hash, retrieval date, implemented sections, and known deviations in `specs/manifest.yaml`.
+Primary sources checked for this plan show several changes from the README. The [P0 manifest](../specs/manifest.yaml) now records exact URLs, revisions/commits, content hashes, retrieval dates, target sections and deviations. Implemented protocol sections remain empty until adapter evidence exists.
 
 | Dependency | Baseline for the implementation spike |
 | --- | --- |

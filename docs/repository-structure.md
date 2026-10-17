@@ -1,6 +1,6 @@
 # Canonical repository structure
 
-Mayi uses a modular monolith with ports and adapters. This is the target layout; only the documentation and CI tooling exist initially. Add feature directories when implementing their contents. Keep a single root Go module, `github.com/startificial/mayi`.
+Mayi uses a modular monolith with ports and adapters. This is the target layout; the initial P0 domain/service contract, crypto adapter and composition packages now exist alongside documentation and CI tooling. No command/HTTP server or production storage/signer exists yet. Add feature directories when implementing their contents. Keep a single root Go module, `github.com/startificial/mayi`.
 
 ```text
 .

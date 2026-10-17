@@ -1,0 +1,354 @@
+{
+  "version": 1,
+  "documents": [
+    {
+      "id": "oauth21",
+      "revision": "draft-ietf-oauth-v2-1-16",
+      "url": "https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt",
+      "resolved_url": "https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt",
+      "sha256": "c27a60f631fc0bc0e4809426ee9fc26f695ec586191215d775c12e4b8171fa12",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P0",
+      "target_sections": [
+        "4.1",
+        "4.2",
+        "4.3",
+        "7",
+        "10"
+      ],
+      "implemented_sections": [],
+      "deviations": [
+        "Require S256; authorization code lifetime at most 60 seconds.",
+        "Mayi binds codes to the original redirect; the token request may omit redirect_uri under this revision."
+      ]
+    },
+    {
+      "id": "cimd",
+      "revision": "draft-ietf-oauth-client-id-metadata-document-02",
+      "url": "https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.txt",
+      "resolved_url": "https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.txt",
+      "sha256": "1a0d5f079042734e754afc88ca7a554418d12a2c64c936519130c55e322297fe",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P3",
+      "target_sections": [
+        "all"
+      ],
+      "implemented_sections": [],
+      "deviations": [
+        "Mayi applies a same-origin redirect default and explicit native/approved exceptions."
+      ]
+    },
+    {
+      "id": "id-jag",
+      "revision": "draft-ietf-oauth-identity-assertion-authz-grant-04",
+      "url": "https://www.ietf.org/archive/id/draft-ietf-oauth-identity-assertion-authz-grant-04.txt",
+      "resolved_url": "https://www.ietf.org/archive/id/draft-ietf-oauth-identity-assertion-authz-grant-04.txt",
+      "sha256": "a59c1dffc0b5e59d1bd541276c6948eb9191f3b83685be5810a32e63effb4653",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P5",
+      "target_sections": [
+        "all"
+      ],
+      "implemented_sections": [],
+      "deviations": [
+        "Per-tenant issuer and client trust; signature alone does not authorize."
+      ]
+    },
+    {
+      "id": "rfc7636",
+      "revision": "RFC 7636",
+      "url": "https://www.rfc-editor.org/rfc/rfc7636.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc7636.txt",
+      "sha256": "1972e5d81cbaba7066cfd46374207bc2b4546b085ed5dd9b034e79e023e0ca31",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P0",
+      "target_sections": [
+        "4"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "rfc8252",
+      "revision": "RFC 8252",
+      "url": "https://www.rfc-editor.org/rfc/rfc8252.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc8252.txt",
+      "sha256": "4233c0650ec7e7918c20e0fde2dc565f85e2aa2d4c18123e3cd834295c2f68d0",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P0",
+      "target_sections": [
+        "7",
+        "8"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "rfc8414",
+      "revision": "RFC 8414",
+      "url": "https://www.rfc-editor.org/rfc/rfc8414.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc8414.txt",
+      "sha256": "16c816e4e0fdbffb7e910ff3017867bf39debe9cb7f52f5cbc508a052ed660e8",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P0",
+      "target_sections": [
+        "2",
+        "3"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "rfc9700",
+      "revision": "RFC 9700",
+      "url": "https://www.rfc-editor.org/rfc/rfc9700.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc9700.txt",
+      "sha256": "9919d061d40a97886ca866b51c69389b6c81c65cd4b979056c14fdbebfcf622a",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P0",
+      "target_sections": [
+        "2",
+        "4"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "rfc8707",
+      "revision": "RFC 8707",
+      "url": "https://www.rfc-editor.org/rfc/rfc8707.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc8707.txt",
+      "sha256": "3b89844a938b9219571931b664ed4a7b380555a4dda1df4e9445a2f72188e76b",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P0",
+      "target_sections": [
+        "2"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "rfc9068",
+      "revision": "RFC 9068",
+      "url": "https://www.rfc-editor.org/rfc/rfc9068.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc9068.txt",
+      "sha256": "68d3ff3910c0f2340fd7b93b430e00053da845b6eebe095ebef0c8bfda5e14c5",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P0",
+      "target_sections": [
+        "2",
+        "4"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "rfc8725",
+      "revision": "RFC 8725",
+      "url": "https://www.rfc-editor.org/rfc/rfc8725.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc8725.txt",
+      "sha256": "737b7013a2495dcfd5481cf4c57c87e2455d537c4cec1140c9096a71fcef0812",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P0",
+      "target_sections": [
+        "3"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "rfc9449",
+      "revision": "RFC 9449",
+      "url": "https://www.rfc-editor.org/rfc/rfc9449.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc9449.txt",
+      "sha256": "3842c58e1f6043389416023b9bb8d765048266024982fbbd90640e05943f4e13",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P0",
+      "target_sections": [
+        "4",
+        "5",
+        "7",
+        "10"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "rfc8693",
+      "revision": "RFC 8693",
+      "url": "https://www.rfc-editor.org/rfc/rfc8693.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc8693.txt",
+      "sha256": "358d658014738bf4dc56c8aae2094ce716ede23b6d5a80488a7dc8e8d72da609",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P0",
+      "target_sections": [
+        "2",
+        "4"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "rfc7523",
+      "revision": "RFC 7523",
+      "url": "https://www.rfc-editor.org/rfc/rfc7523.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc7523.txt",
+      "sha256": "ae24f77a8fc4338903c805c6ace38def1f23d40194aea87b123b13c5b3d2d915",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P0",
+      "target_sections": [
+        "2",
+        "3"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "rfc7009",
+      "revision": "RFC 7009",
+      "url": "https://www.rfc-editor.org/rfc/rfc7009.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc7009.txt",
+      "sha256": "b2f346d5a87ba9d7f09047901257a65f7ac0b26352095969c25821afab447829",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P0",
+      "target_sections": [
+        "2"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "rfc7662",
+      "revision": "RFC 7662",
+      "url": "https://www.rfc-editor.org/rfc/rfc7662.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc7662.txt",
+      "sha256": "2b7d688cb849f093e860557ac97e6cddac2556d69a4386561b22cdf97bf13657",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P0",
+      "target_sections": [
+        "2"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "rfc10017",
+      "revision": "RFC 10017",
+      "url": "https://www.rfc-editor.org/rfc/rfc10017.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc10017.txt",
+      "sha256": "ebbf745b69cb48390ed65b30b8d3e5badfec5b6f250979f7107dfa4684f82b7d",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P2",
+      "target_sections": [
+        "all"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "oidc-core",
+      "revision": "OpenID Connect Core 1.0 incorporating errata set 2",
+      "url": "https://openid.net/specs/openid-connect-core-1_0-errata2.html",
+      "resolved_url": "https://openid.net/specs/openid-connect-core-1_0-errata2.html",
+      "sha256": "4d016752a645e8a3c259baa4173b5a90cb6c82898ce868fc8444adde262a5aed",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P0",
+      "target_sections": [
+        "2",
+        "3.1",
+        "9",
+        "15"
+      ],
+      "implemented_sections": [],
+      "deviations": [
+        "Mayi requires nonce for code flow.",
+        "Business-resource tokens cannot be used at UserInfo."
+      ]
+    },
+    {
+      "id": "oidc-discovery",
+      "revision": "OpenID Connect Discovery 1.0 incorporating errata set 2",
+      "url": "https://openid.net/specs/openid-connect-discovery-1_0-errata2.html",
+      "resolved_url": "https://openid.net/specs/openid-connect-discovery-1_0-errata2.html",
+      "sha256": "0401a07b35de50e914e195aa2c3c64cc4f6542464381c885d24a2623fbf75ec2",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P2",
+      "target_sections": [
+        "3",
+        "4"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "mcp-index",
+      "revision": "2026-07-28 @ 5f5440bb26a62e2cf3440b92da5a667efa03b267",
+      "url": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/5f5440bb26a62e2cf3440b92da5a667efa03b267/docs/specification/2026-07-28/basic/authorization/index.mdx",
+      "resolved_url": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/5f5440bb26a62e2cf3440b92da5a667efa03b267/docs/specification/2026-07-28/basic/authorization/index.mdx",
+      "sha256": "e31841f18b21f83f984689c0b0409577139cc50b698ce7c8fbd09a8c920a5241",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P3",
+      "target_sections": [
+        "all"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "mcp-authorization-server-discovery",
+      "revision": "2026-07-28 @ 5f5440bb26a62e2cf3440b92da5a667efa03b267",
+      "url": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/5f5440bb26a62e2cf3440b92da5a667efa03b267/docs/specification/2026-07-28/basic/authorization/authorization-server-discovery.mdx",
+      "resolved_url": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/5f5440bb26a62e2cf3440b92da5a667efa03b267/docs/specification/2026-07-28/basic/authorization/authorization-server-discovery.mdx",
+      "sha256": "2d80118a0187d16f0122e64e6092c49f13d901c650f69712dce1a241a08cfb1d",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P3",
+      "target_sections": [
+        "all"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "mcp-client-registration",
+      "revision": "2026-07-28 @ 5f5440bb26a62e2cf3440b92da5a667efa03b267",
+      "url": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/5f5440bb26a62e2cf3440b92da5a667efa03b267/docs/specification/2026-07-28/basic/authorization/client-registration.mdx",
+      "resolved_url": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/5f5440bb26a62e2cf3440b92da5a667efa03b267/docs/specification/2026-07-28/basic/authorization/client-registration.mdx",
+      "sha256": "912365f0c2b859269d25a3e868580d3f222dd94c80dbc5c3b18024bec1e7daff",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P3",
+      "target_sections": [
+        "all"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "mcp-security-considerations",
+      "revision": "2026-07-28 @ 5f5440bb26a62e2cf3440b92da5a667efa03b267",
+      "url": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/5f5440bb26a62e2cf3440b92da5a667efa03b267/docs/specification/2026-07-28/basic/authorization/security-considerations.mdx",
+      "resolved_url": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/5f5440bb26a62e2cf3440b92da5a667efa03b267/docs/specification/2026-07-28/basic/authorization/security-considerations.mdx",
+      "sha256": "71dd5f0f236cfa26fb33a3cebf6fc71d4797f1225a06c9cae85bdda54ae50bf8",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P3",
+      "target_sections": [
+        "all"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    },
+    {
+      "id": "mcp-enterprise",
+      "revision": "stable @ fb374c7db2b34f18ca9183882e0beecdf661892b",
+      "url": "https://raw.githubusercontent.com/modelcontextprotocol/ext-auth/fb374c7db2b34f18ca9183882e0beecdf661892b/specification/stable/enterprise-managed-authorization.mdx",
+      "resolved_url": "https://raw.githubusercontent.com/modelcontextprotocol/ext-auth/fb374c7db2b34f18ca9183882e0beecdf661892b/specification/stable/enterprise-managed-authorization.mdx",
+      "sha256": "df4fe01daec0eac6069e17a293d4ed7e197ab20463038d806f71e63b22fd8986",
+      "retrieved_on": "2026-10-17",
+      "target_phase": "P5",
+      "target_sections": [
+        "all"
+      ],
+      "implemented_sections": [],
+      "deviations": []
+    }
+  ]
+}

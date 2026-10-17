@@ -38,6 +38,8 @@ jobs:
         run: go run ./tools/checks -only licenses
       - name: Enforce ports and adapters
         run: go run ./tools/checks -only architecture
+      - name: Validate pinned specifications
+        run: go run ./tools/checks -only specifications
       - name: Require Go formatting
         run: |
           unformatted="$(gofmt -l .)"

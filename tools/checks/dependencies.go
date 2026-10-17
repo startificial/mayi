@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -27,13 +28,19 @@ type evidenceFile struct {
 	SHA256 string `json:"sha256"`
 }
 
+type sourceAccess struct {
+	URL                string `json:"url"`
+	ModificationStatus string `json:"modification_status"`
+}
+
 type dependency struct {
-	Name     string         `json:"name"`
-	Version  string         `json:"version"`
-	Licenses []string       `json:"licenses"`
-	Source   string         `json:"source"`
-	Review   string         `json:"review"`
-	Files    []evidenceFile `json:"files"`
+	Name         string         `json:"name"`
+	Version      string         `json:"version"`
+	Licenses     []string       `json:"licenses"`
+	Source       string         `json:"source"`
+	Review       string         `json:"review"`
+	Files        []evidenceFile `json:"files"`
+	SourceAccess *sourceAccess  `json:"source_access,omitempty"`
 }
 
 type inventory struct {
@@ -76,6 +83,11 @@ func validateEvidence(dep dependency, allowed map[string]bool, root string) erro
 	for _, license := range dep.Licenses {
 		if !allowed[license] {
 			return fmt.Errorf("%s: disallowed or unknown license %q", dep.Name, license)
+		}
+	}
+	if slices.Contains(dep.Licenses, "MPL-2.0") {
+		if dep.SourceAccess == nil || dep.SourceAccess.ModificationStatus != "unmodified" || dep.SourceAccess.URL != moduleArchiveURL(dep.Name, dep.Version) {
+			return fmt.Errorf("%s: MPL-2.0 requires an exact unmodified source archive and distribution notice", dep.Name)
 		}
 	}
 	for _, file := range dep.Files {
@@ -301,5 +313,8 @@ func checkDependencies(root string) error {
 	if len(modules) == 0 {
 		return errors.New("empty module graph")
 	}
-	return validateModules(modules, deps.Modules, allowed)
+	if err := validateModules(modules, deps.Modules, allowed); err != nil {
+		return err
+	}
+	return validateMPLNotices(root, deps.Modules)
 }

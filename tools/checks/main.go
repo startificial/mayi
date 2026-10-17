@@ -11,15 +11,17 @@ import (
 
 func main() {
 	root := flag.String("root", ".", "repository root")
-	only := flag.String("only", "all", "check to run: all, architecture, licenses")
+	only := flag.String("only", "all", "check to run: all, architecture, licenses, specifications")
 	flag.Parse()
 	abs, err := filepath.Abs(*root)
 	if err == nil {
 		switch *only {
 		case "all":
-			err = errors.Join(checkArchitecture(abs), checkDependencies(abs))
+			err = errors.Join(checkArchitecture(abs), checkDependencies(abs), checkSpecifications(abs))
 		case "architecture":
 			err = checkArchitecture(abs)
+		case "specifications":
+			err = checkSpecifications(abs)
 		case "licenses":
 			err = checkDependencies(abs)
 		default:

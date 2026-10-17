@@ -1,6 +1,6 @@
 # Dependency and tooling license policy
 
-The permitted SPDX identifiers are **MIT, Apache-2.0, 0BSD, BSD-2-Clause, BSD-3-Clause, PostgreSQL and ISC**. BSD and PostgreSQL were explicitly added to the initial MIT/Apache rule; ISC was explicitly approved for CI tool dependencies. Unknown and unlisted licenses are rejected. Being open source or generally permissive is not sufficient.
+The permitted SPDX identifiers are **MIT, Apache-2.0, 0BSD, BSD-2-Clause, BSD-3-Clause, PostgreSQL, ISC and MPL-2.0**. BSD and PostgreSQL were explicitly added to the initial MIT/Apache rule; ISC was explicitly approved for CI tool dependencies. MPL-2.0 was subsequently approved with license-notice and corresponding-source obligations. Unknown and unlisted licenses are rejected. Being open source or generally permissive is not sufficient.
 
 The machine-readable source is [tools/license-policy.json](../tools/license-policy.json). [AGENTS.md](../AGENTS.md) defines the engineering rules. Changing the allowlist requires a direct maintainer decision; contributors must not loosen it to make a dependency pass.
 
@@ -23,6 +23,14 @@ Specifications linked as documentation are references, not bundled software. Do 
 
 An upgrade invalidates approval for the previous version. Re-review its complete graph and evidence. Modified license bytes, unknown modules, local replacements and stale inventory entries fail CI. No exceptions are currently configured.
 
+## MPL-2.0 notice and source access
+
+Retain the complete [MPL 2.0 license text](../tools/license-evidence/MPL-2.0.txt), applicable copyright/NOTICE files, and [third-party distribution notice](../THIRD_PARTY_NOTICES.md). For every admitted unmodified MPL Go module, the inventory must contain `source_access.url` pointing to the exact Go module source archive and `source_access.modification_status` equal to `unmodified`. List the same `module@version` and archive link in the distribution notice. The gate rejects missing/mutable source offers, missing notices and modified/truncated retained license text.
+
+A source link must actually remain available to recipients. Build/release packaging must include these materials and test source access before shipping binaries or images; the current workflow does not distribute a server. Forks or modifications to covered files need the corresponding modified source under MPL and a source-aware admission path; an unchanged upstream link does not cover those modifications. Local replacements remain rejected. Preserve recipients' MPL source rights in any executable distribution terms. See [Mozilla's distribution FAQ](https://www.mozilla.org/MPL/2.0/FAQ/), especially questions 8–10, and [license sections 3.1–3.4](https://www.mozilla.org/MPL/2.0/).
+
+No MPL dependency is currently built into Mayi. The [P0 candidate review](p0/protocol-spike.md) is preliminary source evidence, not module admission. The new source-access checker supports unmodified Go modules; extending this to other artifact kinds or modified sources requires matching inventory and notice coverage.
+
 ## What CI enforces now
 
 [The workflow](../.github/workflows/ci.yml) runs on pushes and pull requests with read-only repository permissions, immutable action pins and no persisted checkout credentials. It downloads module source for inspection, runs the policy gate, checks formatting, runs tests with the race detector, and runs `go vet`.
@@ -32,6 +40,7 @@ An upgrade invalidates approval for the previous version. Re-review its complete
 - Runs the [architecture gate](architecture-enforcement.md), including direct imports, the SDK's transitive dependencies, port/conformance rules, composition boundaries and public API type exposure, even for generated/build-tagged source.
 - Resolves `go list -mod=readonly -m -json all`, requiring exact-version license evidence for every non-root module, including indirect modules. The inventory currently has no external Go modules.
 - Verifies license evidence hashes against downloaded source, rejects missing/unapproved license labels and prevents evidence paths escaping their source root.
+- Requires exact unmodified source access and distribution notice entries for MPL modules and verifies the retained full MPL text. Release packaging remains a separate required gate.
 - Checks the running Go version and distribution license digest against the reviewed compiler record.
 - Checks workflow action references against the exact reviewed commits and verifies checked-in license evidence for those action bundles.
 - Rejects nested Go modules/workspaces, local module replacements, vendor/node_modules trees and recognized new dependency manifests that lack an implemented license-admission path.
@@ -64,7 +73,7 @@ These are candidates, not admitted dependencies. No server library has been inst
 | --- | --- | --- |
 | PostgreSQL | PostgreSQL License. [Source](https://www.postgresql.org/about/licence/) | Allowed license family; exact distribution/image and bundled components still need review. |
 | pgx | MIT. [Source](https://github.com/jackc/pgx/blob/master/LICENSE) | Exact version and complete Go graph pending. |
-| Ory Fosite | Apache-2.0. [Source](https://github.com/ory/fosite/blob/master/LICENSE) | Protocol spike and exact dependency graph pending. |
+| Ory Fosite | Apache-2.0. [Source](https://github.com/ory/fosite/blob/master/LICENSE) | v0.49.0 source and preliminary graph reviewed in P0; runnable adapter spike and admission pending. |
 | ZITADEL OIDC | Apache-2.0. [Source](https://github.com/zitadel/oidc/blob/main/LICENSE) | Alternative candidate; exact dependency graph pending. |
 | JOSE, telemetry, KMS, migrations, conformance tools and caches | Not selected | Must pass the same gate; a reference in the plan does not approve use. |
 

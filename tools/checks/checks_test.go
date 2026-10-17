@@ -107,7 +107,7 @@ func TestLicenseEvidence(t *testing.T) {
 			case "traversal":
 				dep.Files[0].Path = "../LICENSE"
 			case "bundled-disallowed":
-				dep.Licenses = []string{"MIT", "MPL-2.0"}
+				dep.Licenses = []string{"MIT", "GPL-3.0-only"}
 			}
 			err := validateEvidence(dep, allowed, root)
 			if (err == nil) != (mode == "valid") {

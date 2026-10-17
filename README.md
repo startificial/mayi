@@ -8,6 +8,8 @@ Engineering follows [AGENTS.md](AGENTS.md), the [canonical repository structure]
 
 The [ports-and-adapters CI rules](docs/architecture-enforcement.md) define the enforced boundaries and their limits. Run `go run ./tools/checks -only architecture` to check architecture independently.
 
+Implementation has started with the [P0 contract and protocol-spike report](docs/p0/protocol-spike.md): immutable grant ceilings, issuance ports, S256 verification and adversarial transaction fixtures. The protocol server and production adapters are not implemented yet.
+
 ## The problems
 
 A platform that lets users, third-party clients and AI agents act on its resources needs one authorization server that solves eight separate problems. Each is independent: solving one does not solve the others.

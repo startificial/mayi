@@ -56,10 +56,11 @@ entrypoints / composition -> outbound adapters -> service-owned ports
 
 - Follow [the canonical layout](docs/repository-structure.md). Create directories when they contain real code; do not generate empty packages, speculative abstractions or duplicate implementations.
 - Use one root Go module. New modules, workspaces, dependency ecosystems, vendored trees, downloaded executables and container dependencies require corresponding inventory and CI coverage before use.
-- Allowed license identifiers are **MIT, Apache-2.0, 0BSD, BSD-2-Clause, BSD-3-Clause, PostgreSQL and ISC**. No blanket “permissive” exception. Unknown, missing or disallowed licenses fail admission.
+- Allowed license identifiers are **MIT, Apache-2.0, 0BSD, BSD-2-Clause, BSD-3-Clause, PostgreSQL, ISC and MPL-2.0**. No blanket “permissive” exception. Unknown, missing or disallowed licenses fail admission.
 - Apply the policy to direct and transitive dependencies and repository-selected development/build/test tools. Review exact versions, bundled code and notices; pin actions by immutable commit and tools/modules by exact version.
 - Do not add a dependency merely for convenience. Check existing code and the standard library, then record why an added component is needed and its license evidence in `tools/dependencies.json`.
 - Never bypass a license failure using `--ignore`, unreviewed exceptions, an unchecked download, a manifest omission or a misleading license label. Only a direct maintainer decision may change the allowlist.
+- MPL-2.0 modules additionally require exact source-access inventory fields and distribution notices. Preserve covered-source rights and make modified covered files available when distributed; an unmodified upstream link does not cover local modifications. Test release packaging before shipping binaries.
 - Retain required copyright, license and NOTICE material in distributed artifacts. A parent's acceptable license does not automatically cover its dependencies or bundled files.
 
 ## Tests and CI
