@@ -89,3 +89,8 @@ Redis/optional caches, containers, deployment images, Helm dependencies and exte
 P1 reuses the exact admitted Go/service graph and platform prerequisites. The same source-built harness runs P0 and P1 integration tests; `-development` keeps only a private disposable instance of those services running for operator testing. It adds no container, dependency version or license exception. The runnable command is not a binary/image release; notice/source-access packaging remains mandatory before distribution.
 
 P2 milestone 1 also reuses this exact admitted graph. Its domain/service and PostgreSQL consent tests run through the existing checks and isolated integration harness. No dependency, tool version, copied external code or license exception is added.
+
+P2 milestone 2 also adds no dependency/tool. Upstream signature validation uses
+the admitted go-jose/v4; constrained HTTP/DNS, parsing and HTML rendering use the
+pinned Go standard library. The synthetic OIDC provider is a local Go HTTP fixture,
+not a new external service artifact.

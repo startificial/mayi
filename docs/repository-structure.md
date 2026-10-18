@@ -156,3 +156,10 @@ resource catalogs and tenant policy. Its PostgreSQL session/membership projectio
 are authentication decision metadata; no browser/login protocol adapter is enabled
 by this addition. See [ADR 0008](adr/0008-authorization-transactions-and-consent.md)
 and [P2 milestone status](p2-core-authorization.md).
+
+P2 milestone 2 adds `services/authentication`, pure identity login values, upstream
+OIDC and restricted egress adapters, thin `http/selfservice` browser endpoints and
+script-free `web` consent rendering. `app.NewBrowser` composes the same tenant
+routes for the process and real PostgreSQL fixtures, independently of signing.
+Membership/mapping stay operator-owned; consent reuses the authorization service.
+See [ADR 0009](adr/0009-upstream-login-and-browser-consent.md).

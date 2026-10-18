@@ -26,6 +26,12 @@ The [P2 progress document](p2-core-authorization.md), [ADR 0008](adr/0008-author
 
 This is partial groundwork for CORE-1/2/3/5, GRANT-3/4, ADM-1/5 and OPS-4. No public login/authorization route or token response is enabled by this milestone. Upstream authentication, browser protections, refresh issuance, resource enforcement and the P2 BFF/resource exit demonstration remain Planned. Full requirement rows remain Planned.
 
+## P2 milestone 2 evidence
+
+[ADR 0009](adr/0009-upstream-login-and-browser-consent.md), [login service tests](../internal/services/authentication/service_test.go), [OIDC adapter tests](../internal/adapters/outbound/identity/oidc_test.go), [egress tests](../internal/adapters/outbound/egress/client_test.go), [real session transaction tests](../tests/integration/authentication_test.go) and [browser HTTP fixtures](../tests/integration/browser_test.go) add partial evidence for FED-1/3, WEB-4/7/8/10, CORE-1/2/3/5 and ADM-5. They cover provider trust, state/nonce/S256, explicit identity mapping, active membership, one-use callbacks, browser-bound sessions, rotation/termination, escaped consent, CSRF/origin denial and session/audit rollback.
+
+Token endpoints, downstream OIDC, idle/session-list APIs, BFF/resource enforcement, external-provider and real-browser compatibility, and the complete P2 exit remain pending. Full requirement rows stay Planned; these fixtures complete no production or conformance gate.
+
 ## CORE
 
 | ID | Level | Phase | Owner | Acceptance condition |
