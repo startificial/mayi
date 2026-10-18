@@ -23,6 +23,36 @@ entrypoints / composition -> outbound adapters -> service-owned ports
 - Protocol-library storage hooks are adapters into narrowly scoped services, not a second authorization implementation. Never pass a general database handle into a protocol or HTTP handler.
 - Keep public SDK exports small and stable. Public request/result types must not expose internal packages or database models. Reuse the shared resource-validation service through the documented SDK boundary.
 
+## Domain-driven design
+
+- **Use ubiquitous language.** Use the same precise business terms in requirements, ADRs, Go APIs, persistence mappings, audit events and tests. Start with the vocabulary below and the pinned capability profiles. Qualify overloaded terms in new APIs; do not use `scope` interchangeably for permission names and tenant/issuer context, or `grant` interchangeably for a durable authorization and a protocol grant type. Translate protocol/vendor terminology at adapter boundaries. Record a material change in meaning in an ADR rather than silently redefining an existing term.
+- **Define ownership by bounded context.** Within the canonical layers, group models and use cases by cohesive business capability and invariants, not by a database table, endpoint or vendor. Identify the owning context and its responsibilities before adding a concept. Package names alone do not establish a bounded context. Document new or changed context boundaries and their relationships in an ADR; retain the modular monolith and canonical layout unless an explicit architectural decision changes them.
+- Each business rule has one authoritative owner. Reuse a domain rule only when its meaning and policy are the same in both contexts; similar field shapes do not establish shared semantics. For example, resource identifiers and client redirect destinations need their respective rules even though both are URIs. Do not turn `policy`, `administration` or a shared package into a second owner of another context's lifecycle rules.
+- Cross-context collaboration uses narrow application contracts, explicit identifiers or intentional event contracts. Do not reach into another context's mutable aggregate internals or persistence implementation. Translate upstream identities, assertions and protocol-library models into local concepts through adapters; external schemas and a valid signature do not define local identity, trust or authority.
+- **Keep domain behavior in the domain.** Entities have stable identity; value objects express meaningful values and enforce their own invariants. Put pure business decisions, permission attenuation and valid state transitions in domain constructors, methods or cohesive domain functions. Application services in `internal/services/` authorize the caller and orchestrate these rules, transactions and effects through ports. Do not duplicate domain decisions in handlers, SQL helpers or separate services. Database constraints and atomic predicates reinforce these rules.
+- Define aggregate roots and boundaries from the invariants that must remain consistent together. A table or foreign-key graph is not automatically an aggregate; avoid both one aggregate per row and one tenant-wide object graph. Mutations go through the owning aggregate's behavior or explicit domain transition functions. Protect invariant-bearing state and mutable collections from unchecked caller mutation, and validate rehydrated state before business use.
+- Make consistency boundaries explicit in the service-owned unit-of-work contract, including expected versions, lock order and conflict behavior where relevant. Cross-aggregate operations must state their required atomicity and use the existing issuance/revocation guarantees; do not split consume/issue/audit across eventual events to satisfy a generic DDD pattern. Never call external systems from a pure aggregate.
+- Persistence ports express the owning use case's aggregate operations or narrow, tenant-scoped projections, not generic table CRUD or an ORM model. Read-only queries may use projections without constructing an aggregate, while preserving service authorization and final object policy. Query projections must not become an alternate mutation path.
+- When domain events are needed, name them as business facts in the past tense and carry the identifiers and versions necessary to interpret them. Distinguish domain facts, security audit records and external integration envelopes; map between them explicitly. External delivery follows a successful state/audit commit through the outbox, with versioned contracts and idempotent consumers. Events do not replace authoritative revocation or required atomic checks.
+- Use domain services only for a cohesive pure business operation that does not naturally belong to an entity or value object. Do not create a service, interface, repository, event bus, separate deployable, CQRS framework or event-sourced model merely to use a DDD pattern. Prefer the smallest explicit model that enforces the current requirements.
+- Test business examples in the ubiquitous language: allowed and forbidden transitions, invariant preservation, authority narrowing, tenant isolation and concurrent version conflicts. Static package checks do not establish bounded-context cohesion or correct domain behavior; review must verify both.
+
+### Shared vocabulary
+
+These definitions describe Mayi's model; they do not imply that every capability is implemented. Keep them aligned with requirements, capability profiles and accepted ADRs.
+
+| Term | Meaning and distinction |
+| --- | --- |
+| Tenant / issuer | A tenant is an isolation and policy boundary. Its issuer is the immutable configured authority identifier. Neither is derived from an email domain or request host. |
+| Principal / subject / actor | A principal is a human or machine identity. The subject is the principal on whose behalf authority is exercised; actors record intermediaries acting in that chain. The presenting client is identified separately. These roles can coincide but are not interchangeable. |
+| Registered resource / protected object | A registered resource identifies the intended API audience and its permission catalog. An object inside that API has resource-owned access policy; audience membership alone does not authorize object access. |
+| Permission scope / tenant-issuer context | A permission scope is a resource-local permission name. Tenant/issuer context identifies the trusted isolation boundary for an operation. Equal permission names across resources do not imply equal authority. |
+| Durable grant | Mayi's revocable authority record binding an issuer, tenant, principal, client and resource. It is distinct from an OAuth grant type or the credential presented to redeem that grant type. |
+| Grant revision | An immutable snapshot of approved authority. Credentials reference the exact approved revision; later approval does not enlarge earlier credentials. Current policy and revocation can further restrict that authority. |
+| Authorization transaction | The bounded authorization workflow and validated request/approval correlation. It is distinct from a database transaction, which provides atomic persistence. |
+| Credential / refresh family | A credential is purpose-specific evidence presented to a protocol operation. A refresh family is the related rotation lineage with shared binding, revocation and absolute-lifetime constraints; neither is the durable grant itself. |
+| Session | Authentication continuity and assurance state. Ending a session and revoking application grants are separate operations unless an explicit use case performs both. |
+
 ## Validation and authorization
 
 - **Validate external input at system boundaries.** HTTP bodies, headers, URL parameters, cookies, CLI arguments, jobs, configuration, assertions, metadata, upstream responses and event payloads are untrusted. Apply size/time limits, strict parsing and explicit allowed values.
@@ -75,8 +105,8 @@ entrypoints / composition -> outbound adapters -> service-owned ports
 
 ## Change workflow
 
-1. Identify requirement IDs, existing services and the owning layer.
-2. Define or reuse the service operation and its authorization/transaction boundaries.
+1. Identify requirement IDs, ubiquitous terms, existing domain rules/services, the owning bounded context and the owning layer.
+2. Define or reuse the domain operation and service use case, including aggregate invariants and authorization/transaction boundaries. Record material context or vocabulary changes in an ADR.
 3. Implement domain rules, then adapters and thin entrypoints.
 4. Add focused positive and adversarial tests; run the required checks.
 5. Update relevant docs, dependency evidence and requirement status.
