@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/startificial/mayi/internal/adapters/outbound/postgres"
 	"github.com/startificial/mayi/internal/app"
 	"github.com/startificial/mayi/internal/services/administration"
@@ -89,7 +88,7 @@ func TestP1DisabledActiveVersionFailsReadinessAndStartup(t *testing.T) {
 	e := setupFoundation(t)
 	ctx := context.Background()
 	server := e.server(t)
-	request(t, os.Getenv("MAYI_P0_TRANSIT"), os.Getenv("MAYI_P0_TRANSIT_TOKEN"), "POST", "transit/keys/"+e.config.Tenants[0].KeyName+"/config", map[string]any{"min_encryption_version": 2}, http.StatusNoContent)
+	request(t, os.Getenv("MAYI_P0_TRANSIT"), os.Getenv("MAYI_P0_TRANSIT_TOKEN"), "POST", "transit/keys/"+e.config.Tenants[0].KeyName+"/config", map[string]any{"min_encryption_version": 2}, http.StatusOK)
 	if w := api(t, server.Handler, "GET", "/readyz", "", ""); w.Code != 503 {
 		t.Fatal("disabled active version reported ready", w.Code)
 	}
@@ -177,6 +176,20 @@ func TestP1WorkerShutdownWithBlockedOutputLeavesLeaseUnacknowledged(t *testing.T
 	}
 }
 
+// heldRequestBody signals admission only when the real authenticated handler
+// starts reading. This avoids a probe racing with requests for the last slot.
+type heldRequestBody struct {
+	entered chan<- struct{}
+	release <-chan struct{}
+	once    sync.Once
+}
+
+func (b *heldRequestBody) Read([]byte) (int, error) {
+	b.once.Do(func() { b.entered <- struct{}{} })
+	<-b.release
+	return 0, io.EOF
+}
+
 func TestP1LivenessSurvivesPublicAdmissionSaturation(t *testing.T) {
 	e := setupFoundation(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -185,42 +198,31 @@ func TestP1LivenessSurvivesPublicAdmissionSaturation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var held []*pgxpool.Conn
-	for range e.db.Config().MaxConns {
-		c, err := e.db.Acquire(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		held = append(held, c)
-	}
+	entered := make(chan struct{}, 100)
+	release := make(chan struct{})
 	var wg sync.WaitGroup
-	defer func() {
-		cancel()
-		for _, c := range held {
-			c.Release()
-		}
-		wg.Wait()
-	}()
+	defer func() { close(release); cancel(); wg.Wait() }()
 	for range 100 {
 		wg.Go(func() {
-			r := httptest.NewRequest("GET", "/t/a/jwks", nil).WithContext(ctx)
+			body := &heldRequestBody{entered: entered, release: release}
+			r := httptest.NewRequest("POST", "/admin/t/a/resources", body).WithContext(ctx)
+			r.Header.Set("Content-Type", "application/json")
+			r.Header.Set("Authorization", "Bearer "+e.tokens["a"])
 			server.Handler.ServeHTTP(httptest.NewRecorder(), r)
 		})
 	}
-	saturated := false
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		// Unknown routes consume no dependency and finish immediately until all slots
-		// are occupied. Admission rejection has no generated request ID.
-		w := api(t, server.Handler, "GET", "/unknown", "", "")
-		if w.Code == 503 && w.Header().Get("X-Request-ID") == "" {
-			saturated = true
-			break
+	deadline := time.NewTimer(3 * time.Second)
+	defer deadline.Stop()
+	for range 100 {
+		select {
+		case <-entered:
+		case <-deadline.C:
+			t.Fatal("not all requests reached the admitted handler")
 		}
-		time.Sleep(time.Millisecond)
 	}
-	if !saturated {
-		t.Fatal("failed to saturate public admission")
+	// Once all bodies are blocked, check admission without perturbing startup.
+	if w := api(t, server.Handler, "GET", "/unknown", "", ""); w.Code != 503 || w.Header().Get("X-Request-ID") != "" {
+		t.Fatal("public admission was not saturated", w.Code)
 	}
 	for _, method := range []string{"GET", "HEAD"} {
 		if w := api(t, server.Handler, method, "/healthz", "", ""); w.Code != 200 {
