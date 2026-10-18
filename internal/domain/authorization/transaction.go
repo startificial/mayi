@@ -29,7 +29,7 @@ type Request struct {
 }
 
 func (r Request) Valid() bool {
-	if !r.TenantIssuer.Valid() || !resources.ValidID(r.ClientID) || !clients.ValidRedirectURI(r.RedirectURI) || !resources.ValidURI(r.ResourceURI) || !digestValue(r.PKCEChallenge) || r.BindingThumbprint != "" && !digestValue(r.BindingThumbprint) || len(r.State) > 1024 || !grants.ValidScopes(r.PermissionScopes) || len(r.PermissionScopes) == 0 {
+	if !r.TenantIssuer.Valid() || !resources.ValidID(r.ClientID) || !clients.ValidAuthorizationRedirect(r.RedirectURI) || !resources.ValidURI(r.ResourceURI) || !digestValue(r.PKCEChallenge) || r.BindingThumbprint != "" && !digestValue(r.BindingThumbprint) || len(r.State) > 1024 || !grants.ValidScopes(r.PermissionScopes) || len(r.PermissionScopes) == 0 {
 		return false
 	}
 	for _, c := range r.State {

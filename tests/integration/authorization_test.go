@@ -40,6 +40,9 @@ func setupAuthorization(t *testing.T) (*foundation, *authorization.Service, doma
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err = e.admin.Exec(ctx, `INSERT INTO mayi.session_authentication VALUES('a',$1,$2,'test','https://idp.example',clock_timestamp()),('b',$3,$4,'test','https://idp.example',clock_timestamp())`, secretHash("session-a"), secretHash("browser-a"), secretHash("session-b"), secretHash("browser-b")); err != nil {
+		t.Fatal(err)
+	}
 	svc, err := app.NewAuthorization(e.store, clock{})
 	if err != nil {
 		t.Fatal(err)
@@ -241,6 +244,9 @@ func TestP2ConsentCannotMoveToAnotherSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := e.admin.Exec(ctx, `INSERT INTO mayi.browser_sessions VALUES('a',$1,'user:alice',clock_timestamp()+interval '1 hour',false)`, secretHash("replacement-session")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.admin.Exec(ctx, `INSERT INTO mayi.session_authentication VALUES('a',$1,$2,'test','https://idp.example',clock_timestamp())`, secretHash("replacement-session"), p.BrowserBindingHash); err != nil {
 		t.Fatal(err)
 	}
 	p.SessionHash = secretHash("replacement-session")

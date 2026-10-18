@@ -57,6 +57,7 @@ func (s *Store) AuthorizeConsent(ctx context.Context, p authorization.AccessProo
  JOIN mayi.authorization_transactions w ON w.tenant_id=s.tenant_id
  JOIN mayi.clients c ON c.tenant_id=w.tenant_id AND c.client_id=w.client_id AND c.enabled
  WHERE s.tenant_id=$1 AND s.session_hash=$2 AND NOT s.revoked AND s.expires_at>$6 AND s.expires_at>clock_timestamp() AND m.active
+ AND EXISTS(SELECT 1 FROM mayi.session_authentication e WHERE e.tenant_id=s.tenant_id AND e.session_hash=s.session_hash AND e.browser_hash=$4)
  AND w.handle_hash=$3 AND w.browser_binding_hash=$4 AND ($5='' OR w.csrf_hash=$5)
  AND (w.consent_session_hash IS NULL OR w.consent_session_hash=s.session_hash) AND w.status='pending' AND w.policy_version=$7 AND w.created_at<=$6 AND w.expires_at>$6 AND w.expires_at>clock_timestamp()`, p.TenantIssuer.TenantID, p.SessionHash, p.AuthorizationHash, p.BrowserBindingHash, p.CSRFHash, now, a.version).Scan(&result.Subject)
 		if err != nil {
@@ -137,6 +138,7 @@ func (a *authorizationTransaction) RecheckConsent(ctx context.Context, proof aut
  JOIN mayi.principal_memberships m ON m.tenant_id=s.tenant_id AND m.subject=s.subject
  JOIN mayi.clients c ON c.tenant_id=w.tenant_id AND c.client_id=w.client_id
  WHERE w.tenant_id=$1 AND w.handle_hash=$2 AND w.browser_binding_hash=$3 AND ($4='' OR w.csrf_hash=$4)
+ AND EXISTS(SELECT 1 FROM mayi.session_authentication e WHERE e.tenant_id=s.tenant_id AND e.session_hash=s.session_hash AND e.browser_hash=$3)
  AND w.status='pending' AND w.policy_version=$5 AND w.created_at<=$6 AND w.expires_at>$6 AND w.expires_at>clock_timestamp()
  AND (w.consent_session_hash IS NULL OR w.consent_session_hash=s.session_hash) AND s.session_hash=$7 AND s.subject=$8 AND NOT s.revoked AND s.expires_at>$6 AND s.expires_at>clock_timestamp() AND m.active AND c.enabled
  FOR UPDATE OF w FOR SHARE OF c`, a.tenantIssuer.TenantID, proof.AuthorizationHash, proof.BrowserBindingHash, proof.CSRFHash, a.version, now, p.SessionHash, p.Subject).Scan(&hash)

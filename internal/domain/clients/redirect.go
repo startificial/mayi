@@ -60,3 +60,26 @@ func ValidRedirectURI(raw string) bool {
 	}
 	return true
 }
+
+// ValidAuthorizationRedirect rejects fixed query members reserved for the
+// authorization response, so successful/error responses cannot become ambiguous
+// or overwrite a client's registered fixed query data.
+func ValidAuthorizationRedirect(raw string) bool {
+	if !ValidRedirectURI(raw) {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	q, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return false
+	}
+	for _, name := range []string{"code", "state", "iss", "error", "error_description", "error_uri"} {
+		if _, ok := q[name]; ok {
+			return false
+		}
+	}
+	return true
+}

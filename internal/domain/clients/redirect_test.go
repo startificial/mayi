@@ -26,3 +26,14 @@ func TestWebRedirectRejectsUnsafeOrMalformedDestinations(t *testing.T) {
 		t.Fatal("duplicate redirects accepted")
 	}
 }
+
+func TestAuthorizationRedirectRejectsReservedResponseQuery(t *testing.T) {
+	for _, raw := range []string{"https://app.example/cb?code=old", "https://app.example/cb?state=fixed", "https://app.example/cb?%69ss=evil", "https://app.example/cb?error=bad"} {
+		if ValidAuthorizationRedirect(raw) {
+			t.Fatal("ambiguous authorization redirect", raw)
+		}
+	}
+	if !ValidAuthorizationRedirect("https://app.example/cb?provider=mayi") {
+		t.Fatal("fixed non-protocol query refused")
+	}
+}

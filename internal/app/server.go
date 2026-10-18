@@ -123,6 +123,13 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 		}
 		router.HandleFunc("GET /.well-known/oauth-authorization-server/t/"+t.ID, public.Metadata)
 		router.HandleFunc("GET /t/"+t.ID+"/jwks", public.JWKS)
+		if t.IdentityProvider != nil {
+			browser, err := NewBrowser(ctx, c, t, store, lookup)
+			if err != nil {
+				return nil, err
+			}
+			router.Handle("/t/"+t.ID+"/", browser)
+		}
 	}
 	telemetry := middleware.NewTelemetry(logger)
 	signers := make([]health.TenantSigner, 0, len(rings))

@@ -29,6 +29,7 @@ type BeginResult struct {
 }
 type Consent struct {
 	ClientName, ResourceName, RedirectURI string
+	ClientID, ResourceURI                 string
 	PermissionScopes                      []resources.Scope
 	ExpiresAt                             time.Time
 }
@@ -125,7 +126,7 @@ func (s *Service) PrepareConsent(ctx context.Context, p AccessProof) (Consent, e
 			return err
 		}
 		spec := workflow.Snapshot()
-		result = Consent{ClientName: current.Client.Name, ResourceName: current.Resource.Name, RedirectURI: spec.Request.RedirectURI, ExpiresAt: spec.ExpiresAt}
+		result = Consent{ClientName: current.Client.Name, ClientID: current.Client.ID, ResourceName: current.Resource.Name, ResourceURI: current.Resource.URI, RedirectURI: spec.Request.RedirectURI, ExpiresAt: spec.ExpiresAt}
 		for _, name := range spec.Request.PermissionScopes {
 			for _, permission := range current.Resource.Scopes {
 				if name == permission.Name {

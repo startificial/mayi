@@ -27,12 +27,26 @@ type Config struct {
 	Tenants                []TenantConfig `json:"tenants"`
 }
 type TenantConfig struct {
-	ID                string                `json:"id"`
-	KeyName           string                `json:"key_name"`
-	KeyVersions       []int                 `json:"key_versions"`
-	InitialKeyVersion int                   `json:"initial_key_version"`
-	TransitTokenEnv   string                `json:"transit_token_env"`
-	Administrators    []AdministratorConfig `json:"administrators"`
+	ID                string                  `json:"id"`
+	KeyName           string                  `json:"key_name"`
+	KeyVersions       []int                   `json:"key_versions"`
+	InitialKeyVersion int                     `json:"initial_key_version"`
+	TransitTokenEnv   string                  `json:"transit_token_env"`
+	Administrators    []AdministratorConfig   `json:"administrators"`
+	IdentityProvider  *IdentityProviderConfig `json:"identity_provider,omitempty"`
+}
+
+// Provider trust is explicit startup configuration. Changing an issuer, client
+// or endpoint requires a new ID and new operator-owned identity mappings.
+type IdentityProviderConfig struct {
+	ID                    string `json:"id"`
+	Issuer                string `json:"issuer"`
+	ClientID              string `json:"client_id"`
+	ClientSecretEnv       string `json:"client_secret_env"`
+	AuthorizationEndpoint string `json:"authorization_endpoint"`
+	TokenEndpoint         string `json:"token_endpoint"`
+	JWKSURI               string `json:"jwks_uri"`
+	SigningAlgorithm      string `json:"signing_algorithm"`
 }
 type AdministratorConfig struct {
 	ID          string   `json:"id"`
@@ -88,6 +102,11 @@ func (c Config) Validate() error {
 			return ErrConfiguration
 		}
 		seenTenants[t.ID] = true
+		if t.IdentityProvider != nil {
+			if err := validateIdentityProvider(c, t.IdentityProvider); err != nil {
+				return err
+			}
+		}
 		seenKeys[t.KeyName] = true
 		seenVersions := map[int]bool{}
 		for _, v := range t.KeyVersions {
@@ -114,6 +133,19 @@ func (c Config) Validate() error {
 				}
 				seenPermissions[p] = true
 			}
+		}
+	}
+	return nil
+}
+
+func validateIdentityProvider(c Config, p *IdentityProviderConfig) error {
+	if _, err := NewIssuerScope(c.PublicOrigin, p.ID); err != nil || p.ClientID == "" || len(p.ClientID) > 255 || !regexp.MustCompile(`^MAYI_[A-Z0-9_]{1,80}$`).MatchString(p.ClientSecretEnv) || !slices.Contains([]string{"ES256", "RS256", "PS256"}, p.SigningAlgorithm) {
+		return ErrConfiguration
+	}
+	for _, raw := range []string{p.Issuer, p.AuthorizationEndpoint, p.TokenEndpoint, p.JWKSURI} {
+		u, e := url.Parse(raw)
+		if e != nil || len(raw) > 2048 || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || u.String() != raw || strings.HasSuffix(raw, "/") || u.Scheme != "https" && !(c.AllowInsecureLoopback && u.Scheme == "http" && (u.Hostname() == "127.0.0.1" || u.Hostname() == "::1")) {
+			return ErrConfiguration
 		}
 	}
 	return nil
