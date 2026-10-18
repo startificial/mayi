@@ -218,12 +218,12 @@ This is partial groundwork for CORE-1/2/3/5, GRANT-3/4, ADM-1/5 and OPS-4. No pu
 
 | ID | Level | Phase | Owner | Acceptance condition |
 | --- | --- | --- | --- | --- |
-| WEB-1 | MUST | P2 | Browser integration and sessions | Sample BFF keeps tokens server-side and browser has only hardened session cookies. |
+| WEB-1 | MUST | P2 | Browser integration and sessions | Runnable [Go reference BFF](implementation-plan.md#go-reference-backend-for-frontend) keeps tokens server-side, serializes refresh, permits only configured API forwarding and gives the browser hardened opaque session cookies. Document standalone/existing-Go-backend deployment and a language-independent integration contract. |
 | WEB-2 | MUST | P3 | Browser integration and sessions | Browser-token sample uses short-lived DPoP credentials and a non-exportable key with no token URL leakage. |
 | WEB-3 | SHOULD | P7 | Browser integration and sessions | Supported-browser DBSC registration/refresh works and registered sessions cannot silently downgrade. |
 | WEB-4 | MUST | P2 | Browser integration and sessions | Sensitive pages enforce nonce CSP, supported Trusted Types and escaped untrusted content. |
-| WEB-5 | MUST | P5 | Browser integration and sessions | Embedded flow uses tested cookie/storage capabilities and origin-bound one-use handoff codes; unsupported cases fail safely. |
-| WEB-6 | MUST | P5 | Browser integration and sessions | Embeddable pages use tenant allowlists while login and consent remain unframeable. |
+| WEB-5 | MUST | P5 (contract in P2) | Browser integration and sessions | [Embedded-session integration](implementation-plan.md#embedded-authentication-and-sessions) extends the same Go reference BFF with a runnable cross-origin parent/iframe example, iframe-context cookie establishment, partitioned-cookie and permitted Storage Access paths, proof/origin/session-bound one-use handoff, atomic replay/concurrency checks, lifecycle/revocation evidence and a versioned browser matrix with blocked-storage/popup fallbacks. Tokens remain server-side; unsupported cases fail explicitly. |
+| WEB-6 | MUST | P5 (contract in P2) | Browser integration and sessions | Exact tenant/client parent-origin and full ancestor policy permits only approved application frames; login, account selection, consent and step-up remain unframeable and use popup/top-level continuation. Sandbox, opaque-origin, nested-frame and forged message origin/source cases fail safely. |
 | WEB-7 | MUST | P2 | Browser integration and sessions | CORS is explicit per origin; wildcard credentialed responses and reflected arbitrary origins fail. |
 | WEB-8 | MUST | P2 | Browser integration and sessions | Idle/absolute timeout, list/end sessions and sensitive-action reauthentication work; P5 completes assurance integration. |
 | WEB-9 | SHOULD | P7 | Browser integration and sessions | Documented device/network changes produce bounded step-up/revocation decisions with false-positive monitoring. |

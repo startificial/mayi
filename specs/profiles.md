@@ -24,7 +24,9 @@ These resolve the implementation plan's clarification table while preserving the
 | OIDC-3/RES-4 | UserInfo is a separate registered audience. A business-resource token is never accepted as a UserInfo credential. Identity claims may be returned in an appropriately authorized ID token. |
 | LIFE-12 | JWTs have jti; opaque tokens/codes have internal issuance/lineage IDs and hashed handles. Plaintext handles need not encode JWT claims. |
 | SEC-10 | FAPI is a complete separately enabled profile with conformance evidence. Base public/native clients are not labeled FAPI. |
-| WEB-3/5 | Capability-test DBSC and embedding. Login/consent stay top-level. Fail unsupported embedding explicitly; never put tokens in URLs/postMessage. |
+| WEB-1 | Deliver the [Go reference BFF](../docs/implementation-plan.md#go-reference-backend-for-frontend) in P2 with server-side credentials, opaque browser sessions, serialized refresh and allowlisted API forwarding. It may run standalone or in an existing Go backend. Its public integration contract remains language-independent. |
+| WEB-3 | Capability-test DBSC; unsupported browsers do not imply the device-bound session guarantee. |
+| WEB-5/6/8/10 | Authenticated embedded applications use the [BFF/session integration contract](../docs/implementation-plan.md#embedded-authentication-and-sessions). Interactive login/consent/step-up remain popup/top-level and unframeable. Use tested partitioned cookies or a permitted Storage Access path, exact frame/message origin and source checks, and a distinct proof-bound one-use handoff code. Preserve session and grant lifecycle semantics; blocked storage/popups require explicit recovery, never credentials in URLs/messages. Contract in P2; implementation and browser evidence in P5. |
 | FED-9 | Signature verification of an enterprise assertion does not deliver upstream removal events. Immediate upstream cutoff requires authenticated lifecycle signals or a current upstream decision contract. |
 
 ## Intended profiles

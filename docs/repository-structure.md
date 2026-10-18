@@ -63,7 +63,7 @@ Mayi uses a modular monolith with ports and adapters. This is the target layout;
 │           └── telemetry/          Logging, metrics and tracing integrations
 ├── pkg/
 │   └── resource/                   Public Go resource SDK facade and middleware
-├── examples/                       BFF, native client, workload, gateway and MCP
+├── examples/                       Go reference BFF, native client, workload, gateway and MCP
 ├── tests/
 │   ├── integration/                Real adapter and transaction behavior
 │   ├── contract/                   Port contracts and interoperable fixtures
@@ -113,6 +113,12 @@ A service package normally contains `service.go`, `ports.go`, `commands.go`, `re
 Ports belong to their consumer. For example, a token service defines a narrow `GrantReader`, `CredentialUnitOfWork`, `Signer` and `ReplayStore`. The database adapter implements those contracts without leaking `sql.Tx`, `pgx.Tx` or generated rows into service signatures. Do not define one interface per concrete type without an actual boundary.
 
 Pure grant/scoping rules belong in domain code and are called by services. Keep reusable orchestration in `services/`; do not place it in a handler, SDK middleware, SQL query helper or package called `utils`, `common`, `helpers` or `manager`.
+
+## Reference BFF boundary
+
+The planned Go application under `examples/bff/` demonstrates an application-owned backend for frontend; create the directory only when implementing real code. It stays in the root module and uses public OAuth/OIDC and documented session/status/logout contracts, plus the bounded public resource SDK where applicable. It must not import Mayi's `internal/` packages, query Mayi's tables or reuse its privileged server configuration. Its own handlers, use cases, domain state and effect ports follow the same inward dependency principles. Any added dependency/tool requires inventory and CI admission.
+
+Document standalone deployment behind the embedded application's same-origin reverse proxy and integration into an existing Go backend. P2 supplies the core BFF/resource example; P5 extends it with the parent/iframe bootstrap and compatibility tests. The wire/session contract is language-independent, so other application backends can implement it without Go. A published BFF SDK, new module or extra server composition boundary is not implied by this reference application.
 
 ## Protected resource access
 
