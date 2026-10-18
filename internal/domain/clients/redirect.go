@@ -50,5 +50,13 @@ func ValidRedirectURI(raw string) bool {
 	if _, err := url.QueryUnescape(u.RawQuery); err != nil {
 		return false
 	}
+	// RawQuery is preserved by URL.String without escaping. Require URI query
+	// characters here too, so quotes/brackets/control syntax must be encoded.
+	for _, c := range u.RawQuery {
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("-._~!$&'()*+,;=:@/?%", c) {
+			continue
+		}
+		return false
+	}
 	return true
 }
