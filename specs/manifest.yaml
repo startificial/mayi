@@ -349,6 +349,38 @@
       ],
       "implemented_sections": [],
       "deviations": []
+    },
+    {
+      "id": "rfc9396",
+      "revision": "RFC 9396",
+      "url": "https://www.rfc-editor.org/rfc/rfc9396.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc9396.txt",
+      "sha256": "d6a8f032d8a585daae1c33a8c7b6e539d199f886ec8cc1c7898436f7f2eed29c",
+      "retrieved_on": "2026-10-18",
+      "target_phase": "P2",
+      "target_sections": [
+        "all"
+      ],
+      "implemented_sections": [],
+      "deviations": [
+        "Mayi initial document profile requires one exact registered location, nonempty identifier/actions and PAR; unregistered type semantics fail closed."
+      ]
+    },
+    {
+      "id": "rfc9126",
+      "revision": "RFC 9126",
+      "url": "https://www.rfc-editor.org/rfc/rfc9126.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc9126.txt",
+      "sha256": "a79d0e30fcc24a22b79c8e18aa82362f6e63a7b8a5d58b480e746360e97388db",
+      "retrieved_on": "2026-10-18",
+      "target_phase": "P2",
+      "target_sections": [
+        "all"
+      ],
+      "implemented_sections": [],
+      "deviations": [
+        "Mayi requires PAR for the P2 object-RAR profile; other supported profiles may apply per-client PAR policy."
+      ]
     }
   ]
 }

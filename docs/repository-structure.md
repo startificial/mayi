@@ -21,7 +21,7 @@ Mayi uses a modular monolith with ports and adapters. This is the target layout;
 │   │   ├── identity/               Subject, tenant, membership, assurance
 │   │   ├── clients/                Client identity and registration rules
 │   │   ├── resources/              Resource identifiers and permission ceilings
-│   │   ├── grants/                 Roots, immutable revisions and attenuation
+│   │   ├── grants/                 Roots, immutable revisions, typed RAR ceilings and attenuation
 │   │   ├── tokens/                 Token purpose, lineage, expiry and binding
 │   │   ├── policy/                 Pure policy evaluation
 │   │   └── audit/                  Security-event values
@@ -119,6 +119,8 @@ Pure grant/scoping rules belong in domain code and are called by services. Keep 
 The planned Go application under `examples/bff/` demonstrates an application-owned backend for frontend; create the directory only when implementing real code. It stays in the root module and uses public OAuth/OIDC and documented session/status/logout contracts, plus the bounded public resource SDK where applicable. It must not import Mayi's `internal/` packages, query Mayi's tables or reuse its privileged server configuration. Its own handlers, use cases, domain state and effect ports follow the same inward dependency principles. Any added dependency/tool requires inventory and CI admission.
 
 Document standalone deployment behind the embedded application's same-origin reverse proxy and integration into an existing Go backend. P2 supplies the core BFF/resource example; P5 extends it with the parent/iframe bootstrap and compatibility tests. The wire/session contract is language-independent, so other application backends can implement it without Go. A published BFF SDK, new module or extra server composition boundary is not implied by this reference application.
+
+RFC 9396 ownership follows these existing boundaries: `domain/grants` owns approved typed object/action ceilings and pure comparison; `domain/resources` owns registered audience/type/action policy; authorization owns the bounded request/consent workflow; token and resource services reuse those rules. Adapters map standard wire details and persistence records without importing vendor/JSON models into the domain or creating a second authorization engine. The public resource SDK maps its own bounded types and invokes shared enforcement. [ADR 0010](adr/0010-rar-object-grants-prerequisite.md) makes this a P2 prerequisite; it adds no parallel package layout or module.
 
 ## Protected resource access
 

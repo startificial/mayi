@@ -113,20 +113,20 @@ This is the fix for ambient authority: every access token names the one resource
 | RES-7 | Machine tokens carry `sub` equal to `client_id` and no user claims, so a resource can always tell user tokens from machine tokens | MUST | RFC 9068 §2.2 |  |
 | RES-8 | Tenant identity (organisation) in a dedicated claim, never inferred from the user | MUST | Operational |  |
 | RES-9 | A token issued for one resource is refused by every other resource, including other resources served by the same platform | MUST | RFC 8707, RFC 9068 §4 |  |
-| RES-10 | Rich authorization requests for fine-grained, structured permissions (for example "this workspace, these operations, read only") | SHOULD | RFC 9396 |  |
+| RES-10 | Rich authorization requests using standard `authorization_details`, including grants limited to specific objects/actions (for example document `123`, read only); prerequisite for the P2 core preview | MUST | RFC 9396 |  |
 
 ## Scopes, consent and grants
 
-A grant is a durable record: this user lets this client do these things on this resource, until it expires or is revoked. Tokens are derived from grants and never outlive them.
+A grant is a durable record: this user lets this client do these things on this resource, until it expires or is revoked. Tokens are derived from grants and never outlive them. [ADR 0010](docs/adr/0010-rar-object-grants-prerequisite.md) makes RFC 9396 object-specific grants a mandatory P2 prerequisite; a scope-only preview does not satisfy RES-10.
 
 | ID | Requirement | Level | Standard | Verified |
 | --- | --- | --- | --- | --- |
 | GRANT-1 | Scopes defined per resource, with human descriptions shown on consent; requests for unknown scopes refused with `invalid_scope` | MUST | RFC 6749 §3.3 |  |
-| GRANT-2 | Effective access = the user's current permissions ∩ the granted scopes, evaluated at the resource on every request; a token never carries permissions the user has since lost | MUST | Design rule |  |
+| GRANT-2 | Effective access = the user's current permissions ∩ the approved scope and RAR object/action ceilings, evaluated at the resource on every request; historical token claims cannot restore permissions the user has lost | MUST | Design rule |  |
 | GRANT-3 | Explicit consent screen per client, resource and scope set, showing the client's verified identity and redirect host; protected against clickjacking (`frame-ancestors 'none'`) and CSRF | MUST | RFC 9700 §4.4, §4.7 |  |
 | GRANT-4 | Consent stored as a grant record with client, user, tenant, resource, scopes, authorization details, created, expires, revoked | MUST | Design rule |  |
 | GRANT-5 | Incremental authorization: a client asks for more scopes later, and the new consent extends the existing grant instead of replacing it | SHOULD | OAuth 2.1, RFC 9470 for the challenge |  |
-| GRANT-6 | Down-scoping on refresh and exchange: a client may request fewer scopes than granted, never more | MUST | RFC 6749 §6, RFC 8693 |  |
+| GRANT-6 | Down-scoping on refresh and exchange: scopes and RAR object/action permissions may only narrow, never gain new objects or actions | MUST | RFC 6749 §6, RFC 8693, RFC 9396 |  |
 | GRANT-7 | Users list and revoke their own grants; tenant admins list and revoke any grant in their tenant | MUST | Design rule |  |
 | GRANT-8 | Grant management API for clients to query, update and revoke the grant they hold | MAY | FAPI Grant Management |  |
 | GRANT-9 | Revoking a grant revokes every token derived from it, including tokens exchanged from it at any depth, and refresh token families | MUST | Design rule, RFC 7009 |  |
@@ -246,7 +246,7 @@ The OAuth 2.0 Security Best Current Practice (RFC 9700) is the baseline; FAPI 2.
 | ID | Requirement | Level | Standard | Verified |
 | --- | --- | --- | --- | --- |
 | SEC-1 | Every recommendation of the OAuth Security BCP applied; deviations listed and justified | MUST | RFC 9700 |  |
-| SEC-2 | Pushed authorization requests, so authorization parameters travel back-channel and cannot be tampered with in the browser; per-client option to require them | SHOULD | RFC 9126 |  |
+| SEC-2 | Pushed authorization requests protect back-channel request integrity; required for the P2 object-RAR profile and configurable per client for other profiles | SHOULD | RFC 9126 |  |
 | SEC-3 | Signed request objects for clients that need integrity of authorization parameters | MAY | RFC 9101 |  |
 | SEC-4 | JWT-secured authorization responses | MAY | OpenID JARM |  |
 | SEC-5 | Step-up authentication: resources return `insufficient_user_authentication` with required `acr_values` or `max_age`, and the server re-authenticates (MFA) before issuing | MUST | RFC 9470 |  |
@@ -357,9 +357,9 @@ Every published RFC the server must be checked against, with the requirements th
 | [RFC 8725](https://www.rfc-editor.org/rfc/rfc8725) | JSON Web Token Best Current Practices | LIFE-11, SEC-9 | MUST | Not checked |
 | [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) | JWT Profile for OAuth 2.0 Access Tokens | RES-5, RES-7, RES-9, OIDC-2, M2M-4 | MUST | Not checked |
 | [RFC 9101](https://www.rfc-editor.org/rfc/rfc9101) | JWT-Secured Authorization Request (JAR) | SEC-3 | MAY | Not checked |
-| [RFC 9126](https://www.rfc-editor.org/rfc/rfc9126) | Pushed Authorization Requests (PAR) | SEC-2, SEC-10 | SHOULD | Not checked |
+| [RFC 9126](https://www.rfc-editor.org/rfc/rfc9126) | Pushed Authorization Requests (PAR) | SEC-2, SEC-10, RES-10 | MUST for object-RAR profile | Not checked |
 | [RFC 9207](https://www.rfc-editor.org/rfc/rfc9207) | Authorization Server Issuer Identification | DISC-4, SEC-6 | MUST | Not checked |
-| [RFC 9396](https://www.rfc-editor.org/rfc/rfc9396) | Rich Authorization Requests (RAR) | RES-10 | SHOULD | Not checked |
+| [RFC 9396](https://www.rfc-editor.org/rfc/rfc9396) | Rich Authorization Requests (RAR) | RES-10 | MUST | Not checked |
 | [RFC 9449](https://www.rfc-editor.org/rfc/rfc9449) | Demonstrating Proof of Possession (DPoP) | BIND-1 to BIND-4, BIND-6, BIND-7, WEB-2 | MUST | Not checked |
 | [RFC 9470](https://www.rfc-editor.org/rfc/rfc9470) | Step-Up Authentication Challenge | SEC-5, GRANT-5 | MUST | Not checked |
 | [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700) | OAuth 2.0 Security Best Current Practice | CORE-3, CORE-5, GRANT-3, GRANT-12, LIFE-1 to LIFE-3, SEC-1, SEC-6 to SEC-8, WEB-10 | MUST | Not checked |

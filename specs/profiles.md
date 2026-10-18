@@ -12,7 +12,8 @@ These resolve the implementation plan's clarification table while preserving the
 | --- | --- |
 | CORE-3/4 | Exact redirect matching, with only RFC 8252's native loopback port exception. Compare host/path/scheme; exceptions do not create wildcard redirects. Native fixtures arrive in P3. |
 | CORE-5 | Code stores original authorization transaction, redirect, exact revision and S256 challenge; lifetime ≤60s. OAuth 2.1 -16 permits omission of redirect_uri at redemption. When present it must match the original exactly. Authenticated reuse commits lineage revocation before returning invalid_grant. |
-| GRANT-2 | Claims are an immutable ceiling. Enforce current permissions at every resource request; historical JWT claims cannot be edited after issuance. |
+| GRANT-2 | Claims and approved typed RAR object/action tuples are immutable ceilings. Enforce the exact requested object/action and current resource-owned permissions before payload access; historical JWT claims cannot be edited after issuance. |
+| RES-10/GRANT-4/6/SEC-2 | [ADR 0010](../docs/adr/0010-rar-object-grants-prerequisite.md) makes RFC 9396 object grants a P2 prerequisite, with required RFC 9126 PAR for that profile. Use registered `authorization_details` types with exact audience/identifier/action semantics, safe consent, immutable revision/credential ceilings, standard token/JWT/introspection details and resource enforcement. Scope-only fallback, extra objects/actions and unknown semantics fail closed; P4 exchange must preserve/narrow these tuples. Additional type profiles may follow later. |
 | GRANT-9/LIFE-7/OPS-3 | Fresh authoritative decisions after revocation acknowledgement; no stale-positive cache/offline fallback in the strict profile. Push is supplementary. See ADR 0002. |
 | GRANT-12/11/FED-5 | First-party interactive consent exemptions use an explicit audited tenant trust list. Administrative grants and trusted enterprise assertions are separately authorized sources and never confer missing user permissions. |
 | CLI-3 | CIMD establishes metadata-host control. Use same-origin redirect policy by default; native and approved third-party exceptions require explicit policy/fixtures. Self-declared branding is not verified reputation. |
@@ -33,7 +34,7 @@ These resolve the implementation plan's clarification table while preserving the
 
 | Profile | Intended behavior | Enabling evidence |
 | --- | --- | --- |
-| Base interactive and machine | S256, single-resource access tokens, explicit grants and tenant isolation; approved authentication methods only | P2/P3 adapter tests and interoperability, real persistence and signer |
+| Base interactive and machine | S256, single-resource access tokens, explicit grants and tenant isolation; approved authentication methods only; P2 includes the mandatory RFC 9396 document-grant/PAR profile with resource enforcement | P2/P3 adapter tests and interoperability, real persistence/signer, mandatory document-123/read end-to-end and denial/refresh/revocation evidence |
 | Strict resource enforcement | Signature/purpose/audience/binding plus current grant, subject, client, actor and permission decisions; fail closed | P3/P6 resource integration and partition/revocation tests |
 | Gateway recipient exchange | Explicit edge, same tenant/user, bounded actor ancestry and attenuation; fresh gateway key proof | P4 topology and descendant-revocation tests |
 | Enterprise assertion authorization | Distinct assertion purpose, per-tenant issuer/client trust, replay checks and current enterprise policy | P5 assertion and lifecycle tests |

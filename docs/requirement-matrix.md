@@ -2,7 +2,7 @@
 
 October 18, 2026 · Delivery coverage and bounded implementation evidence
 
-This matrix covers all 156 requirements in [the README](../README.md): 110 MUSTs, 35 SHOULDs and 11 MAYs. It accompanies [the implementation plan](implementation-plan.md). Owners are component responsibilities, not named staff. Phase P6 is the first production gate; earlier phases are limited previews. All full requirements remain **Planned**; P0 architecture/protocol work is complete as documented below, without marking protocol or production behavior Verified.
+This matrix covers all 156 requirements in [the README](../README.md): 111 MUSTs, 34 SHOULDs and 11 MAYs. It accompanies [the implementation plan](implementation-plan.md). Owners are component responsibilities, not named staff. Phase P6 is the first production gate; earlier phases are limited previews. All full requirements remain **Planned**; P0 architecture/protocol work is complete as documented below, without marking protocol or production behavior Verified.
 
 The phase is the intended delivery or final acceptance phase. Cross-cutting work starts earlier; later flows must inherit existing controls. MUST acceptance conditions incorporate the interpretation decisions in the plan, which P0 must resolve. P7 schedules recommended extensions; P8 contains optional profiles. A MAY promoted earlier remains optional in the requirements baseline.
 
@@ -95,18 +95,18 @@ Token endpoints, downstream OIDC, idle/session-list APIs, BFF/resource enforceme
 | RES-7 | MUST | P2 | Authorization and resource SDK | Machine sub equals client_id; disjoint subject namespaces and principal_type prevent user/machine ambiguity. |
 | RES-8 | MUST | P2 | Authorization and resource SDK | Dedicated tenant claim is issued from trusted transaction context and matched by resources. |
 | RES-9 | MUST | P2 | Authorization and resource SDK | Resource A tokens fail at B even when both APIs share a deployment and signing infrastructure. |
-| RES-10 | SHOULD | P7 | Authorization and resource SDK | Each RAR type has schema validation, consent rendering, resource enforcement and a tested attenuation relation. |
+| RES-10 | MUST | P2 prerequisite | Authorization, grants, tokens and resource SDK | [ADR 0010](adr/0010-rar-object-grants-prerequisite.md): standard RFC 9396 request/response, metadata and JWT/introspection details; registered document profile; protected consent; immutable object/action ceilings through code/refresh; resource enforcement and fail-closed unknown-type handling. Grant read on document 123, deny 124/write even when the user has both, and prove ACL removal, revocation, replay and narrowing. P2 cannot exit without this evidence. |
 
 ## GRANT
 
 | ID | Level | Phase | Owner | Acceptance condition |
 | --- | --- | --- | --- | --- |
 | GRANT-1 | MUST | P2 | Grant services and resource SDK | Consent uses resource-owned descriptions and unknown scopes fail with invalid_scope. |
-| GRANT-2 | MUST | P2 | Grant services and resource SDK | An unexpired token loses effective object access immediately after the resource removes the user's permission. |
+| GRANT-2 | MUST | P2 | Grant services and resource SDK | Enforce the approved RAR object/action ceiling and current resource-owned permissions before payload load; document 124 fails under a document-123 grant even if the user can access both. An unexpired token loses access immediately after ACL removal or grant revocation. |
 | GRANT-3 | MUST | P2 | Grant services and resource SDK | Consent binds exact client/resource/scope request and resists CSRF, framing and malicious metadata. |
-| GRANT-4 | MUST | P2 | Grant services and resource SDK | Grant persistence contains immutable approved revision and complete principal/client/tenant/resource/validity data. |
+| GRANT-4 | MUST | P2 | Grant services and resource SDK | Immutable approved revisions retain principal/client/tenant/resource/validity and the typed RAR profile/version/object/action ceiling; codes, refresh families and issuances bind to that exact approval. |
 | GRANT-5 | SHOULD | P2 | Grant services and resource SDK | New consent extends visible authorization while old refresh families retain their original scope ceilings. |
-| GRANT-6 | MUST | P2 | Grant services and resource SDK | Refresh refuses scope expansion; P4 repeats this invariant for exchange and mapped resources. |
+| GRANT-6 | MUST | P2 | Grant services and resource SDK | Refresh preserves or narrows scopes and complete RAR object/action tuples, never adds objects/actions or drops required details; P4 repeats this invariant for exchange and mapped resources. |
 | GRANT-7 | MUST | P2 | Grant services and resource SDK | Users revoke only their own grants; tenant admins can revoke only grants in their tenant. |
 | GRANT-8 | MAY | P8 | Grant services and resource SDK | Client grant management exposes only the caller's authorized grant operations and cannot silently expand consent. |
 | GRANT-9 | MUST | P4 | Grant services and resource SDK | Root revocation blocks refresh and all multi-hop descendants on the next fresh authoritative decision. |
@@ -149,7 +149,7 @@ Token endpoints, downstream OIDC, idle/session-list APIs, BFF/resource enforceme
 | --- | --- | --- | --- | --- |
 | DEL-1 | MUST | P4 | Delegation services and gateway integration | Confidential intermediary authentication is mandatory; supplied actor tokens must match the authenticated actor. |
 | DEL-2 | MUST | P4 | Delegation services and gateway integration | User subject stays stable and nested act history orders current and prior actors correctly. |
-| DEL-3 | MUST | P4 | Delegation services and gateway integration | Tenant/user changes, unauthorized target audiences and expanding scope/RAR mappings fail. |
+| DEL-3 | MUST | P4 | Delegation services and gateway integration | Reuse P2 typed RAR comparison: subset objects/actions succeed only on an approved edge; additional identifiers, action expansion, tuple recombination, tenant/user changes, unauthorized audiences and unknown mappings fail. |
 | DEL-4 | MUST | P4 | Delegation services and gateway integration | Exchange requires applicable may_act or a configured recipient/intermediary/target delegation edge. |
 | DEL-5 | MUST | P4 | Delegation services and gateway integration | Depth overflow, cycles and child lifetime beyond parent fail. |
 | DEL-6 | MUST | P4 | Delegation services and gateway integration | Revoked or expired root, family, parent or applicable actor dependency prevents exchange. |
@@ -208,7 +208,7 @@ Token endpoints, downstream OIDC, idle/session-list APIs, BFF/resource enforceme
 | ID | Level | Phase | Owner | Acceptance condition |
 | --- | --- | --- | --- | --- |
 | SEC-1 | MUST | P6 | Security across all components | RFC 9700 control checklist is complete with reviewed and justified applicability/deviation entries. |
-| SEC-2 | SHOULD | P7 | Security across all components | PAR requests are authenticated and short-lived; browser tampering and bypass of per-client PAR requirements fail. |
+| SEC-2 | SHOULD | P2 (required for object-RAR profile) | Security across all components | RFC 9126 PAR is a dependency of the mandatory P2 object-RAR profile. Apply the registered client authentication policy, bounded lifetime, S256/client binding and immutable request handling; front-channel replacement, request_uri swapping and required-PAR bypass fail. Wider FAPI requirements remain P7. |
 | SEC-3 | MAY | P8 | Security across all components | JAR validates client signatures, audience, time and request-parameter consistency without remote key-header trust. |
 | SEC-4 | MAY | P8 | Security across all components | JARM responses validate audience, signing policy, expiry and client processing in conformance fixtures. |
 | SEC-5 | MUST | P5 | Security across all components | Resource step-up challenge leads to verified fresh required assurance; failure or unsupported assurance blocks issuance. |
