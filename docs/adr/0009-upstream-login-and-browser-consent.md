@@ -26,6 +26,8 @@ When configured, expose `I/authorize`, `I/upstream/callback`, `I/consent` (GET/P
 
 Consent names the registered client ID, API audience, redirect and permissions. Script-free escaped pages send no-store/no-referrer, CSP, Trusted Types and frame denial. Approval requires stored CSRF proof, exact Origin and permitted Fetch Metadata; ending a session requires exact Origin plus browser/session proof. Tenant-specific cookies use Secure, HttpOnly, Path=/, no Domain and the `__Host-` prefix. TLS at the trusted proxy is required; no insecure-cookie fallback. These top-level pages do not implement the BFF's embedding/handoff contract.
 
+Consent's `form-action` permits Mayi plus only the validated registered client's exact origin, including any explicit port. This permits the post-submission return redirect under the [CSP form-navigation checks](https://www.w3.org/TR/2026/WD-CSP3-20260916/#directive-form-action), without wildcard destinations, scripts or framing. Other pages retain a self-only form policy. Real-browser interoperability still requires separate evidence.
+
 Every upstream fetch uses constrained egress: exact configured URLs, HTTPS/443, no proxy or redirects, bounded time/headers/JSON, no compression, and DNS/IP validation on each connection. Dial the validated literal while retaining normal TLS hostname verification; mixed private/public answers and special-use addresses fail closed. The explicit development flag permits HTTP to literal loopback addresses only. Private-network production upstreams need a reviewed destination policy; never disable SSRF checks as a workaround. This is P3 groundwork, not complete network-abuse certification.
 
 ## Evidence and remaining gates

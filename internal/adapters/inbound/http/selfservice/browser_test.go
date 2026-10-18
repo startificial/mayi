@@ -31,3 +31,21 @@ func TestAuthorizationResponseRetainsRegisteredQueryBytes(t *testing.T) {
 		}
 	}
 }
+
+func TestConsentPolicyAllowsExactRegisteredReturnOrigin(t *testing.T) {
+	policy, err := consentPolicy("https://app.example:8443/cb?provider=mayi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(policy, "form-action 'self' https://app.example:8443;") || !strings.Contains(policy, "default-src 'none'") || !strings.Contains(policy, "frame-ancestors 'none'") || strings.Contains(policy, "*") {
+		t.Fatal("unbounded consent policy", policy)
+	}
+	if strings.Contains(pagePolicy(""), "app.example") {
+		t.Fatal("default policy trusts a client")
+	}
+	for _, redirect := range []string{"https://app.example.evil/cb\r\nX-Test:yes", "https://app.example/cb?state=ambiguous", "http://app.example/cb", "https://user@app.example/cb"} {
+		if _, err := consentPolicy(redirect); err == nil {
+			t.Fatal("unsafe policy input", redirect)
+		}
+	}
+}

@@ -22,6 +22,7 @@ import (
 	httptransport "github.com/startificial/mayi/internal/adapters/inbound/http"
 	"github.com/startificial/mayi/internal/adapters/inbound/web"
 	domain "github.com/startificial/mayi/internal/domain/authorization"
+	"github.com/startificial/mayi/internal/domain/clients"
 	"github.com/startificial/mayi/internal/domain/grants"
 	"github.com/startificial/mayi/internal/services/authentication"
 	"github.com/startificial/mayi/internal/services/authorization"
@@ -102,7 +103,28 @@ func headers(w http.ResponseWriter) {
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-Frame-Options", "DENY")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; require-trusted-types-for 'script'; trusted-types 'none'")
+	w.Header().Set("Content-Security-Policy", pagePolicy(""))
+}
+
+func pagePolicy(formOrigin string) string {
+	forms := "'self'"
+	if formOrigin != "" {
+		forms += " " + formOrigin
+	}
+	return "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action " + forms + "; require-trusted-types-for 'script'; trusted-types 'none'"
+}
+
+// Form-submission redirects retain the initiating document's form-action
+// constraints. Permit only the already authorized registered client's origin.
+func consentPolicy(redirect string) (string, error) {
+	if !clients.ValidAuthorizationRedirect(redirect) {
+		return "", authorization.ErrInvalid
+	}
+	u, err := url.Parse(redirect)
+	if err != nil {
+		return "", err
+	}
+	return pagePolicy(u.Scheme + "://" + u.Host), nil
 }
 func (h *Handler) failure(w http.ResponseWriter, err error) {
 	status := 400
@@ -240,6 +262,12 @@ func (h *Handler) Consent(w http.ResponseWriter, r *http.Request) {
 		h.failure(w, err)
 		return
 	}
+	policy, err := consentPolicy(view.RedirectURI)
+	if err != nil {
+		h.failure(w, authentication.ErrUnavailable)
+		return
+	}
+	w.Header().Set("Content-Security-Policy", policy)
 	model := web.Consent{ClientName: view.ClientName, ClientID: view.ClientID, ResourceName: view.ResourceName, ResourceURI: view.ResourceURI, RedirectURI: view.RedirectURI, CSRF: f.CSRF, Action: h.base + "/consent", LogoutAction: h.base + "/session/end"}
 	for _, p := range view.PermissionScopes {
 		model.Permissions = append(model.Permissions, web.Permission{Name: p.Name, Description: p.Description})
@@ -289,6 +317,12 @@ func (h *Handler) Decide(w http.ResponseWriter, r *http.Request) {
 		h.failure(w, authentication.ErrUnavailable)
 		return
 	}
+	policy, err := consentPolicy(result.RedirectURI)
+	if err != nil {
+		h.failure(w, authentication.ErrUnavailable)
+		return
+	}
+	w.Header().Set("Content-Security-Policy", policy)
 	h.set(w, "flow", "", -1)
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }

@@ -206,6 +206,9 @@ func TestP2BrowserOIDCConsentAndSessionLifecycle(t *testing.T) {
 		t.Fatal("callback replay", w.Code)
 	}
 	w := b.request("GET", "/t/a/consent", "", "")
+	if !strings.Contains(w.Header().Get("Content-Security-Policy"), "form-action 'self' https://app.example;") {
+		t.Fatal("consent cannot return to its registered client")
+	}
 	if w.Code != 200 || strings.Contains(w.Body.String(), "<script>") || !strings.Contains(w.Body.String(), "&lt;script&gt;") || !strings.Contains(w.Body.String(), "Read &lt;items&gt;") || w.Header().Get("X-Frame-Options") != "DENY" || !strings.Contains(w.Header().Get("Content-Security-Policy"), "frame-ancestors 'none'") || w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("unsafe consent rendering", w.Code, w.Body.String())
 	}
