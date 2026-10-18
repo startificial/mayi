@@ -284,22 +284,36 @@ func (h *Handler) Decide(w http.ResponseWriter, r *http.Request) {
 		h.failure(w, err)
 		return
 	}
-	redirect, err := url.Parse(result.RedirectURI)
+	redirect, err := responseRedirect(result, h.scope.Issuer)
 	if err != nil {
 		h.failure(w, authentication.ErrUnavailable)
 		return
 	}
-	q := redirect.Query()
+	h.set(w, "flow", "", -1)
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
+}
+
+// Preserve registered fixed-query bytes, including ordering, repeated values
+// and escape spelling. They may carry an application signature. The domain has
+// already excluded collisions with OAuth response parameter names.
+func responseRedirect(result authorization.DecisionResult, issuer string) (string, error) {
+	u, err := url.Parse(result.RedirectURI)
+	if err != nil {
+		return "", err
+	}
+	q := url.Values{"state": {result.State}, "iss": {issuer}}
 	if result.Code != "" {
 		q.Set("code", result.Code)
 	} else {
 		q.Set("error", "access_denied")
 	}
-	q.Set("state", result.State)
-	q.Set("iss", h.scope.Issuer)
-	redirect.RawQuery = q.Encode()
-	h.set(w, "flow", "", -1)
-	http.Redirect(w, r, redirect.String(), http.StatusSeeOther)
+	separator := "?"
+	if u.RawQuery != "" {
+		separator = "&"
+	} else if u.ForceQuery {
+		separator = ""
+	}
+	return result.RedirectURI + separator + q.Encode(), nil
 }
 func (h *Handler) EndSession(w http.ResponseWriter, r *http.Request) {
 	headers(w)
