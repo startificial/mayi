@@ -27,10 +27,14 @@ func TestTransitRejectsUnsafeMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	public := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))
-	for _, mode := range []string{"missing exportability", "missing backup flag", "exportable", "backup", "wrong algorithm", "private PEM", "wrong version", "redirect"} {
+	for _, mode := range []string{"missing exportability", "missing backup flag", "exportable", "backup", "wrong algorithm", "private PEM", "wrong version", "redirect", "missing minimum version", "negative minimum version"} {
 		t.Run(mode, func(t *testing.T) {
-			data := map[string]any{"type": "ecdsa-p256", "exportable": false, "allow_plaintext_backup": false, "keys": map[string]any{"1": map[string]string{"public_key": public}}}
+			data := map[string]any{"type": "ecdsa-p256", "exportable": false, "allow_plaintext_backup": false, "min_encryption_version": 0, "keys": map[string]any{"1": map[string]string{"public_key": public}}}
 			switch mode {
+			case "missing minimum version":
+				delete(data, "min_encryption_version")
+			case "negative minimum version":
+				data["min_encryption_version"] = -1
 			case "missing exportability":
 				delete(data, "exportable")
 			case "missing backup flag":

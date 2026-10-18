@@ -18,7 +18,7 @@ func (c Client) Valid() bool {
 	}
 	seen := map[string]bool{}
 	for _, uri := range c.RedirectURIs {
-		if !resources.ValidURI(uri) || seen[uri] {
+		if !ValidRedirectURI(uri) || seen[uri] {
 			return false
 		}
 		seen[uri] = true

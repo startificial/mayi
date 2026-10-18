@@ -3,12 +3,15 @@ package app
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/startificial/mayi/internal/adapters/outbound/postgres"
 	"strings"
 	"time"
 )
+
+var ErrDatabaseUnavailable = errors.New("database connection unavailable")
 
 func databaseConfig(dsn string, c Config, runtime bool) (*pgxpool.Config, error) {
 	if dsn == "" || len(dsn) > 8192 {
@@ -39,6 +42,14 @@ func databaseConfig(dsn string, c Config, runtime bool) (*pgxpool.Config, error)
 	p.ConnConfig.RuntimeParams["lock_timeout"] = "5000"
 	p.ConnConfig.RuntimeParams["idle_in_transaction_session_timeout"] = "15000"
 	if runtime {
+		if p.ConnConfig.User != c.RuntimeRole {
+			return nil, postgres.ErrDatabaseConfiguration
+		}
+		for name := range p.ConnConfig.RuntimeParams {
+			if strings.EqualFold(name, "role") || strings.EqualFold(name, "session_authorization") || strings.EqualFold(name, "options") {
+				return nil, postgres.ErrDatabaseConfiguration
+			}
+		}
 		p.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 			return postgres.ValidateRuntime(ctx, conn, c.RuntimeRole)
 		}
@@ -56,7 +67,10 @@ func openDatabase(ctx context.Context, dsn string, c Config, runtime bool) (*pgx
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		return nil, postgres.ErrDatabaseConfiguration
+		if errors.Is(err, postgres.ErrDatabaseConfiguration) {
+			return nil, postgres.ErrDatabaseConfiguration
+		}
+		return nil, ErrDatabaseUnavailable
 	}
 	return pool, nil
 }

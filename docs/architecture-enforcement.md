@@ -9,7 +9,7 @@ The checker implements the boundaries in [AGENTS.md](../AGENTS.md) and [the cano
 | Rule | Enforced behavior |
 | --- | --- |
 | Package placement | Go files must live in a documented layer. Production source symlinks are rejected because they can conceal unscanned code. |
-| Dependency direction | Core code cannot import adapters, composition, SQL, networking or vendor libraries. Inbound code cannot import outbound implementations. Public SDK code cannot import persistence or administrative services. |
+| Dependency direction | Core code cannot import adapters, composition, SQL, effectful networking or vendor libraries. The pure `net/url` parser is allowed; sockets and HTTP clients remain forbidden. Inbound code cannot import outbound implementations. Public SDK code cannot import persistence or administrative services. |
 | Pure presentation | Web components cannot import services, domain business implementations, persistence or I/O packages. They render explicit view models. |
 | Inbound dependencies | Third-party imports are limited to the candidate protocol-integration libraries. That architecture permission is not license admission; a selected version must separately pass the dependency gate. |
 | Transitive SDK isolation | Every reachable local production package is checked against the SDK boundary, with the full offending import chain in the error. A permitted service/crypto/status helper cannot drag persistence or an unrelated service into the SDK. |
@@ -53,6 +53,8 @@ Use `New` or `NewService` for service/adapter constructors. Composition supplies
 Keep SQL-generated interfaces such as `DBTX` in `internal/adapters/outbound/postgres/generated`. Those infrastructure-only contracts may exist inside the adapter family; they must not become service ports or leak through a core dependency. Generated files still undergo import, global-state and other applicable checks.
 
 ## Narrow allowances
+
+`net/url` is permitted for pure parsing in core and presentation layers. It cannot perform network I/O. Positive URL-parser and negative HTTP/socket fixtures cover this distinction; no other `net` package allowance is introduced. See [ADR 0007](adr/0007-p1-review-boundary-corrections.md).
 
 The global-state rule permits only:
 

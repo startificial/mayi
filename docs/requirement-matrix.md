@@ -1,6 +1,6 @@
 # Mayi requirement delivery matrix
 
-October 17, 2026 · Delivery coverage and bounded implementation evidence
+October 18, 2026 · Delivery coverage and bounded implementation evidence
 
 This matrix covers all 156 requirements in [the README](../README.md): 110 MUSTs, 35 SHOULDs and 11 MAYs. It accompanies [the implementation plan](implementation-plan.md). Owners are component responsibilities, not named staff. Phase P6 is the first production gate; earlier phases are limited previews. All full requirements remain **Planned**; P0 architecture/protocol work is complete as documented below, without marking protocol or production behavior Verified.
 
@@ -15,6 +15,8 @@ The [P0 report](p0/protocol-spike.md) links the pinned specification manifest, a
 ## P1 foundation evidence
 
  [the runbook](p1-foundation.md), [ADR 0006](adr/0006-external-postgres-and-foundation-operations.md) and [real-service tests](../tests/integration/foundation_test.go) cover supplied PostgreSQL, explicit migrations/checksums, owner/runtime separation, immutable issuers, two-tenant API/RLS/key isolation, actual rotated Transit signatures, atomic audit/outbox failure and lease retry fencing. [Management service tests](../internal/services/administration/service_test.go) assert denial before every protected management access. Delivery and HTTP boundary tests cover failed acknowledgement and credential parsing.
+
+[P1 review regression tests](../tests/integration/foundation_regression_test.go) cover authenticated runtime login and inherited migration-column grants, disabled active signing versions, liveness under public saturation and canceled worker output without acknowledgement. The issuance test checks exported grant/`jti` correlation; domain and HTTP tests preserve fixed redirect queries. Sink and CLI tests bound output waits and preserve secret-free diagnostics. [ADR 0007](adr/0007-p1-review-boundary-corrections.md) records the corrected contracts and operational limitations. These tests require the real-service harness for persistence/Transit evidence; ordinary `go test` skips those integration cases without its environment.
 
 This supplies partial evidence for ADM-1/2/3/4/5, CLI-7, RES-2, GRANT-1, LIFE-10/11 and OPS-1/4/6. It does not implement users, consent/grant endpoints, full admin UI/step-up, enforced token policy at live endpoints, production alerts, HA/restore or conformance. DISC-1 has a marked foundation preview only; DISC-2 remains disabled until P2. Full requirement rows remain Planned until their entire acceptance conditions have evidence.
 

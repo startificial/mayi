@@ -128,7 +128,7 @@ func (h *Handler) CreateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, uri := range input.RedirectURIs {
-		if !validURL(uri) {
+		if !clients.ValidRedirectURI(uri) {
 			failure(w, administration.ErrInvalid)
 			return
 		}

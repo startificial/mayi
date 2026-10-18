@@ -14,6 +14,20 @@ func TestArchitectureContracts(t *testing.T) {
 		want  string
 	}{
 		{
+			name:  "pure URL parsing in domain",
+			files: map[string]string{"internal/domain/clients/redirect.go": `package clients; import "net/url"; func Valid(raw string) bool { _,err:=url.Parse(raw);return err==nil }`},
+		},
+		{
+			name:  "URL parsing does not permit HTTP I/O",
+			files: map[string]string{"internal/domain/clients/redirect.go": `package clients; import "net/http"; func Fetch(raw string) { http.Get(raw) }`},
+			want:  "forbidden import",
+		},
+		{
+			name:  "URL parsing does not permit sockets",
+			files: map[string]string{"internal/domain/clients/redirect.go": `package clients; import "net"; func Fetch(raw string) { net.Dial("tcp",raw) }`},
+			want:  "forbidden import",
+		},
+		{
 			name: "consumer owned port and adapter assertion",
 			files: map[string]string{
 				"internal/services/tokens/ports.go":   `package tokens; type Signer interface { Sign([]byte) ([]byte, error) }`,

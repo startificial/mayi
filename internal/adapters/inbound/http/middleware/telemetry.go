@@ -38,17 +38,29 @@ func (w *response) Write(b []byte) (int, error) {
 	}
 	return w.ResponseWriter.Write(b)
 }
+
+// Wrap applies public admission control and observes the admitted request.
 func (t *Telemetry) Wrap(next http.Handler) http.Handler {
+	observed := t.Observe(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.requests.Add(1)
 		select {
 		case t.slots <- struct{}{}:
 			defer func() { <-t.slots }()
 		default:
+			t.requests.Add(1)
 			t.errors.Add(1)
 			httptransport.Error(w, 503, "temporarily_unavailable")
 			return
 		}
+		observed.ServeHTTP(w, r)
+	})
+}
+
+// Observe records transport telemetry without consuming public admission slots.
+// Composition uses this only for the constant-time liveness operation.
+func (t *Telemetry) Observe(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.requests.Add(1)
 		var id [16]byte
 		if _, err := rand.Read(id[:]); err != nil {
 			httptransport.Error(w, 503, "temporarily_unavailable")

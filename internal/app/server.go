@@ -86,7 +86,7 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 		if err != nil {
 			return nil, err
 		}
-		if _, err := ring.PublicKey(ctx, scope, active); err != nil {
+		if err := ring.Check(ctx, scope, active); err != nil {
 			return nil, err
 		}
 		published, err := store.PublishedKeys(ctx, scope)
@@ -150,6 +150,17 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 		}{"ready"})
 	})
 	router.HandleFunc("GET /metrics", telemetry.Metrics)
-	handler := telemetry.Wrap(http.TimeoutHandler(router, 10*time.Second, `{"error":"temporarily_unavailable"}`))
+	// Liveness is independent of public admission and dependency readiness.
+	// Match the exact operation before choosing the wrapper; every other route
+	// retains the public concurrency bound and request timeout.
+	publicHandler := telemetry.Wrap(http.TimeoutHandler(router, 10*time.Second, `{"error":"temporarily_unavailable"}`))
+	liveness := telemetry.Observe(router)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == "/healthz" {
+			liveness.ServeHTTP(w, r)
+			return
+		}
+		publicHandler.ServeHTTP(w, r)
+	})
 	return &http.Server{Addr: c.ListenAddress, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 16 << 10, ErrorLog: slog.NewLogLogger(logger.Handler(), slog.LevelError)}, nil
 }

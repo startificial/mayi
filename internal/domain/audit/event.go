@@ -10,6 +10,7 @@ type Event struct {
 	ID                  int64
 	Scope               grants.Scope
 	Type, Actor, Object string
+	GrantID, IssuanceID string
 	OccurredAt          time.Time
 }
 type Delivery struct {

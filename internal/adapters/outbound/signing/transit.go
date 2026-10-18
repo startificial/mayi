@@ -38,9 +38,10 @@ type Config struct {
 }
 
 type Transit struct {
-	config Config
-	client *http.Client
-	public jose.JSONWebKey
+	config         Config
+	client         *http.Client
+	public         jose.JSONWebKey
+	minimumVersion int
 }
 
 func New(ctx context.Context, c Config, client *http.Client) (*Transit, error) {
@@ -55,10 +56,11 @@ func New(ctx context.Context, c Config, client *http.Client) (*Transit, error) {
 	s := &Transit{config: c, client: &copyClient}
 	var metadata struct {
 		Data struct {
-			Type       string `json:"type"`
-			Exportable *bool  `json:"exportable"`
-			Backup     *bool  `json:"allow_plaintext_backup"`
-			Keys       map[string]struct {
+			Type           string `json:"type"`
+			Exportable     *bool  `json:"exportable"`
+			Backup         *bool  `json:"allow_plaintext_backup"`
+			MinimumVersion *int   `json:"min_encryption_version"`
+			Keys           map[string]struct {
 				PublicKey string `json:"public_key"`
 			} `json:"keys"`
 		} `json:"data"`
@@ -66,7 +68,7 @@ func New(ctx context.Context, c Config, client *http.Client) (*Transit, error) {
 	if err := s.request(ctx, http.MethodGet, "keys/"+c.Key, nil, &metadata); err != nil {
 		return nil, err
 	}
-	if metadata.Data.Type != "ecdsa-p256" || metadata.Data.Exportable == nil || metadata.Data.Backup == nil || *metadata.Data.Exportable || *metadata.Data.Backup {
+	if metadata.Data.MinimumVersion == nil || *metadata.Data.MinimumVersion < 0 || metadata.Data.Type != "ecdsa-p256" || metadata.Data.Exportable == nil || metadata.Data.Backup == nil || *metadata.Data.Exportable || *metadata.Data.Backup {
 		return nil, tokens.ErrUnavailable
 	}
 	block, rest := pem.Decode([]byte(metadata.Data.Keys[strconv.Itoa(c.Version)].PublicKey))
@@ -81,6 +83,7 @@ func New(ctx context.Context, c Config, client *http.Client) (*Transit, error) {
 	if !ok || ec.Curve != elliptic.P256() {
 		return nil, tokens.ErrUnavailable
 	}
+	s.minimumVersion = *metadata.Data.MinimumVersion
 	s.public = jose.JSONWebKey{Key: ec, KeyID: c.Key + ".v" + strconv.Itoa(c.Version), Algorithm: string(jose.ES256), Use: "sig"}
 	return s, nil
 }

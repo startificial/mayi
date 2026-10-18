@@ -33,14 +33,15 @@ func Run(ctx context.Context, args []string, lookup func(string) string, output,
 		}
 		var bytes [32]byte
 		if _, err := rand.Read(bytes[:]); err != nil {
-			return ErrCommand
+			return commandFailure("credential_generation", err)
 		}
 		token := base64.RawURLEncoding.EncodeToString(bytes[:])
 		digest := sha256.Sum256([]byte(token))
-		return json.NewEncoder(output).Encode(struct {
+		err := json.NewEncoder(output).Encode(struct {
 			Token  string `json:"token"`
 			SHA256 string `json:"sha256"`
 		}{token, hex.EncodeToString(digest[:])})
+		return commandFailure("credential_output", err)
 	}
 	if args[0] != "serve" && args[0] != "migrate" && args[0] != "provision" && args[0] != "worker" {
 		return ErrConfiguration
@@ -54,7 +55,7 @@ func Run(ctx context.Context, args []string, lookup func(string) string, output,
 	}
 	c, err := LoadConfig(*path)
 	if err != nil {
-		return err
+		return commandFailure("config_load", err)
 	}
 	owner := args[0] == "migrate" || args[0] == "provision"
 	env := "MAYI_DATABASE_URL"
@@ -65,55 +66,55 @@ func Run(ctx context.Context, args []string, lookup func(string) string, output,
 	defer cancel()
 	pool, err := openDatabase(startup, lookup(env), c, !owner)
 	if err != nil {
-		return ErrCommand
+		return commandFailure("database_connect", err)
 	}
 	defer pool.Close()
 	switch args[0] {
 	case "migrate":
 		if err := postgres.ApplyMigrations(startup, pool, c.RuntimeRole); err != nil {
-			return ErrCommand
+			return commandFailure("migration_apply", err)
 		}
 		_, err = fmt.Fprintln(output, "Mayi migrations applied")
-		return err
+		return commandFailure("command_output", err)
 	case "provision":
 		for _, t := range c.Tenants {
 			if t.ID == *tenantID {
 				store, err := postgres.New(pool)
 				if err != nil {
-					return ErrCommand
+					return commandFailure("provision_setup", err)
 				}
 				ring, err := newRing(startup, c, t, store, lookup)
 				if err != nil {
-					return ErrCommand
+					return commandFailure("signer_setup", err)
 				}
 				scope, _ := NewIssuerScope(c.PublicOrigin, t.ID)
 				service, err := administration.New(store, ring, systemClock{})
 				if err != nil {
-					return ErrCommand
+					return commandFailure("provision_setup", err)
 				}
 				actor := administration.Actor{ID: "operator", Scope: scope, Permissions: []string{"tenants:provision"}}
 				if err := service.ProvisionTenant(startup, actor, scope, t.InitialKeyVersion); err != nil {
-					return ErrCommand
+					return commandFailure("tenant_provision", err)
 				}
 				_, err = fmt.Fprintln(output, "Tenant provisioned")
-				return err
+				return commandFailure("command_output", err)
 			}
 		}
 		return ErrConfiguration
 	case "worker":
 		if err := runWorker(ctx, c, pool, output); err != nil && ctx.Err() == nil {
-			return ErrCommand
+			return commandFailure("audit_worker", err)
 		}
 		return nil
 	case "serve":
 		logger := slog.New(slog.NewJSONHandler(errorOutput, nil))
 		server, err := NewServer(startup, c, pool, lookup, logger)
 		if err != nil {
-			return ErrCommand
+			return commandFailure("server_setup", err)
 		}
 		listener, err := net.Listen("tcp", server.Addr)
 		if err != nil {
-			return ErrCommand
+			return commandFailure("server_listen", err)
 		}
 		logger.Info("server_started", "stage", "P1-foundation", "listen", server.Addr)
 		done := make(chan error, 1)
@@ -121,7 +122,7 @@ func Run(ctx context.Context, args []string, lookup func(string) string, output,
 		select {
 		case err := <-done:
 			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				return ErrCommand
+				return commandFailure("server_run", err)
 			}
 			return nil
 		case <-ctx.Done():

@@ -75,3 +75,24 @@ func TestAdminTokenIsRandomAndOnlyItsHashGoesInConfig(t *testing.T) {
 		t.Fatal("invalid credential output")
 	}
 }
+
+func TestRuntimeRequiresItsOwnLoginWithoutRoleOverrides(t *testing.T) {
+	c := validConfig()
+	c.AllowInsecureLoopback = true
+	for _, dsn := range []string{
+		"host=127.0.0.1 user=owner sslmode=disable role=mayi_runtime",
+		"host=127.0.0.1 user=mayi_runtime sslmode=disable role=mayi_runtime",
+		"host=127.0.0.1 user=mayi_runtime sslmode=disable session_authorization=mayi_runtime",
+		"host=127.0.0.1 user=mayi_runtime sslmode=disable options='-c role=mayi_runtime'",
+	} {
+		if _, err := databaseConfig(dsn, c, true); err == nil {
+			t.Fatal("privileged or overridden runtime identity accepted")
+		}
+	}
+	if _, err := databaseConfig("host=127.0.0.1 user=mayi_runtime sslmode=disable", c, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := databaseConfig("host=127.0.0.1 user=owner sslmode=disable", c, false); err != nil {
+		t.Fatal("explicit owner command rejected", err)
+	}
+}

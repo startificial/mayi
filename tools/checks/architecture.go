@@ -33,6 +33,10 @@ func sourceLayer(path string) string {
 
 // The core is deliberately pure. Concrete crypto and I/O belong behind ports.
 func effectfulImport(path string) bool {
+	// net/url parses values; it cannot open sockets or perform network I/O.
+	if path == "net/url" {
+		return false
+	}
 	for _, prefix := range []string{
 		"net", "database", "os", "syscall", "unsafe", "plugin", "runtime/cgo",
 		"io/ioutil", "log", "crypto/rand", "math/rand", "reflect", "runtime", "testing",

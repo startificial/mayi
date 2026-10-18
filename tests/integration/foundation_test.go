@@ -44,9 +44,14 @@ type foundation struct {
 	log              bytes.Buffer
 }
 
-func setupFoundation(t *testing.T) *foundation {
+func setupFoundationDatabase(t *testing.T) *foundation {
 	t.Helper()
-	needed(t)
+	if os.Getenv("MAYI_P0_POSTGRES") == "" {
+		if os.Getenv("MAYI_P0_REQUIRED") == "1" {
+			t.Fatal("real PostgreSQL is required")
+		}
+		t.Skip("run go run ./tools/p0 for isolated real services")
+	}
 	ctx := context.Background()
 	admin, err := pgxpool.New(ctx, os.Getenv("MAYI_P0_POSTGRES"))
 	if err != nil {
@@ -89,6 +94,14 @@ func setupFoundation(t *testing.T) *foundation {
 	t.Cleanup(func() { db.Close(); owner.Close(); admin.Close() })
 	store, _ := postgres.New(db)
 	e := &foundation{admin: admin, owner: owner, db: db, store: store, keys: map[string]*signing.Ring{}, secret: map[string]string{}, tokens: map[string]string{}}
+	return e
+}
+
+func setupFoundation(t *testing.T) *foundation {
+	t.Helper()
+	needed(t)
+	e := setupFoundationDatabase(t)
+	ctx := context.Background()
 	e.config = app.Config{PublicOrigin: "https://auth.example", ListenAddress: "127.0.0.1:8080", RuntimeRole: "mayi_p1_runtime", DatabaseMaxConnections: 6, AllowInsecureLoopback: true, TransitAddress: os.Getenv("MAYI_P0_TRANSIT")}
 	address := os.Getenv("MAYI_P0_TRANSIT")
 	root := os.Getenv("MAYI_P0_TRANSIT_TOKEN")
@@ -122,12 +135,12 @@ func setupFoundation(t *testing.T) *foundation {
 			}
 			versions = append(versions, s)
 		}
-		ring, err := signing.NewRing(scope, versions, store)
+		ring, err := signing.NewRing(scope, versions, e.store)
 		if err != nil {
 			t.Fatal(err)
 		}
 		e.keys[id] = ring
-		ownerStore, _ := postgres.New(owner)
+		ownerStore, _ := postgres.New(e.owner)
 		provisioner, _ := administration.New(ownerStore, ring, &testClock{time.Now()})
 		if err := provisioner.ProvisionTenant(ctx, administration.Actor{ID: "operator", Scope: scope, Permissions: []string{"tenants:provision"}}, scope, 1); err != nil {
 			t.Fatal("provision", err)
@@ -168,9 +181,16 @@ func TestP1MigrationsOwnershipAndTenantIsolation(t *testing.T) {
 			t.Fatal(w.Code, w.Body.String())
 		}
 	}
-	client := `{"id":"web","name":"Web client","redirect_uris":["https://app.example/callback"],"resources":["api"],"access_token_seconds":300,"enabled":true}`
+	client := `{"id":"web","name":"Web client","redirect_uris":["https://app.example/callback?flow=login&tenant=a"],"resources":["api"],"access_token_seconds":300,"enabled":true}`
 	if w := api(t, h, "POST", "/admin/t/a/clients", e.tokens["a"], client); w.Code != 201 {
 		t.Fatal(w.Code, w.Body.String())
+	}
+	w := api(t, h, "GET", "/admin/t/a/clients/web", e.tokens["a"], "")
+	var savedClient struct {
+		RedirectURIs []string `json:"redirect_uris"`
+	}
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &savedClient) != nil || len(savedClient.RedirectURIs) != 1 || savedClient.RedirectURIs[0] != "https://app.example/callback?flow=login&tenant=a" {
+		t.Fatal("fixed redirect query changed", w.Code, w.Body.String())
 	}
 	for _, path := range []string{"/admin/t/b/resources/api", "/admin/t/b/clients/web", "/admin/t/b/policy"} {
 		if w := api(t, h, "GET", path, e.tokens["a"], ""); w.Code != 403 {
@@ -501,4 +521,30 @@ func TestP1ExpandedSchemaPreservesAtomicIssuanceAndEnqueuesAudit(t *testing.T) {
 	if err != nil || count != 1 {
 		t.Fatal("issuance audit not enqueued", count, err)
 	}
+	parsed, err := jwt.ParseSigned(result.AccessToken, []jose.SignatureAlgorithm{jose.ES256})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var claims struct {
+		ID string `json:"jti"`
+	}
+	if err := parsed.UnsafeClaimsWithoutVerification(&claims); err != nil {
+		t.Fatal(err)
+	}
+	for range 10 {
+		d, ok, err := e.store.ClaimEvent(ctx, scope, time.Now(), time.Minute)
+		if err != nil || !ok {
+			t.Fatal("missing issuance projection", err)
+		}
+		if d.Event.Type == "token_issued" {
+			if d.Event.GrantID != "grant" || d.Event.IssuanceID != claims.ID || claims.ID == "" {
+				t.Fatal("issuance correlation lost", d.Event)
+			}
+			return
+		}
+		if err := e.store.CompleteEvent(ctx, d, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Fatal("issuance event not delivered")
 }

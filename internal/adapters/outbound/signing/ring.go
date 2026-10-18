@@ -77,7 +77,7 @@ func (r *Ring) Check(ctx context.Context, scope grants.Scope, version int) error
 	if err != nil {
 		return tokens.ErrUnavailable
 	}
-	if !fresh.public.Key.(*ecdsa.PublicKey).Equal(s.public.Key) {
+	if version < fresh.minimumVersion || !fresh.public.Key.(*ecdsa.PublicKey).Equal(s.public.Key) {
 		return tokens.ErrUnavailable
 	}
 	return nil
