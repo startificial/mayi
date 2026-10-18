@@ -394,7 +394,7 @@ func mainRun() error {
 	if *development {
 		return developmentStack(ctx, root, session, socket, url, pgdir, env)
 	}
-	fmt.Println("Running real PostgreSQL and OpenBao P0 tests")
+	fmt.Println("Running real PostgreSQL and OpenBao integration tests")
 	testenv := make([]string, 0, len(env)+5)
 	for _, item := range env {
 		if !strings.HasPrefix(item, "CGO_ENABLED=") {

@@ -30,20 +30,29 @@ type RevisionSpec struct {
 // Revision takes a snapshot: later consent cannot enlarge an older credential.
 type Revision struct{ spec RevisionSpec }
 
-func NewRevision(spec RevisionSpec) (Revision, error) {
-	if !spec.Scope.Valid() || !validID(spec.GrantID) || spec.Number == 0 || !validID(spec.ClientID) || !validID(spec.Subject) || spec.Resource == "" || len(spec.Resource) > 2048 || spec.ExpiresAt.IsZero() {
-		return Revision{}, ErrInvalidRevision
+// ValidReferences validates the grant's identity tuple independently of a
+// permission ceiling or lifetime. Reference projections need no synthetic grant.
+func (spec RevisionSpec) ValidReferences() bool {
+	if !spec.Scope.Valid() || !validID(spec.GrantID) || spec.Number == 0 || !validID(spec.ClientID) || !validID(spec.Subject) || spec.Resource == "" || len(spec.Resource) > 2048 {
+		return false
 	}
 	switch spec.PrincipalType {
 	case "user":
 		if !strings.HasPrefix(spec.Subject, "user:") {
-			return Revision{}, ErrInvalidRevision
+			return false
 		}
 	case "machine":
 		if spec.Subject != spec.ClientID || !strings.HasPrefix(spec.ClientID, "client:") {
-			return Revision{}, ErrInvalidRevision
+			return false
 		}
 	default:
+		return false
+	}
+	return true
+}
+
+func NewRevision(spec RevisionSpec) (Revision, error) {
+	if !spec.ValidReferences() || spec.ExpiresAt.IsZero() {
 		return Revision{}, ErrInvalidRevision
 	}
 	if !ValidScopes(spec.Scopes) {

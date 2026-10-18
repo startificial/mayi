@@ -17,6 +17,7 @@ Mayi uses a modular monolith with ports and adapters. This is the target layout;
 │   │   ├── server.go               Assemble HTTP application
 │   │   └── worker.go               Assemble durable workers
 │   ├── domain/                     Pure entities, values and invariants
+│   │   ├── authorization/          Short-lived authorization workflow and consent invariants
 │   │   ├── identity/               Subject, tenant, membership, assurance
 │   │   ├── clients/                Client identity and registration rules
 │   │   ├── resources/              Resource identifiers and permission ceilings
@@ -142,3 +143,10 @@ Do not create empty directories to mirror the diagram. The first production slic
 `tools/p0/**` is an explicit tooling boundary: it may use the standard library, process execution and network I/O to build reviewed test services. It cannot import application layers or external Go libraries. The architecture checker enforces this exception independently of production composition rules.
 
 P1 adds `services/administration`, `services/discovery` and `services/delivery`. The HTTP transport root contains bounded JSON/error encoding only; sibling handlers reuse it through the ordinary module-qualified local import path. Configuration, effects and wiring remain in `app`; no handler receives a database handle. The explicit `migrate`/`provision` owner operations live in the PostgreSQL adapter and composition and cannot be invoked by the restricted HTTP runtime. See [ADR 0006](adr/0006-external-postgres-and-foundation-operations.md).
+
+P2 milestone 1 adds the pure `domain/authorization` workflow and its consuming
+`services/authorization` use cases. They reuse grant revisions, client redirects,
+resource catalogs and tenant policy. Its PostgreSQL session/membership projections
+are authentication decision metadata; no browser/login protocol adapter is enabled
+by this addition. See [ADR 0008](adr/0008-authorization-transactions-and-consent.md)
+and [P2 milestone status](p2-core-authorization.md).

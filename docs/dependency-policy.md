@@ -87,3 +87,5 @@ A Go module inventory covers all selected modules, including upstream test-graph
 Redis/optional caches, containers, deployment images, Helm dependencies and external conformance runners still require exact admission and checker coverage before use. Production binary/image release packaging must bundle required notices and preserve corresponding-source access; P0 does not distribute a server.
 
 P1 reuses the exact admitted Go/service graph and platform prerequisites. The same source-built harness runs P0 and P1 integration tests; `-development` keeps only a private disposable instance of those services running for operator testing. It adds no container, dependency version or license exception. The runnable command is not a binary/image release; notice/source-access packaging remains mandatory before distribution.
+
+P2 milestone 1 also reuses this exact admitted graph. Its domain/service and PostgreSQL consent tests run through the existing checks and isolated integration harness. No dependency, tool version, copied external code or license exception is added.

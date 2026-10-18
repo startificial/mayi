@@ -20,6 +20,12 @@ The [P0 report](p0/protocol-spike.md) links the pinned specification manifest, a
 
 This supplies partial evidence for ADM-1/2/3/4/5, CLI-7, RES-2, GRANT-1, LIFE-10/11 and OPS-1/4/6. It does not implement users, consent/grant endpoints, full admin UI/step-up, enforced token policy at live endpoints, production alerts, HA/restore or conformance. DISC-1 has a marked foundation preview only; DISC-2 remains disabled until P2. Full requirement rows remain Planned until their entire acceptance conditions have evidence.
 
+## P2 milestone 1 evidence
+
+The [P2 progress document](p2-core-authorization.md), [ADR 0008](adr/0008-authorization-transactions-and-consent.md), [domain tests](../internal/domain/authorization/transaction_test.go), [service denial/order tests](../internal/services/authorization/service_test.go), and [real PostgreSQL tests](../tests/integration/authorization_test.go) cover the in-process consent boundary. Evidence includes exact request snapshots, S256 challenge validation, scoped reference authentication before protected payload loads, one-session binding, expiry/replay/concurrent decisions, immutable grant/revision/code correlation, identity coordination and audit/outbox rollback.
+
+This is partial groundwork for CORE-1/2/3/5, GRANT-3/4, ADM-1/5 and OPS-4. No public login/authorization route or token response is enabled by this milestone. Upstream authentication, browser protections, refresh issuance, resource enforcement and the P2 BFF/resource exit demonstration remain Planned. Full requirement rows remain Planned.
+
 ## CORE
 
 | ID | Level | Phase | Owner | Acceptance condition |

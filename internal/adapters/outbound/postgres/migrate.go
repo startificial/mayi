@@ -42,7 +42,7 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, runtimeRole string
 	if schemaExists && !ledgerExists {
 		return ErrDatabaseConfiguration
 	}
-	versions := []string{migrations.Initial, migrations.Foundation}
+	versions := migrationSources()
 	if !schemaExists {
 		if _, err = tx.Exec(ctx, versions[0]); err != nil {
 			return err
@@ -99,7 +99,9 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, runtimeRole string
 		`GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA mayi TO ` + role,
 		`REVOKE ALL ON mayi.schema_migrations FROM ` + role,
 		`GRANT SELECT ON mayi.schema_migrations TO ` + role,
-		`REVOKE INSERT,UPDATE ON mayi.tenants,mayi.grant_revisions FROM ` + role,
+		`REVOKE INSERT,UPDATE ON mayi.tenants,mayi.principal_memberships,mayi.browser_sessions FROM ` + role,
+		`REVOKE UPDATE ON mayi.grant_revisions,mayi.authorization_transactions FROM ` + role,
+		`GRANT UPDATE(status,subject,grant_id,code_hash,decided_at,consent_session_hash) ON mayi.authorization_transactions TO ` + role,
 		`GRANT UPDATE(policy_version) ON mayi.tenants TO ` + role,
 		`REVOKE UPDATE ON mayi.audit_events FROM ` + role,
 	} {
@@ -135,7 +137,7 @@ func ValidateRuntime(ctx context.Context, conn *pgx.Conn, role string) error {
 		return ErrDatabaseConfiguration
 	}
 	defer rows.Close()
-	for i, source := range []string{migrations.Initial, migrations.Foundation} {
+	for i, source := range migrationSources() {
 		if !rows.Next() {
 			return ErrDatabaseConfiguration
 		}
@@ -159,4 +161,8 @@ func rollback(tx pgx.Tx) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = tx.Rollback(ctx)
+}
+
+func migrationSources() []string {
+	return []string{migrations.Initial, migrations.Foundation, migrations.Authorization}
 }
