@@ -12,6 +12,7 @@ import (
 	"github.com/startificial/mayi/internal/domain/grants"
 	"github.com/startificial/mayi/internal/services/administration"
 	"github.com/startificial/mayi/internal/services/discovery"
+	grantservice "github.com/startificial/mayi/internal/services/grants"
 	"github.com/startificial/mayi/internal/services/health"
 	"log/slog"
 	"net/http"
@@ -99,6 +100,29 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 				return nil, ErrConfiguration
 			}
 		}
+		if len(t.CredentialKeys) > 0 {
+			protocol, err := newProtocol(ctx, c, t, scope, store, ring, lookup)
+			if err != nil {
+				return nil, err
+			}
+			router.HandleFunc("POST /t/"+t.ID+"/token", protocol.Token)
+			router.HandleFunc("POST /t/"+t.ID+"/introspect", protocol.Introspect)
+			router.HandleFunc("POST /t/"+t.ID+"/revoke", protocol.Revoke)
+			hash, err := credentialHasher(t, lookup)
+			if err != nil {
+				return nil, err
+			}
+			clientService, err := newClientAuthentication(c, scope, store, hash)
+			if err != nil {
+				return nil, err
+			}
+			clientControls, err := admin.NewCredentials(clientService)
+			if err != nil {
+				return nil, err
+			}
+			router.Handle("POST /admin/t/"+t.ID+"/clients/{id}/secret", auth.Protect(scope, http.HandlerFunc(clientControls.Rotate)))
+			router.Handle("PUT /admin/t/"+t.ID+"/clients/{id}/keys", auth.Protect(scope, http.HandlerFunc(clientControls.Keys)))
+		}
 		rings[scope] = ring
 		service, err := administration.New(store, ring, systemClock{})
 		if err != nil {
@@ -109,10 +133,22 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 			return nil, err
 		}
 		public, err := oidc.New(discoveryService, scope)
+		if len(t.CredentialKeys) > 0 {
+			public, err = oidc.NewLive(discoveryService, scope, t.IdentityProvider != nil)
+		}
+		if err != nil {
+			return nil, err
+		}
+		grantService, err := grantservice.New(store, systemClock{}, scope)
+		if err != nil {
+			return nil, err
+		}
+		grantControls, err := admin.NewGrantControls(grantService)
 		if err != nil {
 			return nil, err
 		}
 		base := "/admin/t/" + t.ID
+		router.Handle("POST "+base+"/grants/revoke", auth.Protect(scope, http.HandlerFunc(grantControls.Revoke)))
 		for pattern, handler := range map[string]http.HandlerFunc{
 			"GET " + base + "/policy": h.Policy, "PUT " + base + "/policy": h.Policy,
 			"POST " + base + "/resources": h.CreateResource, "GET " + base + "/resources/{id}": h.Resource,
@@ -125,6 +161,9 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 		}
 		router.HandleFunc("GET /.well-known/oauth-authorization-server/t/"+t.ID, public.Metadata)
 		router.HandleFunc("GET /t/"+t.ID+"/jwks", public.JWKS)
+		if len(t.CredentialKeys) > 0 && t.IdentityProvider != nil {
+			router.HandleFunc("GET /t/"+t.ID+"/.well-known/openid-configuration", public.Metadata)
+		}
 		if t.IdentityProvider != nil {
 			browser, err := NewBrowser(ctx, c, t, store, lookup)
 			if err != nil {
@@ -171,5 +210,5 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 		}
 		publicHandler.ServeHTTP(w, r)
 	})
-	return &http.Server{Addr: c.ListenAddress, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 16 << 10, ErrorLog: slog.NewLogLogger(logger.Handler(), slog.LevelError)}, nil
+	return &http.Server{Addr: c.ListenAddress, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 64 << 10, ErrorLog: slog.NewLogLogger(logger.Handler(), slog.LevelError)}, nil
 }

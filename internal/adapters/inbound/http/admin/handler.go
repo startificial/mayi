@@ -46,6 +46,9 @@ type resourceDTO struct {
 	RequireBinding     bool       `json:"require_binding"`
 }
 type clientDTO struct {
+	AuthMethod                string   `json:"token_endpoint_auth_method"`
+	Machine                   bool     `json:"machine"`
+	Introspection             bool     `json:"introspection"`
 	ID                        string   `json:"id"`
 	Name                      string   `json:"name"`
 	RedirectURIs              []string `json:"redirect_uris"`
@@ -134,7 +137,7 @@ func (h *Handler) CreateClient(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	value := clients.Client{ID: input.ID, Name: input.Name, RedirectURIs: input.RedirectURIs, Resources: input.Resources, AccessTokenSeconds: input.AccessTokenSeconds, Enabled: input.Enabled, AuthorizationDetailsTypes: input.AuthorizationDetailsTypes}
+	value := clients.Client{ID: input.ID, Name: input.Name, RedirectURIs: input.RedirectURIs, Resources: input.Resources, AccessTokenSeconds: input.AccessTokenSeconds, Enabled: input.Enabled, AuthorizationDetailsTypes: input.AuthorizationDetailsTypes, AuthMethod: input.AuthMethod, Machine: input.Machine, Introspection: input.Introspection}
 	if err := h.service.CreateClient(r.Context(), middleware.Actor(r), h.scope, value); err != nil {
 		failure(w, err)
 		return
@@ -147,7 +150,7 @@ func (h *Handler) Client(w http.ResponseWriter, r *http.Request) {
 		failure(w, err)
 		return
 	}
-	httptransport.JSON(w, 200, clientDTO{ID: value.ID, Name: value.Name, RedirectURIs: value.RedirectURIs, Resources: value.Resources, AccessTokenSeconds: value.AccessTokenSeconds, Enabled: value.Enabled, AuthorizationDetailsTypes: value.AuthorizationDetailsTypes})
+	httptransport.JSON(w, 200, clientDTO{ID: value.ID, Name: value.Name, RedirectURIs: value.RedirectURIs, Resources: value.Resources, AccessTokenSeconds: value.AccessTokenSeconds, Enabled: value.Enabled, AuthorizationDetailsTypes: value.AuthorizationDetailsTypes, AuthMethod: value.AuthMethod, Machine: value.Machine, Introspection: value.Introspection})
 }
 func (h *Handler) PublishKey(w http.ResponseWriter, r *http.Request) {
 	version, err := strconv.Atoi(r.PathValue("version"))

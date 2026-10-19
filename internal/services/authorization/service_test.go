@@ -234,3 +234,7 @@ func TestObjectAuthorityStaysClosedUntilPARAndConsentIntegration(t *testing.T) {
 		t.Fatal("scope-only consent approved object authority", err)
 	}
 }
+
+func (m *material) NewCodeMaterial(ctx context.Context, _ grants.Scope) (authorization.Material, error) {
+	return m.NewAuthorizationMaterial(ctx)
+}

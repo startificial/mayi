@@ -121,7 +121,7 @@ Pure grant/scoping rules belong in domain code and are called by services. Keep 
 
 ## Reference BFF boundary
 
-The planned Go application under `examples/bff/` demonstrates an application-owned backend for frontend; create the directory only when implementing real code. It stays in the root module and uses public OAuth/OIDC and documented session/status/logout contracts, plus the bounded public resource SDK where applicable. It must not import Mayi's `internal/` packages, query Mayi's tables or reuse its privileged server configuration. Its own handlers, use cases, domain state and effect ports follow the same inward dependency principles. Any added dependency/tool requires inventory and CI admission.
+The Go application under `examples/bff/` demonstrates an application-owned backend for frontend; see its README for runnable setup. It stays in the root module and uses public OAuth/OIDC and documented session/status/logout contracts, plus the bounded public resource SDK where applicable. It must not import Mayi's `internal/` packages, query Mayi's tables or reuse its privileged server configuration. Its own handlers, use cases, domain state and effect ports follow the same inward dependency principles. Any added dependency/tool requires inventory and CI admission.
 
 Document standalone deployment behind the embedded application's same-origin reverse proxy and integration into an existing Go backend. P2 supplies the core BFF/resource example; P5 extends it with the parent/iframe bootstrap and compatibility tests. The wire/session contract is language-independent, so other application backends can implement it without Go. A published BFF SDK, new module or extra server composition boundary is not implied by this reference application.
 
@@ -183,3 +183,11 @@ schema within the same database as Mayi. The final authorization unit of work
 and resource guard enlist in one transaction; no driver type crosses the service
 boundary. See [ADR 0021](adr/0021-postgresql-resource-authority.md). This adds no
 new layer, service locator or public SDK persistence dependency.
+
+The bounded SDK may import only `outbound/egress/httpclient`, the extracted
+standard-library constrained transport helper. It must not import the parent
+egress adapter, authentication services or persistence through that helper.
+`examples/bff` has its own `app/`, `services/` and `adapters/{crypto,memory,oauth,api,http}`
+layout inside the root module. Its pure services and consumer-owned ports have no
+Mayi internal imports. [ADR 0023](adr/0023-p2-live-lifecycle-and-bff-encryption.md)
+records the live lifecycle/status boundary and application-owned encrypted state.

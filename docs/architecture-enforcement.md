@@ -88,3 +88,11 @@ The workflow is a CI failure gate. Repository branch protection must separately 
 `tools/p0/**` is a dedicated standard-library-only tooling boundary. It can perform I/O and start reviewed local service processes, but it cannot import application layers or external Go modules. CI fixtures reject either kind of import. This does not relax the production composition boundary in `internal/app`.
 
 The Fosite token callback depends only on the token service and domain scope. Its committed service result becomes the response. The PostgreSQL adapter implements the service-owned unit-of-work, authorization and proof-replay ports with static assertions; the Transit and proof adapters likewise implement service-owned ports. No database handle crosses the inbound boundary. Tests prove authorization order, real policy/client/grant locks through remote signing, and no returned credential on transaction failure. These behavioral properties supplement the static architecture gate.
+
+The SDK's constrained HTTP allowance is specifically
+`internal/adapters/outbound/egress/httpclient`; the parent egress adapter remains
+forbidden. Import fixtures cover both cases. CI also rejects Mayi internal imports
+from `examples/bff`, and enforces pure imports, ambient-effect/tag rules and port
+placement for its services. Production declaration checks cover the reference
+BFF, including generated/build-tagged code. This preserves its application-owned
+boundary rather than making the example a privileged alternate server entrypoint.

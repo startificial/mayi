@@ -30,21 +30,64 @@ var ErrInvalidPushedRequest = errors.New("invalid pushed authorization request")
 // metadata. The service must recheck registration and policy before committing.
 // No handler or public PAR route is enabled by these pure wire codecs.
 func DecodePushedRequest(raw string, scope grants.Scope, profiles ...resources.ObjectProfile) (domain.Request, error) {
+	r, err := DecodePushedInput(raw, scope)
+	if err != nil {
+		return domain.Request{}, err
+	}
+	if _, err := resources.ValidateObjectRequest(scope, r.ResourceURI, profiles, r.ObjectCeiling.Snapshot().Details); err != nil {
+		return domain.Request{}, ErrInvalidPushedRequest
+	}
+	if _, err := EncodeAuthorizationDetails(r.ObjectCeiling, profiles...); err != nil {
+		return domain.Request{}, ErrInvalidPushedRequest
+	}
+	return r, nil
+}
+
+// DecodePushedInput validates the wire grammar and domain tuple shape. Current
+// client/resource vocabulary and policy are checked by Push under its unit of work.
+func DecodePushedInput(raw string, scope grants.Scope) (domain.Request, error) {
 	v, err := pushedForm(raw, MaxPushedFormBytes, map[string]int{
-		"client_id": 64, "response_type": 4, "redirect_uri": 2048,
-		"resource": 2048, "scope": 8192, "state": 1024,
-		"code_challenge": 43, "code_challenge_method": 4,
-		"authorization_details": MaxAuthorizationDetailsBytes,
+		"client_id": 64, "response_type": 4, "redirect_uri": 2048, "resource": 2048, "scope": 8192, "state": 1024,
+		"code_challenge": 43, "code_challenge_method": 4, "authorization_details": MaxAuthorizationDetailsBytes, "nonce": 256, "dpop_jkt": 43,
 	})
-	if err != nil || len(v) != 9 || !scope.Valid() || v.Get("response_type") != "code" || v.Get("code_challenge_method") != "S256" || len(v.Get("state")) < 16 {
+	if err != nil || len(v) < 9 || !scope.Valid() || v.Get("response_type") != "code" || v.Get("code_challenge_method") != "S256" || len(v.Get("state")) < 16 {
 		return domain.Request{}, ErrInvalidPushedRequest
 	}
-	ceiling, err := DecodeAuthorizationDetails(v.Get("authorization_details"), profiles...)
-	if err != nil || !ceiling.BoundTo(scope, v.Get("resource")) {
+	details, err := decodeObjectDetails(v.Get("authorization_details"), v.Get("resource"))
+	if err != nil || len(details) == 0 {
 		return domain.Request{}, ErrInvalidPushedRequest
 	}
-	r := domain.Request{TenantIssuer: scope, ClientID: v.Get("client_id"), RedirectURI: v.Get("redirect_uri"), ResourceURI: v.Get("resource"), PermissionScopes: strings.Split(v.Get("scope"), " "), State: v.Get("state"), PKCEChallenge: v.Get("code_challenge"), ObjectCeiling: ceiling}
+	ceiling, err := grants.NewObjectCeiling(grants.ObjectCeilingSpec{Scope: scope, Resource: v.Get("resource"), Details: details})
+	if err != nil {
+		return domain.Request{}, ErrInvalidPushedRequest
+	}
+	r := domain.Request{TenantIssuer: scope, ClientID: v.Get("client_id"), RedirectURI: v.Get("redirect_uri"), ResourceURI: v.Get("resource"), State: v.Get("state"), PKCEChallenge: v.Get("code_challenge"), BindingThumbprint: v.Get("dpop_jkt"), ObjectCeiling: ceiling, Nonce: v.Get("nonce")}
+	for _, name := range strings.Split(v.Get("scope"), " ") {
+		switch name {
+		case "openid":
+			if r.OIDC {
+				return domain.Request{}, ErrInvalidPushedRequest
+			}
+			r.OIDC = true
+		case "offline_access":
+			if r.OfflineAccess {
+				return domain.Request{}, ErrInvalidPushedRequest
+			}
+			r.OfflineAccess = true
+		default:
+			r.PermissionScopes = append(r.PermissionScopes, name)
+		}
+	}
 	if !r.Valid() {
+		return domain.Request{}, ErrInvalidPushedRequest
+	}
+	// Bound serialization expansion before any request is persisted.
+	wire := make([]objectDetailDTO, 0, len(details))
+	for _, d := range details {
+		wire = append(wire, objectDetailDTO{d.Type, []string{r.ResourceURI}, d.Identifier, d.Actions})
+	}
+	encoded, err := json.Marshal(wire)
+	if err != nil || len(encoded) > MaxAuthorizationDetailsBytes {
 		return domain.Request{}, ErrInvalidPushedRequest
 	}
 	return r, nil

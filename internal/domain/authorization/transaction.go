@@ -23,6 +23,8 @@ const Denied = "denied"
 // Request preserves the client's exact redirect and permission ceiling. S256 is
 // the only accepted PKCE method; adapters must reject other methods before mapping.
 type Request struct {
+	OIDC, OfflineAccess                                                         bool
+	Nonce                                                                       string
 	TenantIssuer                                                                grants.Scope
 	ClientID, RedirectURI, ResourceURI, PKCEChallenge, BindingThumbprint, State string
 	PermissionScopes                                                            []string
@@ -30,6 +32,15 @@ type Request struct {
 }
 
 func (r Request) Valid() bool {
+	if r.OIDC && (len(r.Nonce) < 16 || len(r.Nonce) > 256) || !r.OIDC && r.Nonce != "" {
+		return false
+	}
+	for _, c := range r.Nonce {
+		if c < 0x21 || c > 0x7e {
+			return false
+		}
+	}
+
 	if !r.TenantIssuer.Valid() || !resources.ValidID(r.ClientID) || !clients.ValidAuthorizationRedirect(r.RedirectURI) || !resources.ValidURI(r.ResourceURI) || !digestValue(r.PKCEChallenge) || r.BindingThumbprint != "" && !digestValue(r.BindingThumbprint) || len(r.State) > 1024 || !grants.ValidScopes(r.PermissionScopes) || len(r.PermissionScopes) == 0 {
 		return false
 	}

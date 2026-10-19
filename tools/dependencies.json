@@ -5457,7 +5457,7 @@
         "BSD-3-Clause"
       ],
       "source": "https://proxy.golang.org/golang.org/x/oauth2/@v/v0.37.0.zip",
-      "review": "2026-10-17: exact source/root and nested license/NOTICE files reviewed for the P0 Fosite/JOSE/PostgreSQL spike; complete selected module graph inventoried. Upstream examples/test datasets are not executed or distributed. Required transitive module; not a parallel application implementation.",
+      "review": "2026-10-18: now directly used by the reference BFF for code exchange and refresh; explicit Basic auth prevents automatic authentication discovery/retry. Version and license evidence unchanged. 2026-10-17: exact source/root and nested license/NOTICE files reviewed for the P0 Fosite/JOSE/PostgreSQL spike; complete selected module graph inventoried. Upstream examples/test datasets are not executed or distributed. Required transitive module; not a parallel application implementation.",
       "files": [
         {
           "path": "LICENSE",

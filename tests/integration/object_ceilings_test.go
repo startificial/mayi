@@ -330,3 +330,5 @@ func TestP2CredentialAuthenticationDoesNotRehydrateObjectPayload(t *testing.T) {
 		}
 	}
 }
+
+func (*objectIssuanceEffects) DigestAccessToken(raw string) string { return raw }

@@ -27,6 +27,7 @@ import (
 )
 
 var _ tokens.Signer = (*Transit)(nil)
+var _ tokens.IdentitySigner = (*Transit)(nil)
 
 // Config is trusted startup configuration. Token is a scoped service credential,
 // never a token from an OAuth request. HTTP is allowed only for loopback P0 tests.
@@ -123,7 +124,7 @@ func (s *Transit) request(ctx context.Context, method, path string, body any, re
 }
 
 func (s *Transit) SignAccessToken(ctx context.Context, c domaintokens.AccessClaims) (string, error) {
-	if c.Scope != s.config.Scope || c.ID == "" || c.Resource == "" || c.Subject == "" || c.ClientID == "" || c.GrantID == "" || c.Revision == 0 || (c.PrincipalType != "user" && c.PrincipalType != "machine") || len(c.Scopes) == 0 || !grants.ValidScopes(c.Scopes) || c.IssuedAt.IsZero() || !c.ExpiresAt.After(c.IssuedAt) || c.ExpiresAt.After(c.IssuedAt.Add(15*time.Minute)) {
+	if c.SigningKeyVersion != 0 && c.SigningKeyVersion != s.config.Version || c.Scope != s.config.Scope || c.ID == "" || c.Resource == "" || c.Subject == "" || c.ClientID == "" || c.GrantID == "" || c.Revision == 0 || (c.PrincipalType != "user" && c.PrincipalType != "machine") || len(c.Scopes) == 0 || !grants.ValidScopes(c.Scopes) || c.IssuedAt.IsZero() || !c.ExpiresAt.After(c.IssuedAt) || c.ExpiresAt.After(c.IssuedAt.Add(15*time.Minute)) {
 		return "", tokens.ErrUnavailable
 	}
 	var details []objectDetailClaim
@@ -139,10 +140,6 @@ func (s *Transit) SignAccessToken(ctx context.Context, c domaintokens.AccessClai
 			return "", tokens.ErrUnavailable
 		}
 	}
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.ES256, Key: &remoteSigner{transit: s, ctx: ctx}}, (&jose.SignerOptions{}).WithType("at+jwt").WithHeader("kid", s.public.KeyID))
-	if err != nil {
-		return "", tokens.ErrUnavailable
-	}
 	claims := map[string]any{"iss": c.Scope.Issuer, "tenant_id": c.Scope.TenantID, "sub": c.Subject, "aud": c.Resource, "client_id": c.ClientID, "jti": c.ID, "iat": c.IssuedAt.Unix(), "exp": c.ExpiresAt.Unix(), "scope": strings.Join(c.Scopes, " "), "principal_type": c.PrincipalType, "grant_id": c.GrantID, "grant_revision": c.Revision}
 	if details != nil {
 		claims["authorization_details"] = details
@@ -150,8 +147,23 @@ func (s *Transit) SignAccessToken(ctx context.Context, c domaintokens.AccessClai
 	if c.BindingThumbprint != "" {
 		claims["cnf"] = map[string]string{"jkt": c.BindingThumbprint}
 	}
+	return s.signClaims(ctx, "at+jwt", claims)
+}
+func (s *Transit) signClaims(ctx context.Context, typ string, claims any) (string, error) {
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.ES256, Key: &remoteSigner{transit: s, ctx: ctx}}, (&jose.SignerOptions{}).WithType(jose.ContentType(typ)).WithHeader("kid", s.public.KeyID))
+	if err != nil {
+		return "", tokens.ErrUnavailable
+	}
 	token, err := jwt.Signed(signer).Claims(claims).Serialize()
 	if err != nil {
+		return "", tokens.ErrUnavailable
+	}
+	verified, err := jwt.ParseSigned(token, []jose.SignatureAlgorithm{jose.ES256})
+	if err != nil || len(verified.Headers) != 1 || verified.Headers[0].KeyID != s.public.KeyID {
+		return "", tokens.ErrUnavailable
+	}
+	var checked map[string]any
+	if verified.Claims(s.public.Key, &checked) != nil {
 		return "", tokens.ErrUnavailable
 	}
 	return token, nil
@@ -195,4 +207,11 @@ func (r *remoteSigner) SignPayload(payload []byte, algorithm jose.SignatureAlgor
 		return nil, tokens.ErrUnavailable
 	}
 	return signature, nil
+}
+
+func (s *Transit) SignIdentityToken(ctx context.Context, c domaintokens.IdentityClaims) (string, error) {
+	if c.Scope != s.config.Scope || c.Subject == "" || c.ClientID == "" || len(c.Nonce) < 16 || len(c.Nonce) > 256 || c.SigningKeyVersion != s.config.Version || c.AuthenticatedAt.IsZero() || c.AuthenticatedAt.After(c.IssuedAt) || !c.ExpiresAt.After(c.IssuedAt) || c.ExpiresAt.After(c.IssuedAt.Add(15*time.Minute)) {
+		return "", tokens.ErrUnavailable
+	}
+	return s.signClaims(ctx, "JWT", map[string]any{"iss": c.Scope.Issuer, "sub": c.Subject, "aud": c.ClientID, "nonce": c.Nonce, "jti": c.ID, "auth_time": c.AuthenticatedAt.Unix(), "iat": c.IssuedAt.Unix(), "exp": c.ExpiresAt.Unix()})
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/ory/fosite"
@@ -25,15 +26,20 @@ func WithCaller(ctx context.Context, caller tokens.Caller) context.Context {
 type TokenHandler struct {
 	scope   grants.Scope
 	service *tokens.Service
+	hasher  tokens.SecretHasher
 }
 
 var _ fosite.TokenEndpointHandler = (*TokenHandler)(nil)
 
-func New(scope grants.Scope, service *tokens.Service) (*TokenHandler, error) {
+func New(scope grants.Scope, service *tokens.Service, hashers ...tokens.SecretHasher) (*TokenHandler, error) {
 	if !scope.Valid() || service == nil {
 		return nil, tokens.ErrUnavailable
 	}
-	return &TokenHandler{scope: scope, service: service}, nil
+	h := &TokenHandler{scope: scope, service: service}
+	if len(hashers) == 1 {
+		h.hasher = hashers[0]
+	}
+	return h, nil
 }
 func (*TokenHandler) CanSkipClientAuth(context.Context, fosite.AccessRequester) bool { return false }
 func (*TokenHandler) CanHandleTokenEndpointRequest(_ context.Context, r fosite.AccessRequester) bool {
@@ -48,6 +54,9 @@ func (h *TokenHandler) command(ctx context.Context, r fosite.AccessRequester) (t
 		return tokens.Command{}, fosite.ErrUnknownRequest
 	}
 	form := r.GetRequestForm()
+	if form.Has("scope") && !grants.ValidScopes(strings.Split(form.Get("scope"), " ")) {
+		return tokens.Command{}, fosite.ErrInvalidScope
+	}
 	if len(form) > 32 {
 		return tokens.Command{}, fosite.ErrInvalidRequest
 	}
@@ -55,6 +64,9 @@ func (h *TokenHandler) command(ctx context.Context, r fosite.AccessRequester) (t
 		limit := 8192
 		if key == "authorization_details" {
 			limit = MaxAuthorizationDetailsBytes
+		}
+		if key == "client_assertion" {
+			limit = 16384
 		}
 		if len(values) != 1 || len(values[0]) > limit {
 			return tokens.Command{}, fosite.ErrInvalidRequest
@@ -87,7 +99,29 @@ func (h *TokenHandler) command(ctx context.Context, r fosite.AccessRequester) (t
 		objects = requested.Snapshot().Details
 	}
 	digest := sha256.Sum256([]byte(secret))
-	return tokens.Command{Caller: caller, Kind: kind, CredentialHash: hex.EncodeToString(digest[:]), Resource: resources[0], Verifier: form.Get("code_verifier"), RedirectURI: form.Get("redirect_uri"), Scopes: []string(r.GetRequestedScopes()), Objects: objects}, nil
+	hash := hex.EncodeToString(digest[:])
+	if h.hasher != nil {
+		var err error
+		hash, err = h.hasher.Digest(caller.Scope, kind, secret)
+		if err != nil {
+			return tokens.Command{}, fosite.ErrInvalidGrant
+		}
+	}
+	cmd := tokens.Command{Caller: caller, Kind: kind, CredentialHash: hash, Resource: resources[0], Verifier: form.Get("code_verifier"), RedirectURI: form.Get("redirect_uri"), Objects: objects, WireScopesSpecified: form.Has("scope")}
+	for _, name := range r.GetRequestedScopes() {
+		switch name {
+		case "openid":
+			cmd.OIDCRequested = true
+		case "offline_access":
+			cmd.OfflineRequested = true
+		default:
+			cmd.Scopes = append(cmd.Scopes, name)
+		}
+	}
+	if cmd.WireScopesSpecified && len(cmd.Scopes) == 0 {
+		return tokens.Command{}, fosite.ErrInvalidScope
+	}
+	return cmd, nil
 }
 func (h *TokenHandler) HandleTokenEndpointRequest(ctx context.Context, r fosite.AccessRequester) error {
 	_, err := h.command(ctx, r)
@@ -105,6 +139,9 @@ func (h *TokenHandler) PopulateTokenEndpointResponse(ctx context.Context, r fosi
 	if err != nil {
 		return fosite.ErrTemporarilyUnavailable
 	}
+	return writeTokenResponse(response, result)
+}
+func writeTokenResponse(response fosite.AccessResponder, result tokens.Result) error {
 	if !result.Claims.ObjectCeiling.IsZero() {
 		details, err := EncodeAuthorizationDetails(result.Claims.ObjectCeiling, result.ObjectProfiles...)
 		if err != nil {
@@ -118,7 +155,17 @@ func (h *TokenHandler) PopulateTokenEndpointResponse(ctx context.Context, r fosi
 		response.SetTokenType("DPoP")
 	}
 	response.SetExpiresIn(result.Claims.ExpiresAt.Sub(result.Claims.IssuedAt).Truncate(time.Second))
-	response.SetScopes(result.Claims.Scopes)
+	scopes := append([]string(nil), result.Claims.Scopes...)
+	if result.OIDC {
+		scopes = append(scopes, "openid")
+	}
+	if result.OfflineAccess {
+		scopes = append(scopes, "offline_access")
+	}
+	response.SetScopes(scopes)
+	if result.IDToken != "" {
+		response.SetExtra("id_token", result.IDToken)
+	}
 	if result.RefreshToken != "" {
 		response.SetExtra("refresh_token", result.RefreshToken)
 	}

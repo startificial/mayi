@@ -49,6 +49,18 @@ Token endpoints, downstream OIDC, idle/session-list APIs, BFF/resource enforceme
 
 [ADR 0021](adr/0021-postgresql-resource-authority.md) adds concrete resource-owned PostgreSQL authority with one atomic guard/consent transaction, safe runtime privileges and real one-connection/fault/isolation evidence in [resource-consent tests](../tests/integration/resource_consent_test.go). [ADR 0022](adr/0022-object-bound-token-propagation.md) adds partial RES-10/GRANT-4/GRANT-6 evidence for approved PAR code redemption, signed and response details, durable issuance and refresh-successor narrowing. [Object-token integration](../tests/integration/object_token_test.go) verifies real Fosite/Transit/SQL propagation and replay cutoff; [service contracts](../tests/contract/object_issuance_test.go) verify refresh subset/omission. Public PAR/token endpoints, introspection/resource SDK/current ACL enforcement and end-to-end refresh remain pending. Full requirement status is unchanged.
 
+## Additional P2 live-preview evidence
+
+[ADR 0023](adr/0023-p2-live-lifecycle-and-bff-encryption.md) and
+[the current P2 evidence](p2-core-authorization.md#live-lifecycle-and-bff-evidence)
+cover the live code/refresh/machine protocol, client credentials, JWT/opaque
+status, object SDK, user/admin revocation, session controls and reference BFF.
+The real PostgreSQL/OpenBao suite includes `live_protocol_test.go`; the BFF race
+suite separately verifies AAD substitution, key rotation and serialized refresh.
+These add partial evidence to CORE, CLI-8/10, RES, GRANT, LIFE, M2M, OIDC-1/2,
+WEB-1/8 and ADM-8. Full rows remain Planned until all acceptance gates pass;
+fresh-schema cutover and distributed abuse limits are still outstanding.
+
 ## CORE
 
 | ID | Level | Phase | Owner | Acceptance condition |

@@ -28,6 +28,7 @@ type BeginResult struct {
 	ExpiresAt         time.Time
 }
 type Consent struct {
+	OIDC, OfflineAccess                   bool
 	ClientName, ResourceName, RedirectURI string
 	ClientID, ResourceURI                 string
 	PermissionScopes                      []resources.Scope
@@ -191,7 +192,7 @@ func (s *Service) completeDecision(ctx context.Context, tx Transaction, workflow
 	var material Material
 	var err error
 	if approve {
-		material, err = s.material.NewAuthorizationMaterial(ctx)
+		material, err = s.material.NewCodeMaterial(ctx, actor.TenantIssuer)
 		if err != nil || !validMaterial(material) {
 			return DecisionResult{}, ErrUnavailable
 		}

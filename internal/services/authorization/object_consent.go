@@ -142,7 +142,7 @@ func objectConsentView(workflow domain.Transaction, current domain.Registration,
 
 func consentView(workflow domain.Transaction, current domain.Registration) Consent {
 	spec := workflow.Snapshot()
-	result := Consent{ClientName: current.Client.Name, ClientID: current.Client.ID, ResourceName: current.Resource.Name, ResourceURI: current.Resource.URI, RedirectURI: spec.Request.RedirectURI, ExpiresAt: spec.ExpiresAt, DecisionAvailable: true}
+	result := Consent{ClientName: current.Client.Name, ClientID: current.Client.ID, ResourceName: current.Resource.Name, ResourceURI: current.Resource.URI, RedirectURI: spec.Request.RedirectURI, ExpiresAt: spec.ExpiresAt, DecisionAvailable: true, OIDC: spec.Request.OIDC, OfflineAccess: spec.Request.OfflineAccess}
 	for _, name := range spec.Request.PermissionScopes {
 		for _, permission := range current.Resource.Scopes {
 			if name == permission.Name {

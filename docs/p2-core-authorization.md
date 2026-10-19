@@ -1,6 +1,6 @@
 # P2: Core authorization preview
 
-P2 is in progress. Milestones 1/2 implement durable consent, configured upstream OIDC login and browser sessions/consent. The service is not yet a usable OAuth authorization server: live token endpoints, resource enforcement and the end-to-end P2 exit condition remain outstanding. Discovery retains its foundation preview.
+P2 is in progress. Milestones 1/2 implement durable consent, configured upstream OIDC login and browser sessions/consent. The live preview now includes configured token endpoints, online resource enforcement and a connected reference BFF fixture. P2 is not complete: fresh-schema mandatory RAR/PAR cutover, distributed abuse limits, full recovery/conformance coverage and the remaining operator/incremental-grant gates are outstanding. Configured live tenants expose preview discovery; foundation-only tenants retain P1 metadata.
 
 ## Milestones and acceptance
 
@@ -8,9 +8,9 @@ P2 is in progress. Milestones 1/2 implement durable consent, configured upstream
 | --- | --- | --- |
 | 1. Authorization transaction and consent core | Implemented | Exact redirect/resource/permission snapshot; five-minute workflow and 60-second code; session/browser/CSRF authorization before protected loads; immutable session binding; one concurrent decision; atomic grant/revision/code/audit/outbox; no plaintext secrets persisted. Domain/service tests and real PostgreSQL regressions exercise these conditions. |
 | 2. Upstream OIDC login and browser consent | Implemented, limited preview | Constrained egress; state/nonce/issuer/audience/PKCE; explicit active-member mapping; atomic session issuance/rotation/termination; secure cookies; escaped consent and CSRF/CSP/origin checks. Real PostgreSQL and local OIDC HTTP fixtures cover the flow; browser/provider interoperability remains unverified. [ADR 0009](adr/0009-upstream-login-and-browser-consent.md). |
-| 2a. Standard RAR object-grant prerequisite | In progress: typed snapshots, registrations, mixed-type wire codecs and pushed-request storage/binding; blocks live token/resource preview | Migrations 5–9 and real PostgreSQL tests preserve typed authority, one-use pushed references and immutable display/version evidence. Explicit resource-guard composition supports exact object consent-to-code approval. A same-database PostgreSQL resource adapter and internal code/refresh token propagation are implemented. Public PAR composition, universal RAR/PAR cutover and resource enforcement remain outstanding. Documents are the worked exit example; the model also covers workflows, projects and files through resource-owned types/actions. |
-| 3. Live protocol and token lifecycle | Planned; depends on 2a | Explicit Fosite composition; code/PKCE and refresh HTTP endpoints; consent-authorized initial refresh issuance and idle/absolute deadlines; reviewed keyed credential-hash/version policy; JWT/opaque access tokens and OIDC ID tokens; client authentication and machine credentials; current policy/resource/client lifetime enforcement; transaction-owned key selection without nested issuance-pool acquisition. |
-| 4. Enforcement and complete preview | Planned; depends on 2a/3 | Authenticated introspection/revocation with approved RAR details, immediate authoritative resource checks, typed object/action SDK enforcement, connected-app grant details, Go BFF/document-123 example, denial before protected payload loads, current-permission loss, refresh replay/concurrency and immediate-cutoff tests. Only enforced RAR types and capabilities enter discovery. |
+| 2a. Standard RAR object-grant prerequisite | In progress: public required PAR/RAR flow tested; universal schema cutover remains | Migrations 5–9 and real PostgreSQL tests preserve typed authority, one-use pushed references and immutable display/version evidence. Explicit resource-guard composition supports exact object consent-to-code approval. A same-database PostgreSQL resource adapter and internal code/refresh token propagation are implemented. Public PAR composition and resource enforcement now have connected integration evidence; universal RAR/PAR schema cutover remains outstanding. Documents are the worked exit example; the model also covers workflows, projects and files through resource-owned types/actions. |
+| 3. Live protocol and token lifecycle | Implemented preview, incomplete acceptance | Explicit Fosite composition; code/PKCE and refresh HTTP endpoints; consent-authorized initial refresh issuance and idle/absolute deadlines; reviewed keyed credential-hash/version policy; JWT/opaque access tokens and OIDC ID tokens; client authentication and machine credentials; current policy/resource/client lifetime enforcement; transaction-owned key selection without nested issuance-pool acquisition. |
+| 4. Enforcement and complete preview | Connected BFF/SDK fixture implemented; remaining gates open | Authenticated introspection/revocation with approved RAR details, immediate authoritative resource checks, typed object/action SDK enforcement, connected-app grant details, Go BFF/document-123 example, denial before protected payload loads, current-permission loss, refresh replay/concurrency and immediate-cutoff tests. Only enforced RAR types and capabilities enter discovery. |
 
 **P2 now has a mandatory RFC 9396 RAR prerequisite**, recorded in [ADR 0010](adr/0010-rar-object-grants-prerequisite.md). Complete milestone 2a before enabling the remaining live token/resource preview or declaring P2 complete. The exit demonstration must grant read access to document `123`, reject `124` and write operations even when the user has both permissions, and prove narrowing, refresh rotation, current-permission loss and immediate revocation. Existing milestones 1/2 are implemented scope-only groundwork; their status does not establish RAR support or satisfy this new gate.
 
@@ -90,7 +90,7 @@ COMMIT;
 
 Start at `I/authorize` with `response_type=code`, registered `client_id`/exact `redirect_uri`, one `resource`, space-separated resource `scope`, unpredictable `state` (at least 16 characters) and S256 `code_challenge`/`code_challenge_method`. The browser returns through the tenant callback to consent. Every new request authenticates upstream; broader local SSO/prompt behavior remains later work. Approval creates a durable 60-second code, but **there is no live redemption endpoint yet**. This is a login/consent preview. Cookies require HTTPS through the trusted proxy.
 
-Sessions have a one-hour absolute lifetime, rotate at login and end through a same-origin POST to `I/session/end`. Session end does not revoke durable grants. Idle timeout, listing, BFF/status integration and downstream logout remain pending. Login/consent stay unframeable; the Go BFF and embedded-session plan has separate acceptance gates.
+Sessions have a 15-minute idle and one-hour absolute lifetime, rotate at login and end through a same-origin POST to `I/session/end`. `I/sessions` lists active sessions; same-origin POSTs to `I/sessions/{reference}/revoke` and `I/session/touch` revoke or renew activity without extending the absolute deadline. Session end does not revoke durable grants. Connected-app details/revocation use `I/grants` and `I/grants/{id}/revoke`. Downstream logout remains pending. Login/consent stay unframeable; the Go BFF and embedded-session plan has separate acceptance gates.
 
 ## Verification
 
@@ -104,3 +104,31 @@ go run ./tools/p0
 ```
 
 The existing real-service CI harness includes authorization, authentication and browser tests automatically. Ordinary `go test` skips database cases without that environment. Login/consent tests can also use the reviewed PostgreSQL instance independently of Transit; the full-server routing test additionally requires Transit. The local OIDC fixture exchanges code/S256 and signs test ID tokens without contacting enterprise accounts or cloud services.
+
+## Live lifecycle and BFF evidence
+
+[ADR 0023](adr/0023-p2-live-lifecycle-and-bff-encryption.md) records registered
+Basic/private-key client authentication, purpose-separated keyed credential
+hashes, atomic initial refresh issuance, transaction-owned signing version,
+JWT/opaque online status, machine policy and user/administrator controls. The
+public SDK performs a fresh authenticated status decision and checks exact typed
+object/action authority before the resource owner's current-permission callback.
+
+`TestP2PublicProtocolAndSDKEnforceObjectAuthorityAndImmediateCutoff` runs PAR,
+code/ID-token issuance, initial refresh, rotation, replay and JWT/opaque resource
+checks with real PostgreSQL/OpenBao. It rejects object substitution, write access
+and ID-token misuse before protected payload access; current ACL loss and replay
+cut off access. `TestP2ClientAuthenticationRotationAssertionsAndMachinePolicy`
+adds rotation overlap, atomic assertion replay and machine policy removal.
+`TestP2UserAndAdministratorControlsAuthenticateBeforeLoading` covers connected
+apps, tenant/browser isolation, user/admin cutoff and idle session controls.
+
+`TestP2ReferenceBFFCompletesPARLoginAndProtectsResources` connects the runnable
+[Go BFF](../examples/bff/README.md) through public PAR, upstream login, consent,
+code exchange, independent ID-token validation and the resource SDK. The user
+can read objects 123 and 124, while the application receives only 123/read.
+Application routing in this fixture is in-process; introspection, persistence
+and non-exportable signing are real. The separate BFF race tests cover encrypted
+storage and refresh serialization. Both token and login-state ciphertext use
+AES-256-GCM with AAD and context-substitution tests. This is not real-browser,
+embedding, deployment, performance or complete P2 conformance evidence.

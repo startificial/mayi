@@ -12,6 +12,7 @@ import (
 	"github.com/startificial/mayi/internal/services/tokens"
 )
 
+var _ tokens.IdentitySigner = (*Ring)(nil)
 var _ tokens.Signer = (*Ring)(nil)
 var _ administration.KeyCatalog = (*Ring)(nil)
 var _ health.Signer = (*Ring)(nil)
@@ -55,9 +56,13 @@ func (r *Ring) SignAccessToken(ctx context.Context, c domain.AccessClaims) (stri
 	if c.Scope != r.scope {
 		return "", tokens.ErrUnavailable
 	}
-	version, err := r.active.ActiveSigningKey(ctx, r.scope)
-	if err != nil {
-		return "", tokens.ErrUnavailable
+	version := c.SigningKeyVersion
+	if version == 0 {
+		var err error
+		version, err = r.active.ActiveSigningKey(ctx, r.scope)
+		if err != nil {
+			return "", tokens.ErrUnavailable
+		}
 	}
 	s := r.versions[version]
 	if s == nil {
@@ -81,4 +86,11 @@ func (r *Ring) Check(ctx context.Context, scope grants.Scope, version int) error
 		return tokens.ErrUnavailable
 	}
 	return nil
+}
+
+func (r *Ring) SignIdentityToken(ctx context.Context, c domain.IdentityClaims) (string, error) {
+	if c.Scope != r.scope || c.SigningKeyVersion < 1 || r.versions[c.SigningKeyVersion] == nil {
+		return "", tokens.ErrUnavailable
+	}
+	return r.versions[c.SigningKeyVersion].SignIdentityToken(ctx, c)
 }

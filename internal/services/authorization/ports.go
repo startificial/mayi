@@ -10,6 +10,7 @@ import (
 type Clock interface{ Now() time.Time }
 type MaterialSource interface {
 	NewAuthorizationMaterial(context.Context) (Material, error)
+	NewCodeMaterial(context.Context, grants.Scope) (Material, error)
 }
 
 // ObjectConsentQuery contains only authenticated actor/workflow correlation and

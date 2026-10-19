@@ -73,7 +73,7 @@ func (s *Store) AuthorizeConsent(ctx context.Context, p authorization.AccessProo
  JOIN mayi.principal_memberships m USING(tenant_id,subject)
  JOIN mayi.authorization_transactions w ON w.tenant_id=s.tenant_id
  JOIN mayi.clients c ON c.tenant_id=w.tenant_id AND c.client_id=w.client_id AND c.enabled
- WHERE s.tenant_id=$1 AND s.session_hash=$2 AND NOT s.revoked AND s.expires_at>$6 AND s.expires_at>clock_timestamp() AND m.active
+ WHERE s.tenant_id=$1 AND s.session_hash=$2 AND NOT s.revoked AND s.last_used_at>clock_timestamp()-interval '15 minutes' AND s.expires_at>$6 AND s.expires_at>clock_timestamp() AND m.active
  AND EXISTS(SELECT 1 FROM mayi.session_authentication e WHERE e.tenant_id=s.tenant_id AND e.session_hash=s.session_hash AND e.browser_hash=$4)
  AND w.handle_hash=$3 AND w.browser_binding_hash=$4 AND ($5='' OR w.csrf_hash=$5)
  AND (w.consent_session_hash IS NULL OR w.consent_session_hash=s.session_hash) AND w.status='pending' AND w.policy_version=$7 AND w.created_at<=$6 AND w.expires_at>$6 AND w.expires_at>clock_timestamp()`, p.TenantIssuer.TenantID, p.SessionHash, p.AuthorizationHash, p.BrowserBindingHash, p.CSRFHash, now, a.version).Scan(&result.Subject)
@@ -161,6 +161,9 @@ func (a *authorizationTransaction) CreateAuthorization(ctx context.Context, w do
 	if err != nil || tag.RowsAffected() != 1 {
 		return authorization.ErrUnavailable
 	}
+	if _, err := a.tx.Exec(ctx, `INSERT INTO mayi.authorization_options VALUES($1,$2,$3,$4,$5)`, a.tenantIssuer.TenantID, s.HandleHash, r.OIDC, r.Nonce, r.OfflineAccess); err != nil {
+		return err
+	}
 	_, err = a.tx.Exec(ctx, `INSERT INTO mayi.audit_events(tenant_id,event_type,object_ref) VALUES($1,'authorization_started',$2)`, a.tenantIssuer.TenantID, s.ID)
 	return err
 }
@@ -179,6 +182,9 @@ func (a *authorizationTransaction) Authorization(ctx context.Context, hash strin
 	s.Request.ObjectCeiling, err = decodeObjectCeiling(objects, a.tenantIssuer, s.Request.ResourceURI)
 	if err != nil {
 		return domain.Transaction{}, authorization.ErrDenied
+	}
+	if err := a.tx.QueryRow(ctx, `SELECT oidc,nonce,offline_access FROM mayi.authorization_options WHERE tenant_id=$1 AND handle_hash=$2`, a.tenantIssuer.TenantID, hash).Scan(&s.Request.OIDC, &s.Request.Nonce, &s.Request.OfflineAccess); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return domain.Transaction{}, authorization.ErrUnavailable
 	}
 	w, err := domain.New(s)
 	if err != nil {
@@ -201,7 +207,7 @@ func (a *authorizationTransaction) RecheckConsent(ctx context.Context, proof aut
  WHERE w.tenant_id=$1 AND w.handle_hash=$2 AND w.browser_binding_hash=$3 AND ($4='' OR w.csrf_hash=$4)
  AND EXISTS(SELECT 1 FROM mayi.session_authentication e WHERE e.tenant_id=s.tenant_id AND e.session_hash=s.session_hash AND e.browser_hash=$3)
  AND w.status='pending' AND w.policy_version=$5 AND w.created_at<=$6 AND w.expires_at>$6 AND w.expires_at>clock_timestamp()
- AND (w.consent_session_hash IS NULL OR w.consent_session_hash=s.session_hash) AND s.session_hash=$7 AND s.subject=$8 AND NOT s.revoked AND s.expires_at>$6 AND s.expires_at>clock_timestamp() AND m.active AND c.enabled
+ AND (w.consent_session_hash IS NULL OR w.consent_session_hash=s.session_hash) AND s.session_hash=$7 AND s.subject=$8 AND NOT s.revoked AND s.last_used_at>clock_timestamp()-interval '15 minutes' AND s.expires_at>$6 AND s.expires_at>clock_timestamp() AND m.active AND c.enabled
  FOR UPDATE OF w FOR SHARE OF c`, a.tenantIssuer.TenantID, proof.AuthorizationHash, proof.BrowserBindingHash, proof.CSRFHash, a.version, now, p.SessionHash, p.Subject).Scan(&hash)
 	if err != nil {
 		return authorization.ErrDenied
@@ -249,7 +255,7 @@ func (a *authorizationTransaction) CompleteAuthorization(ctx context.Context, w 
 	}
 	tag, err := a.tx.Exec(ctx, `UPDATE mayi.authorization_transactions SET status=$3,subject=NULLIF($4,''),grant_id=NULLIF($5,''),code_hash=NULLIF($6,''),decided_at=$7 WHERE tenant_id=$1 AND handle_hash=$2 AND status='pending' AND policy_version=$8 AND created_at<=$7 AND expires_at>$7 AND consent_session_hash=$9 AND expires_at>clock_timestamp()
  AND object_ceiling IS NOT DISTINCT FROM $11::jsonb AND client_id=$12 AND resource_uri=$13 AND permission_scopes=$14 AND redirect_uri=$15 AND pkce_challenge=$16 AND binding_thumbprint=$17 AND client_state=$18 AND COALESCE(pushed_request_hash,'')=$19
- AND EXISTS(SELECT 1 FROM mayi.browser_sessions session JOIN mayi.principal_memberships membership USING(tenant_id,subject) WHERE session.tenant_id=$1 AND session.session_hash=$9 AND session.subject=$10 AND NOT session.revoked AND session.expires_at>clock_timestamp() AND membership.active)`, a.tenantIssuer.TenantID, s.HandleHash, s.Status, s.Subject, s.GrantID, s.CodeHash, now, a.version, a.principal.SessionHash, a.principal.Subject, objects, r.ClientID, r.ResourceURI, r.PermissionScopes, r.RedirectURI, r.PKCEChallenge, r.BindingThumbprint, r.State, s.PushedRequestHash)
+ AND EXISTS(SELECT 1 FROM mayi.browser_sessions session JOIN mayi.principal_memberships membership USING(tenant_id,subject) WHERE session.tenant_id=$1 AND session.session_hash=$9 AND session.subject=$10 AND NOT session.revoked AND session.last_used_at>clock_timestamp()-interval '15 minutes' AND session.expires_at>clock_timestamp() AND membership.active)`, a.tenantIssuer.TenantID, s.HandleHash, s.Status, s.Subject, s.GrantID, s.CodeHash, now, a.version, a.principal.SessionHash, a.principal.Subject, objects, r.ClientID, r.ResourceURI, r.PermissionScopes, r.RedirectURI, r.PKCEChallenge, r.BindingThumbprint, r.State, s.PushedRequestHash)
 	if err != nil {
 		return err
 	}

@@ -29,6 +29,7 @@ type Config struct {
 }
 type TenantConfig struct {
 	ID                  string                  `json:"id"`
+	CredentialKeys      []CredentialKeyConfig   `json:"credential_keys,omitempty"`
 	ResourceAuthorities []string                `json:"resource_authorities,omitempty"`
 	KeyName             string                  `json:"key_name"`
 	KeyVersions         []int                   `json:"key_versions"`
@@ -95,12 +96,29 @@ func (c Config) Validate() error {
 	seenTenants := map[string]bool{}
 	seenKeys := map[string]bool{}
 	seenTokens := map[string]bool{}
-	allowed := []string{"policy:read", "policy:write", "resources:read", "resources:write", "clients:read", "clients:write", "keys:write"}
+	allowed := []string{"policy:read", "policy:write", "resources:read", "resources:write", "clients:read", "clients:write", "keys:write", "grants:write"}
 	for _, t := range c.Tenants {
 		if _, err := NewIssuerScope(c.PublicOrigin, t.ID); err != nil {
 			return ErrConfiguration
 		}
 		if seenTenants[t.ID] || seenKeys[t.KeyName] || !regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}$`).MatchString(t.KeyName) || !regexp.MustCompile(`^MAYI_[A-Z0-9_]{1,80}$`).MatchString(t.TransitTokenEnv) || len(t.KeyVersions) == 0 || len(t.KeyVersions) > 16 || !slices.Contains(t.KeyVersions, t.InitialKeyVersion) || len(t.Administrators) == 0 || len(t.Administrators) > 8 {
+			return ErrConfiguration
+		}
+		if len(t.CredentialKeys) > 8 || t.IdentityProvider != nil && len(t.CredentialKeys) == 0 {
+			return ErrConfiguration
+		}
+		active := 0
+		versions := map[int]bool{}
+		for _, k := range t.CredentialKeys {
+			if k.Version < 1 || k.Version > 9999 || versions[k.Version] || !regexp.MustCompile(`^MAYI_[A-Z0-9_]{1,80}$`).MatchString(k.SecretEnv) {
+				return ErrConfiguration
+			}
+			versions[k.Version] = true
+			if k.Active {
+				active++
+			}
+		}
+		if len(t.CredentialKeys) > 0 && active != 1 {
 			return ErrConfiguration
 		}
 		if len(t.ResourceAuthorities) > 32 {
@@ -161,4 +179,10 @@ func validateIdentityProvider(c Config, p *IdentityProviderConfig) error {
 		}
 	}
 	return nil
+}
+
+type CredentialKeyConfig struct {
+	Version   int    `json:"version"`
+	SecretEnv string `json:"secret_env"`
+	Active    bool   `json:"active"`
 }

@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -138,7 +139,15 @@ func (b *browser) clone() *browser {
 func browserStart(t *testing.T, b *browser, f *oidcFixture) string {
 	t.Helper()
 	q := url.Values{"client_id": {"web"}, "response_type": {"code"}, "redirect_uri": {"https://app.example/cb?provider=mayi"}, "resource": {"https://api.example"}, "scope": {"read"}, "state": {"downstream-state-123456"}, "code_challenge_method": {"S256"}, "code_challenge": {challenge}}
-	w := b.request("GET", "/t/a/authorize?"+q.Encode(), "", "")
+	q.Set("authorization_details", `[{"type":"https://api.example/types/fixture/v1","locations":["https://api.example"],"identifier":"workflow:123","actions":["read"]}]`)
+	pushed := b.request("POST", "/t/a/par", q.Encode(), "")
+	var reference struct {
+		URI string `json:"request_uri"`
+	}
+	if pushed.Code != 201 || json.Unmarshal(pushed.Body.Bytes(), &reference) != nil || reference.URI == "" {
+		t.Fatal("push browser authorization", pushed.Code, pushed.Body.String())
+	}
+	w := b.request("GET", "/t/a/authorize?"+url.Values{"client_id": {"web"}, "request_uri": {reference.URI}}.Encode(), "", "")
 	if w.Code != 303 {
 		t.Fatal("start browser login", w.Code, w.Body.String())
 	}
@@ -159,6 +168,7 @@ func TestP2BrowserOIDCConsentAndSessionLifecycle(t *testing.T) {
 	e.config = app.Config{PublicOrigin: "https://auth.example", AllowInsecureLoopback: true, Tenants: []app.TenantConfig{{ID: "a"}}}
 	e.config.Tenants[0].IdentityProvider = &app.IdentityProviderConfig{ID: "upstream", Issuer: f.server.URL, ClientID: "mayi", ClientSecretEnv: "MAYI_A_IDP_SECRET", AuthorizationEndpoint: f.server.URL + "/authorize", TokenEndpoint: f.server.URL + "/token", JWKSURI: f.server.URL + "/jwks", SigningAlgorithm: "ES256"}
 	e.secret["MAYI_A_IDP_SECRET"] = "fixture-secret"
+	configureBrowserKeys(e)
 	_, err := e.admin.Exec(context.Background(), `UPDATE mayi.clients SET name='Client <script>alert(1)</script>' WHERE tenant_id='a' AND client_id='web';UPDATE mayi.resource_scopes SET description='Read <items>' WHERE tenant_id='a' AND resource_id='api' AND name='read'`)
 	if err != nil {
 		t.Fatal(err)
@@ -166,6 +176,7 @@ func TestP2BrowserOIDCConsentAndSessionLifecycle(t *testing.T) {
 	if _, err = e.admin.Exec(context.Background(), `INSERT INTO mayi.external_identities VALUES('a','upstream',$1,'upstream-alice','user:alice')`, f.server.URL); err != nil {
 		t.Fatal(err)
 	}
+	installBrowserResourceAuthority(t, e)
 	handler, err := app.NewBrowser(context.Background(), e.config, e.config.Tenants[0], e.store, func(name string) string { return e.secret[name] })
 	if err != nil {
 		t.Fatal(err)
@@ -271,7 +282,20 @@ func TestP2ServerMountsConfiguredBrowserRoutes(t *testing.T) {
 	f := newOIDCFixture(t)
 	e.config.Tenants[0].IdentityProvider = &app.IdentityProviderConfig{ID: "upstream", Issuer: f.server.URL, ClientID: "mayi", ClientSecretEnv: "MAYI_A_IDP_SECRET", AuthorizationEndpoint: f.server.URL + "/authorize", TokenEndpoint: f.server.URL + "/token", JWKSURI: f.server.URL + "/jwks", SigningAlgorithm: "ES256"}
 	e.secret["MAYI_A_IDP_SECRET"] = "fixture-secret"
+	configureBrowserKeys(e)
 	h := e.server(t).Handler
+	for _, endpoint := range []string{"/.well-known/oauth-authorization-server/t/a", "/t/a/.well-known/openid-configuration"} {
+		w := api(t, h, "GET", endpoint, "", "")
+		var metadata struct {
+			Issuer string   `json:"issuer"`
+			Token  string   `json:"token_endpoint"`
+			PAR    bool     `json:"require_pushed_authorization_requests"`
+			Grants []string `json:"grant_types_supported"`
+		}
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &metadata) != nil || metadata.Issuer != "https://auth.example/t/a" || metadata.Token != metadata.Issuer+"/token" || !metadata.PAR || len(metadata.Grants) != 3 {
+			t.Fatal("live discovery mismatch", w.Code, w.Body.String())
+		}
+	}
 	if w := api(t, h, "GET", "/t/a/authorize", "", ""); w.Code != 400 || w.Header().Get("X-Frame-Options") != "DENY" {
 		t.Fatal("configured browser route missing", w.Code)
 	}
@@ -281,4 +305,30 @@ func TestP2ServerMountsConfiguredBrowserRoutes(t *testing.T) {
 	if w := api(t, h, "GET", "/t/a/jwks", "", ""); w.Code != 200 {
 		t.Fatal("browser subtree hid public keys", w.Code)
 	}
+}
+
+func configureBrowserKeys(e *foundation) {
+	e.config.Tenants[0].CredentialKeys = []app.CredentialKeyConfig{{Version: 1, SecretEnv: "MAYI_A_HASH_KEY", Active: true}}
+	e.secret["MAYI_A_HASH_KEY"] = base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))
+}
+func installBrowserResourceAuthority(t *testing.T, e *foundation) {
+	t.Helper()
+	data, err := os.ReadFile("../../deploy/resource-authority.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.admin.Exec(context.Background(), string(data)); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = e.admin.Exec(context.Background(), `DROP SCHEMA mayi_resource CASCADE`) })
+	if _, err := e.admin.Exec(context.Background(), `
+ GRANT USAGE ON SCHEMA mayi_resource TO mayi_p1_runtime;
+ GRANT SELECT ON ALL TABLES IN SCHEMA mayi_resource TO mayi_p1_runtime;
+ GRANT UPDATE(lock_marker) ON mayi_resource.authorities,mayi_resource.labels TO mayi_p1_runtime;
+ INSERT INTO mayi_resource.authorities(tenant_id,issuer,resource,subject) VALUES('a','https://auth.example/t/a','https://api.example','user:alice');
+ INSERT INTO mayi_resource.permissions VALUES('a','https://auth.example/t/a','https://api.example','user:alice','https://api.example/types/fixture/v1','workflow:123',ARRAY['read','write']);
+ INSERT INTO mayi_resource.labels(tenant_id,issuer,resource,object_type,identifier,name) VALUES('a','https://auth.example/t/a','https://api.example','https://api.example/types/fixture/v1','workflow:123','Resource title');`); err != nil {
+		t.Fatal(err)
+	}
+	e.config.Tenants[0].ResourceAuthorities = []string{"https://api.example"}
 }

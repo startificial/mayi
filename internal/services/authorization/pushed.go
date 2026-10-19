@@ -30,6 +30,15 @@ func (p PushedProof) Valid() bool {
 // confidential clients require their registered authentication policy first.
 // No HTTP endpoint exposes this operation while object consent remains gated.
 func (s *Service) Push(ctx context.Context, request domain.Request) (PushedResult, error) {
+	return s.push(ctx, request, 0)
+}
+func (s *Service) PushAuthenticated(ctx context.Context, request domain.Request, version uint64) (PushedResult, error) {
+	if version == 0 {
+		return PushedResult{}, ErrDenied
+	}
+	return s.push(ctx, request, version)
+}
+func (s *Service) push(ctx context.Context, request domain.Request, authVersion uint64) (PushedResult, error) {
 	if !request.Valid() || request.ObjectCeiling.IsZero() || len(request.State) < 16 {
 		return PushedResult{}, ErrInvalid
 	}
@@ -43,7 +52,7 @@ func (s *Service) Push(ctx context.Context, request domain.Request) (PushedResul
 		if err != nil {
 			return err
 		}
-		if !request.MatchesObjectRegistration(current) {
+		if current.Client.Machine || authVersion != 0 && current.Client.AuthenticationVersion != authVersion || !request.MatchesObjectRegistration(current) {
 			return ErrInvalid
 		}
 		m, err := s.material.NewAuthorizationMaterial(ctx)

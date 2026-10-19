@@ -20,8 +20,8 @@ import (
 	"time"
 
 	httptransport "github.com/startificial/mayi/internal/adapters/inbound/http"
+	"github.com/startificial/mayi/internal/adapters/inbound/http/oauth"
 	"github.com/startificial/mayi/internal/adapters/inbound/web"
-	domain "github.com/startificial/mayi/internal/domain/authorization"
 	"github.com/startificial/mayi/internal/domain/clients"
 	"github.com/startificial/mayi/internal/domain/grants"
 	"github.com/startificial/mayi/internal/services/authentication"
@@ -162,13 +162,8 @@ func (h *Handler) Authorize(w http.ResponseWriter, r *http.Request) {
 		h.failure(w, authentication.ErrDenied)
 		return
 	}
-	v, err := single(r.URL.RawQuery, "client_id", "response_type", "redirect_uri", "resource", "scope", "state", "code_challenge", "code_challenge_method", "dpop_jkt")
-	if err != nil || v.Get("response_type") != "code" || v.Get("code_challenge_method") != "S256" || len(v.Get("state")) < 16 {
-		h.failure(w, authentication.ErrDenied)
-		return
-	}
-	request := domain.Request{TenantIssuer: h.scope, ClientID: v.Get("client_id"), RedirectURI: v.Get("redirect_uri"), ResourceURI: v.Get("resource"), PermissionScopes: strings.Split(v.Get("scope"), " "), State: v.Get("state"), PKCEChallenge: v.Get("code_challenge"), BindingThumbprint: v.Get("dpop_jkt")}
-	if !request.Valid() {
+	// Validate the reference grammar before generating any browser state.
+	if _, err := oauth.DecodePushedAuthorization(r.URL.RawQuery, h.scope, strings.Repeat("0", 64)); err != nil {
 		h.failure(w, authentication.ErrDenied)
 		return
 	}
@@ -182,7 +177,12 @@ func (h *Handler) Authorize(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
-	begun, err := h.consent.Begin(ctx, request, digest(browser))
+	proof, err := oauth.DecodePushedAuthorization(r.URL.RawQuery, h.scope, digest(browser))
+	if err != nil {
+		h.failure(w, err)
+		return
+	}
+	begun, err := h.consent.BeginPushed(ctx, proof)
 	if err != nil {
 		h.failure(w, err)
 		return
@@ -268,7 +268,7 @@ func (h *Handler) Consent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Security-Policy", policy)
-	model := web.Consent{ClientName: view.ClientName, ClientID: view.ClientID, ResourceName: view.ResourceName, ResourceURI: view.ResourceURI, RedirectURI: view.RedirectURI, CSRF: f.CSRF, Action: h.base + "/consent", LogoutAction: h.base + "/session/end", DecisionAvailable: view.DecisionAvailable}
+	model := web.Consent{ClientName: view.ClientName, ClientID: view.ClientID, ResourceName: view.ResourceName, ResourceURI: view.ResourceURI, RedirectURI: view.RedirectURI, CSRF: f.CSRF, Action: h.base + "/consent", LogoutAction: h.base + "/session/end", DecisionAvailable: view.DecisionAvailable, OIDC: view.OIDC, OfflineAccess: view.OfflineAccess}
 	for _, p := range view.PermissionScopes {
 		model.Permissions = append(model.Permissions, web.Permission{Name: p.Name, Description: p.Description})
 	}

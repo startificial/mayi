@@ -68,7 +68,7 @@ func (s *Store) AuthorizeRedemption(ctx context.Context, caller tokens.Caller, _
 	}
 	var version uint64
 	err = tx.QueryRow(ctx, `SELECT t.policy_version FROM mayi.tenants t JOIN mayi.clients c USING(tenant_id)
- WHERE t.tenant_id=$1 AND t.issuer=$2 AND c.client_id=$3 AND c.enabled`, caller.Scope.TenantID, caller.Scope.Issuer, caller.ClientID).Scan(&version)
+ WHERE t.tenant_id=$1 AND t.issuer=$2 AND c.client_id=$3 AND c.enabled AND ($4::bigint=0 OR c.auth_version=$4)`, caller.Scope.TenantID, caller.Scope.Issuer, caller.ClientID, caller.AuthenticationVersion).Scan(&version)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, tokens.ErrInvalidCredential
 	}
@@ -105,11 +105,11 @@ func (t *transaction) Credential(ctx context.Context, hash string) (tokens.Crede
 	c := tokens.Credential{Scope: t.scope}
 	err := t.tx.QueryRow(ctx, `SELECT c.hash,c.kind,c.client_id,c.resource,c.grant_id,c.revision,
  c.pkce_challenge,c.binding_thumbprint,c.redirect_uri,c.ceiling_scopes,c.issued_at,c.expires_at,
- COALESCE(f.absolute_deadline,c.expires_at),c.consumed,c.origin_code,COALESCE(c.family_id,''),COALESCE(c.parent_issuance_id,''),c.object_ceiling IS NOT NULL
+ COALESCE(f.absolute_deadline,c.expires_at),c.consumed,c.origin_code,COALESCE(c.family_id,''),COALESCE(c.parent_issuance_id,''),c.object_ceiling IS NOT NULL,cl.auth_version
  FROM mayi.credentials c JOIN mayi.clients cl ON cl.tenant_id=c.tenant_id AND cl.client_id=c.client_id
  LEFT JOIN mayi.refresh_families f ON f.tenant_id=c.tenant_id AND f.family_id=c.family_id
  WHERE c.tenant_id=$1 AND c.hash=$2 AND cl.enabled FOR UPDATE OF c FOR SHARE OF cl`, t.scope.TenantID, hash).Scan(
-		&c.Hash, &c.Kind, &c.ClientID, &c.Resource, &c.GrantID, &c.Revision, &c.PKCEChallenge, &c.BindingThumbprint, &c.RedirectURI, &c.CeilingScopes, &c.IssuedAt, &c.ExpiresAt, &c.FamilyDeadline, &c.Consumed, &c.OriginCode, &c.FamilyID, &c.ParentIssuanceID, &c.ObjectBound)
+		&c.Hash, &c.Kind, &c.ClientID, &c.Resource, &c.GrantID, &c.Revision, &c.PKCEChallenge, &c.BindingThumbprint, &c.RedirectURI, &c.CeilingScopes, &c.IssuedAt, &c.ExpiresAt, &c.FamilyDeadline, &c.Consumed, &c.OriginCode, &c.FamilyID, &c.ParentIssuanceID, &c.ObjectBound, &c.ClientAuthenticationVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, tokens.ErrInvalidCredential
 	}
@@ -207,6 +207,42 @@ func (t *transaction) GrantRevision(ctx context.Context, id string, number uint6
 	}
 	state.ObjectProfiles = current.ObjectProfiles
 	state.MaxAccessTokenSeconds = min(current.Policy.MaxAccessTokenSeconds, current.Client.AccessTokenSeconds, current.Resource.AccessTokenSeconds)
+	var format string
+	if err := t.tx.QueryRow(ctx, `SELECT token_format FROM mayi.resources WHERE tenant_id=$1 AND uri=$2`, t.scope.TenantID, spec.Resource).Scan(&format); err != nil {
+		return tokens.GrantState{}, err
+	}
+	state.Opaque = format == "opaque"
+	if err := t.tx.QueryRow(ctx, `SELECT refresh_idle_seconds,refresh_absolute_seconds FROM mayi.tenant_policies WHERE tenant_id=$1`, t.scope.TenantID).Scan(&state.RefreshIdleSeconds, &state.RefreshAbsoluteSeconds); err != nil {
+		return tokens.GrantState{}, err
+	}
+	if t.credential.Kind == tokens.RefreshToken {
+		var policyDeadline time.Time
+		if err := t.tx.QueryRow(ctx, `SELECT created_at+make_interval(secs=>$3) FROM mayi.refresh_families WHERE tenant_id=$1 AND family_id=$2`, t.scope.TenantID, t.credential.FamilyID, state.RefreshAbsoluteSeconds).Scan(&policyDeadline); err != nil {
+			return tokens.GrantState{}, err
+		}
+		if policyDeadline.Before(state.AuthorizationDeadline) {
+			state.AuthorizationDeadline = policyDeadline
+		}
+	}
+	err = t.tx.QueryRow(ctx, `SELECT version FROM mayi.signing_keys WHERE tenant_id=$1 AND active`, t.scope.TenantID).Scan(&state.SigningKeyVersion)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return tokens.GrantState{}, err
+	}
+	var authTime *time.Time
+	err = t.tx.QueryRow(ctx, `SELECT o.oidc,o.nonce,o.offline_access,e.authenticated_at FROM mayi.credentials c JOIN mayi.authorization_transactions w ON w.tenant_id=c.tenant_id AND w.handle_hash=c.authorization_hash JOIN mayi.authorization_options o ON o.tenant_id=w.tenant_id AND o.handle_hash=w.handle_hash LEFT JOIN mayi.session_authentication e ON e.tenant_id=w.tenant_id AND e.session_hash=w.consent_session_hash WHERE c.tenant_id=$1 AND c.hash=$2 AND w.status='approved'`, t.scope.TenantID, t.credential.OriginCode).Scan(&state.OIDC, &state.Nonce, &state.OfflineAccess, &authTime)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return tokens.GrantState{}, err
+	}
+	if authTime != nil {
+		state.AuthenticatedAt = *authTime
+	}
+	if t.credential.ObjectBound && spec.PrincipalType == "user" {
+		var member bool
+		if err := t.tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM mayi.principal_memberships WHERE tenant_id=$1 AND subject=$2 AND active)`, t.scope.TenantID, spec.Subject).Scan(&member); err != nil {
+			return tokens.GrantState{}, err
+		}
+		state.Revoked = state.Revoked || !member
+	}
 	t.grant = &state
 	return state, nil
 }
@@ -280,14 +316,24 @@ func (t *transaction) CommitIssuance(ctx context.Context, c tokens.Credential, i
 	if tag.RowsAffected() != 1 {
 		return tokens.ErrInvalidCredential
 	}
-	if _, err := t.tx.Exec(ctx, `INSERT INTO mayi.issuances(tenant_id,issuance_id,grant_id,revision,origin_code,family_id,parent_id,source_credential,resource,scopes,expires_at,object_ceiling)
- VALUES($1,$2,$3,$4,$5,NULLIF($6,''),NULLIF($7,''),$8,$9,$10,$11,$12)`, t.scope.TenantID, i.Claims.ID, c.GrantID, c.Revision, c.OriginCode, c.FamilyID, c.ParentIssuanceID, c.Hash, i.Claims.Resource, i.Claims.Scopes, i.Claims.ExpiresAt, objects); err != nil {
+	familyID := c.FamilyID
+	if i.NewFamily.ID != "" {
+		if c.Kind != tokens.AuthorizationCode || !t.grant.OfflineAccess || i.RefreshHash == "" || i.NewFamily.IdleSeconds < 60 || i.NewFamily.IdleSeconds > t.grant.RefreshIdleSeconds || i.NewFamily.Deadline.After(i.Claims.IssuedAt.Add(time.Duration(t.grant.RefreshAbsoluteSeconds)*time.Second)) || i.NewFamily.Deadline.After(t.grant.AuthorizationDeadline) {
+			return tokens.ErrInvalidCredential
+		}
+		familyID = i.NewFamily.ID
+		if _, err := t.tx.Exec(ctx, `INSERT INTO mayi.refresh_families(tenant_id,family_id,grant_id,revision,origin_code,absolute_deadline,idle_seconds,object_ceiling) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, t.scope.TenantID, familyID, c.GrantID, c.Revision, c.OriginCode, i.NewFamily.Deadline, i.NewFamily.IdleSeconds, objects); err != nil {
+			return err
+		}
+	}
+	if _, err := t.tx.Exec(ctx, `INSERT INTO mayi.issuances(tenant_id,issuance_id,grant_id,revision,origin_code,family_id,parent_id,source_credential,resource,scopes,expires_at,object_ceiling,token_hash,issued_at,binding_thumbprint,signing_version)
+ VALUES($1,$2,$3,$4,$5,NULLIF($6,''),NULLIF($7,''),$8,$9,$10,$11,$12,NULLIF($13,''),$14,$15,$16)`, t.scope.TenantID, i.Claims.ID, c.GrantID, c.Revision, c.OriginCode, familyID, c.ParentIssuanceID, c.Hash, i.Claims.Resource, i.Claims.Scopes, i.Claims.ExpiresAt, objects, i.TokenHash, i.Claims.IssuedAt, i.Claims.BindingThumbprint, i.Claims.SigningKeyVersion); err != nil {
 		return err
 	}
-	if c.Kind == tokens.RefreshToken {
+	if i.RefreshHash != "" {
 		tag, err := t.tx.Exec(ctx, `INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,binding_thumbprint,origin_code,family_id,parent_issuance_id,object_ceiling)
- SELECT $1,$2,'refresh_token',$3,$4,$5,$6,$7,clock_timestamp(),LEAST(clock_timestamp()+make_interval(secs=>f.idle_seconds),f.absolute_deadline),$8,$9,f.family_id,$10,$12
- FROM mayi.refresh_families f WHERE f.tenant_id=$1 AND f.family_id=$11 AND NOT f.revoked AND f.absolute_deadline>clock_timestamp()`, t.scope.TenantID, i.RefreshHash, c.GrantID, c.Revision, c.Resource, c.ClientID, i.Claims.Scopes, c.BindingThumbprint, c.OriginCode, i.Claims.ID, c.FamilyID, objects)
+ SELECT $1,$2,'refresh_token',$3,$4,$5,$6,$7,clock_timestamp(),LEAST(clock_timestamp()+make_interval(secs=>LEAST(f.idle_seconds,$13)),f.absolute_deadline,$14),$8,$9,f.family_id,$10,$12
+ FROM mayi.refresh_families f WHERE f.tenant_id=$1 AND f.family_id=$11 AND NOT f.revoked AND f.absolute_deadline>clock_timestamp()`, t.scope.TenantID, i.RefreshHash, c.GrantID, c.Revision, c.Resource, c.ClientID, i.Claims.Scopes, c.BindingThumbprint, c.OriginCode, i.Claims.ID, familyID, objects, t.grant.RefreshIdleSeconds, t.grant.AuthorizationDeadline)
 		if err != nil {
 			return err
 		}

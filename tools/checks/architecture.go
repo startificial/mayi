@@ -55,6 +55,15 @@ func importAllowed(source, imported string, test bool) bool {
 	}
 	local := strings.TrimPrefix(imported, modulePath+"/")
 	isLocal := local != imported
+	if within(source, "examples/bff/services") && !test {
+		if !isLocal {
+			return !strings.Contains(strings.Split(imported, "/")[0], ".") && !effectfulImport(imported)
+		}
+		return within(local, "examples/bff/services") || within(local, "examples/bff/domain")
+	}
+	if within(source, "examples/bff") && isLocal && within(local, "internal") {
+		return false
+	}
 	if !isLocal {
 		external := strings.Contains(strings.Split(imported, "/")[0], ".") || imported == "C"
 		switch layer {
@@ -96,7 +105,7 @@ func importAllowed(source, imported string, test bool) bool {
 	case "cmd/mayi":
 		return within(local, "internal/app")
 	case "pkg/resource":
-		return within(local, "pkg/resource") || within(local, "internal/domain") || within(local, "internal/services/resource") || within(local, "internal/adapters/outbound/status") || within(local, "internal/adapters/outbound/crypto")
+		return within(local, "pkg/resource") || within(local, "internal/domain") || within(local, "internal/services/resource") || within(local, "internal/adapters/outbound/status") || within(local, "internal/adapters/outbound/crypto") || within(local, "internal/adapters/outbound/egress/httpclient")
 	case "tests", "examples":
 		return sourceLayer(local) != ""
 	case "tools/checks":
@@ -191,10 +200,10 @@ type architectureSource struct {
 }
 
 func isProduction(path string) bool {
-	return within(path, "internal") || within(path, "cmd") || within(path, "pkg")
+	return within(path, "internal") || within(path, "cmd") || within(path, "pkg") || within(path, "examples/bff")
 }
 
 func isPureLayer(path string) bool {
 	layer := sourceLayer(path)
-	return layer == "internal/domain" || layer == "internal/services" || layer == "internal/adapters/inbound/web"
+	return layer == "internal/domain" || layer == "internal/services" || layer == "internal/adapters/inbound/web" || within(path, "examples/bff/services") || within(path, "examples/bff/domain")
 }

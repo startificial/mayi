@@ -21,17 +21,20 @@ const RefreshToken = "refresh_token"
 // Caller must be built from authenticated client and verified sender-proof context
 // by an adapter. These fields are not accepted as claims from external input.
 type Caller struct {
+	AuthenticationVersion       uint64
 	Scope                       grants.Scope
 	ClientID, BindingThumbprint string
 }
 type Command struct {
-	Caller                                   Caller
-	Kind, CredentialHash, Resource, Verifier string
-	RedirectURI                              string
-	Scopes                                   []string
-	Objects                                  []grants.ObjectDetail
+	OIDCRequested, OfflineRequested, WireScopesSpecified bool
+	Caller                                               Caller
+	Kind, CredentialHash, Resource, Verifier             string
+	RedirectURI                                          string
+	Scopes                                               []string
+	Objects                                              []grants.ObjectDetail
 }
 type Credential struct {
+	ClientAuthenticationVersion             uint64
 	Scope                                   grants.Scope
 	Hash, Kind, ClientID, Resource, GrantID string
 	Revision                                uint64
@@ -48,24 +51,37 @@ type Credential struct {
 	Consumed                               bool
 }
 type GrantState struct {
-	ObjectProfiles        []resources.ObjectProfile
-	MaxAccessTokenSeconds int
-	Revision              grants.Revision
-	CurrentScopes         []string
-	CurrentObjectCeiling  grants.ObjectCeiling
-	Revoked               bool
-	PolicyVersion         uint64
-	AuthorizationDeadline time.Time
+	SigningKeyVersion                          int
+	Opaque, OIDC, OfflineAccess                bool
+	Nonce                                      string
+	AuthenticatedAt                            time.Time
+	RefreshIdleSeconds, RefreshAbsoluteSeconds int
+	ObjectProfiles                             []resources.ObjectProfile
+	MaxAccessTokenSeconds                      int
+	Revision                                   grants.Revision
+	CurrentScopes                              []string
+	CurrentObjectCeiling                       grants.ObjectCeiling
+	Revoked                                    bool
+	PolicyVersion                              uint64
+	AuthorizationDeadline                      time.Time
 }
-type Material struct{ ID, RefreshSecret, RefreshHash string }
+type Material struct{ ID, RefreshSecret, RefreshHash, AccessSecret, AccessHash string }
+type RefreshFamily struct {
+	ID          string
+	Deadline    time.Time
+	IdleSeconds int
+}
 type Issuance struct {
+	NewFamily   RefreshFamily
+	TokenHash   string
 	Claims      domaintokens.AccessClaims
 	RefreshHash string
 }
 type Result struct {
-	AccessToken, RefreshToken string
-	Claims                    domaintokens.AccessClaims
-	ObjectProfiles            []resources.ObjectProfile
+	OIDC, OfflineAccess                bool
+	AccessToken, RefreshToken, IDToken string
+	Claims                             domaintokens.AccessClaims
+	ObjectProfiles                     []resources.ObjectProfile
 }
 type Service struct {
 	policy   Authorizer
@@ -100,7 +116,7 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 			return err
 		}
 		now := s.clock.Now()
-		if credential.Scope != cmd.Caller.Scope || credential.Hash != cmd.CredentialHash || credential.ClientID != cmd.Caller.ClientID || credential.Kind != cmd.Kind || credential.Resource != cmd.Resource || credential.BindingThumbprint != cmd.Caller.BindingThumbprint {
+		if cmd.Caller.AuthenticationVersion != 0 && credential.ClientAuthenticationVersion != cmd.Caller.AuthenticationVersion || credential.Scope != cmd.Caller.Scope || credential.Hash != cmd.CredentialHash || credential.ClientID != cmd.Caller.ClientID || credential.Kind != cmd.Kind || credential.Resource != cmd.Resource || credential.BindingThumbprint != cmd.Caller.BindingThumbprint {
 			return ErrInvalidCredential
 		}
 		// Validate possession before allowing a replay to revoke anything.
@@ -140,6 +156,12 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 		state, err := tx.GrantRevision(ctx, credential.GrantID, credential.Revision)
 		if err != nil {
 			return err
+		}
+		if cmd.OIDCRequested && !state.OIDC || cmd.OfflineRequested && !state.OfflineAccess {
+			return ErrInvalidCredential
+		}
+		if cmd.Kind == RefreshToken && state.RefreshIdleSeconds > 0 && !now.Before(credential.IssuedAt.Add(time.Duration(state.RefreshIdleSeconds)*time.Second)) {
+			return ErrInvalidCredential
 		}
 		spec := state.Revision.Snapshot()
 		if credential.ObjectBound != !spec.ObjectCeiling.IsZero() || credential.ObjectBound != !state.CurrentObjectCeiling.IsZero() {
@@ -186,12 +208,55 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 		if err != nil {
 			return ErrInvalidCredential
 		}
-		if cmd.Kind == RefreshToken && (material.RefreshSecret == "" || material.RefreshHash == "" || material.RefreshHash == credential.Hash || material.RefreshSecret == material.RefreshHash) {
+		claims.SigningKeyVersion = state.SigningKeyVersion
+		claims.AuthenticatedAt = state.AuthenticatedAt
+		refresh := cmd.Kind == RefreshToken || cmd.Kind == AuthorizationCode && state.OfflineAccess
+		if refresh && (material.RefreshSecret == "" || material.RefreshHash == "" || material.RefreshHash == credential.Hash || material.RefreshSecret == material.RefreshHash) {
 			return ErrUnavailable
 		}
-		token, err := s.signer.SignAccessToken(ctx, claims)
-		if err != nil {
-			return err
+		issuance := Issuance{Claims: claims}
+		if refresh {
+			issuance.RefreshHash = material.RefreshHash
+		}
+		if cmd.Kind == AuthorizationCode && state.OfflineAccess {
+			if state.RefreshIdleSeconds < 60 || state.RefreshAbsoluteSeconds < state.RefreshIdleSeconds {
+				return ErrUnavailable
+			}
+			deadline := now.Add(time.Duration(state.RefreshAbsoluteSeconds) * time.Second)
+			for _, cap := range []time.Time{spec.ExpiresAt, state.AuthorizationDeadline} {
+				if cap.Before(deadline) {
+					deadline = cap
+				}
+			}
+			if !deadline.After(now) {
+				return ErrInvalidCredential
+			}
+			issuance.NewFamily = RefreshFamily{ID: "f-" + material.ID, Deadline: deadline, IdleSeconds: state.RefreshIdleSeconds}
+		}
+		var token string
+		if state.Opaque {
+			if material.AccessSecret == "" || material.AccessHash == "" || material.AccessSecret == material.AccessHash {
+				return ErrUnavailable
+			}
+			token = material.AccessSecret
+			issuance.TokenHash = material.AccessHash
+		} else {
+			token, err = s.signer.SignAccessToken(ctx, claims)
+			if err != nil {
+				return err
+			}
+			issuance.TokenHash = s.material.DigestAccessToken(token)
+		}
+		var idToken string
+		if cmd.Kind == AuthorizationCode && state.OIDC && (!cmd.WireScopesSpecified || cmd.OIDCRequested) {
+			idSigner, ok := s.signer.(IdentitySigner)
+			if !ok || state.Nonce == "" || state.AuthenticatedAt.IsZero() {
+				return ErrUnavailable
+			}
+			idToken, err = idSigner.SignIdentityToken(ctx, domaintokens.IdentityClaims{Scope: claims.Scope, Subject: claims.Subject, ClientID: claims.ClientID, Nonce: state.Nonce, ID: claims.ID, AuthenticatedAt: state.AuthenticatedAt, IssuedAt: now, ExpiresAt: claims.ExpiresAt, SigningKeyVersion: claims.SigningKeyVersion})
+			if err != nil || idToken == "" {
+				return ErrUnavailable
+			}
 		}
 		afterSigning := s.clock.Now()
 		if afterSigning.Before(now) || !afterSigning.Before(claims.ExpiresAt) {
@@ -203,15 +268,12 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 		if token == "" {
 			return ErrUnavailable
 		}
-		issuance := Issuance{Claims: claims}
-		if cmd.Kind == RefreshToken {
-			issuance.RefreshHash = material.RefreshHash
-		}
+
 		if err := tx.CommitIssuance(ctx, credential, issuance); err != nil {
 			return err
 		}
-		result = Result{AccessToken: token, Claims: claims, ObjectProfiles: state.ObjectProfiles}
-		if cmd.Kind == RefreshToken {
+		result = Result{AccessToken: token, IDToken: idToken, Claims: claims, ObjectProfiles: state.ObjectProfiles, OIDC: state.OIDC && (!cmd.WireScopesSpecified || cmd.OIDCRequested), OfflineAccess: state.OfflineAccess}
+		if refresh {
 			result.RefreshToken = material.RefreshSecret
 		}
 		return nil

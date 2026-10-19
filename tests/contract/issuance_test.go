@@ -541,3 +541,5 @@ func TestSlowOrBrokenSignerClockCannotCommitExpiredCredentials(t *testing.T) {
 		})
 	}
 }
+
+func (*material) DigestAccessToken(raw string) string { return "digest:" + raw }

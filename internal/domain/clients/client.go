@@ -3,6 +3,7 @@ package clients
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/startificial/mayi/internal/domain/resources"
 )
@@ -10,6 +11,10 @@ import (
 const MaxAuthorizationDetailsTypes = 32
 
 type Client struct {
+	Introspection             bool
+	AuthenticationVersion     uint64
+	AuthMethod                string
+	Machine                   bool
 	ID, Name                  string
 	RedirectURIs, Resources   []string
 	AuthorizationDetailsTypes []string
@@ -17,10 +22,20 @@ type Client struct {
 	Enabled                   bool
 }
 
-// Mayi currently registers public HTTPS web clients only. Confidential
-// credentials, native exceptions and live OAuth endpoints remain pending.
+// Web clients use exact HTTPS redirects. Machine clients use a disjoint identity
+// namespace and confidential authentication, without browser redirects.
+func ValidClientID(id string) bool {
+	return resources.ValidID(id) || strings.HasPrefix(id, "client:") && resources.ValidID(strings.TrimPrefix(id, "client:"))
+}
 func (c Client) Valid() bool {
-	if !resources.ValidID(c.ID) || !resources.ValidLabel(c.Name) || c.AccessTokenSeconds < 60 || c.AccessTokenSeconds > 900 || len(c.RedirectURIs) == 0 || len(c.RedirectURIs) > 16 || len(c.Resources) == 0 || len(c.Resources) > 32 || len(c.AuthorizationDetailsTypes) == 0 || len(c.AuthorizationDetailsTypes) > MaxAuthorizationDetailsTypes {
+	if c.Introspection && (c.AuthMethod == "" || c.AuthMethod == "none") {
+		return false
+	}
+	if c.AuthMethod != "" && c.AuthMethod != "none" && c.AuthMethod != "client_secret_basic" && c.AuthMethod != "private_key_jwt" || c.Machine && (!strings.HasPrefix(c.ID, "client:") || c.AuthMethod == "" || c.AuthMethod == "none" || len(c.RedirectURIs) != 0) || !c.Machine && strings.HasPrefix(c.ID, "client:") {
+		return false
+	}
+
+	if !ValidClientID(c.ID) || !resources.ValidLabel(c.Name) || c.AccessTokenSeconds < 60 || c.AccessTokenSeconds > 900 || (!c.Machine && len(c.RedirectURIs) == 0) || len(c.RedirectURIs) > 16 || len(c.Resources) == 0 || len(c.Resources) > 32 || len(c.AuthorizationDetailsTypes) == 0 || len(c.AuthorizationDetailsTypes) > MaxAuthorizationDetailsTypes {
 		return false
 	}
 	seen := map[string]bool{}

@@ -94,7 +94,7 @@ func checkArchitectureContracts(sources []*architectureSource, positions *token.
 		ast.Inspect(source.file, func(node ast.Node) bool {
 			switch n := node.(type) {
 			case *ast.InterfaceType:
-				if within(source.pkg, "internal/services") && n.Methods.NumFields() > 0 && !isPortsFile(source.path) {
+				if (within(source.pkg, "internal/services") || within(source.pkg, "examples/bff/services")) && n.Methods.NumFields() > 0 && !isPortsFile(source.path) {
 					report(source, n, "service interfaces belong in consumer-owned ports.go or ports_<variant>.go")
 				}
 			case *ast.TypeSpec:
@@ -104,7 +104,7 @@ func checkArchitectureContracts(sources []*architectureSource, positions *token.
 					}
 				}
 			case *ast.Field:
-				if n.Tag != nil && (within(source.pkg, "internal/domain") || within(source.pkg, "internal/services")) {
+				if n.Tag != nil && (within(source.pkg, "internal/domain") || within(source.pkg, "internal/services") || within(source.pkg, "examples/bff/services") || within(source.pkg, "examples/bff/domain")) {
 					text, _ := strconv.Unquote(n.Tag.Value)
 					for _, key := range []string{"json", "xml", "yaml", "db", "gorm", "bson", "sql", "form", "query", "header", "validate", "binding"} {
 						if _, ok := reflect.StructTag(text).Lookup(key); ok {

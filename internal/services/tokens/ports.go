@@ -13,6 +13,12 @@ import (
 type Authorizer interface {
 	AuthorizeRedemption(context.Context, Caller, string) (uint64, error)
 }
+
+// SecretHasher implements the pinned purpose/tenant/version-separated keyed
+// digest policy. Raw credentials never enter a persistence port.
+type SecretHasher interface {
+	Digest(grants.Scope, string, string) (string, error)
+}
 type Clock interface{ Now() time.Time }
 type PKCEVerifier interface {
 	VerifyS256(challenge, verifier string) error
@@ -24,10 +30,15 @@ type Signer interface {
 	SignAccessToken(context.Context, domaintokens.AccessClaims) (string, error)
 }
 
+type IdentitySigner interface {
+	SignIdentityToken(context.Context, domaintokens.IdentityClaims) (string, error)
+}
+
 // MaterialSource generates fresh unpredictable values. Only the hash of a refresh
 // secret crosses the persistence boundary. Plaintext is returned after commit.
 type MaterialSource interface {
 	NewMaterial(context.Context) (Material, error)
+	DigestAccessToken(string) string
 }
 
 // UnitOfWork invokes the callback once, synchronously. It serializes credential,

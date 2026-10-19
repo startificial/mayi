@@ -81,7 +81,7 @@ func TestPushedWireRejectsUnsupportedOrAmbiguousRequests(t *testing.T) {
 			})
 		}
 	}
-	for key, value := range map[string]string{"request": "signed-object", "request_uri": "https://evil.example/request", "client_secret": "private-secret", "client_assertion": "private-assertion", "dpop_jkt": strings.Repeat("A", 43), "tenant_id": "other", "nonce": "unsupported", "Scope": "read"} {
+	for key, value := range map[string]string{"request": "signed-object", "request_uri": "https://evil.example/request", "client_secret": "private-secret", "client_assertion": "private-assertion", "dpop_jkt": "invalid-key", "tenant_id": "other", "nonce": "unsupported", "Scope": "read"} {
 		v := pushedFields()
 		v.Set(key, value)
 		assertPushedInvalid(t, v.Encode(), p)

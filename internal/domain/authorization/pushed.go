@@ -65,5 +65,5 @@ func (p PushedRequest) Begin(id, handleHash, browserHash, csrfHash string, now t
 // Equal preserves exact request correlation, including ordered scope bytes;
 // object authority retains the domain's exact tuple-set semantics.
 func (r Request) Equal(other Request) bool {
-	return r.TenantIssuer == other.TenantIssuer && r.ClientID == other.ClientID && r.RedirectURI == other.RedirectURI && r.ResourceURI == other.ResourceURI && r.PKCEChallenge == other.PKCEChallenge && r.BindingThumbprint == other.BindingThumbprint && r.State == other.State && slices.Equal(r.PermissionScopes, other.PermissionScopes) && r.ObjectCeiling.Equal(other.ObjectCeiling)
+	return r.OIDC == other.OIDC && r.OfflineAccess == other.OfflineAccess && r.Nonce == other.Nonce && r.TenantIssuer == other.TenantIssuer && r.ClientID == other.ClientID && r.RedirectURI == other.RedirectURI && r.ResourceURI == other.ResourceURI && r.PKCEChallenge == other.PKCEChallenge && r.BindingThumbprint == other.BindingThumbprint && r.State == other.State && slices.Equal(r.PermissionScopes, other.PermissionScopes) && r.ObjectCeiling.Equal(other.ObjectCeiling)
 }

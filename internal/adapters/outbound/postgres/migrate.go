@@ -126,7 +126,8 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, runtimeRole string
 		`GRANT UPDATE(revoked) ON mayi.grants,mayi.refresh_families,mayi.issuances TO ` + role,
 		`GRANT UPDATE(consumed) ON mayi.credentials TO ` + role,
 		`GRANT UPDATE(policy_version) ON mayi.tenants TO ` + role,
-		`REVOKE UPDATE ON mayi.audit_events FROM ` + role,
+		`REVOKE UPDATE ON mayi.audit_events,mayi.authorization_options,mayi.pushed_options FROM ` + role,
+		`GRANT UPDATE(last_used_at) ON mayi.browser_sessions TO ` + role,
 	} {
 		if _, err = tx.Exec(ctx, sql); err != nil {
 			return err
@@ -187,5 +188,5 @@ func rollback(tx pgx.Tx) {
 }
 
 func migrationSources() []string {
-	return []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed, migrations.ObjectPresentations}
+	return []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed, migrations.ObjectPresentations, migrations.Lifecycle}
 }

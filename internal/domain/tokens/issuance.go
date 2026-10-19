@@ -13,6 +13,8 @@ var ErrInvalidIssuance = errors.New("invalid token issuance")
 
 // AccessClaims are application values; protocol serialization belongs in adapters.
 type AccessClaims struct {
+	SigningKeyVersion                          int
+	AuthenticatedAt                            time.Time
 	ID                                         string
 	Scope                                      grants.Scope
 	GrantID                                    string
@@ -67,4 +69,12 @@ func derive(revision grants.Revision, current, requested []string, objects grant
 		return AccessClaims{}, ErrInvalidIssuance
 	}
 	return AccessClaims{ID: id, Scope: spec.Scope, GrantID: spec.GrantID, Revision: spec.Number, Subject: spec.Subject, PrincipalType: spec.PrincipalType, ClientID: spec.ClientID, Resource: spec.Resource, Scopes: slices.Clone(scopes), ObjectCeiling: objects, BindingThumbprint: binding, IssuedAt: now, ExpiresAt: expiry}, nil
+}
+
+// IdentityClaims are purpose-specific; they are never resource authority.
+type IdentityClaims struct {
+	Scope                                grants.Scope
+	Subject, ClientID, Nonce, ID         string
+	AuthenticatedAt, IssuedAt, ExpiresAt time.Time
+	SigningKeyVersion                    int
 }

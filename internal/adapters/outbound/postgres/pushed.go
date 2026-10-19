@@ -25,6 +25,9 @@ func (a *authorizationTransaction) CreatePushed(ctx context.Context, p domain.Pu
 	if err != nil || tag.RowsAffected() != 1 {
 		return authorization.ErrUnavailable
 	}
+	if _, err := a.tx.Exec(ctx, `INSERT INTO mayi.pushed_options VALUES($1,$2,$3,$4,$5)`, a.tenantIssuer.TenantID, s.ReferenceHash, r.OIDC, r.Nonce, r.OfflineAccess); err != nil {
+		return err
+	}
 	_, err = a.tx.Exec(ctx, `INSERT INTO mayi.audit_events(tenant_id,event_type,object_ref) VALUES($1,'authorization_pushed',$2)`, a.tenantIssuer.TenantID, s.ID)
 	return err
 }
@@ -68,6 +71,9 @@ func (a *authorizationTransaction) Pushed(ctx context.Context, hash string) (dom
 	s.Request.ObjectCeiling, err = decodeObjectCeiling(objects, a.tenantIssuer, s.Request.ResourceURI)
 	if err != nil {
 		return domain.PushedRequest{}, authorization.ErrDenied
+	}
+	if err := a.tx.QueryRow(ctx, `SELECT oidc,nonce,offline_access FROM mayi.pushed_options WHERE tenant_id=$1 AND reference_hash=$2`, a.tenantIssuer.TenantID, hash).Scan(&s.Request.OIDC, &s.Request.Nonce, &s.Request.OfflineAccess); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return domain.PushedRequest{}, authorization.ErrUnavailable
 	}
 	p, err := domain.NewPushed(s)
 	if err != nil {

@@ -174,7 +174,7 @@ func (s *Service) Client(ctx context.Context, actor Actor, scope grants.Scope, i
 	if err := authorize(actor, scope, "clients:read"); err != nil {
 		return clients.Client{}, err
 	}
-	if !resources.ValidID(id) {
+	if !clients.ValidClientID(id) {
 		return clients.Client{}, ErrInvalid
 	}
 	var result clients.Client

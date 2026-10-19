@@ -2,12 +2,14 @@ package app
 
 import (
 	"context"
+	"github.com/startificial/mayi/internal/adapters/inbound/http/oauth"
 	"github.com/startificial/mayi/internal/adapters/inbound/http/selfservice"
 	cryptoadapter "github.com/startificial/mayi/internal/adapters/outbound/crypto"
 	"github.com/startificial/mayi/internal/adapters/outbound/egress"
 	upstream "github.com/startificial/mayi/internal/adapters/outbound/identity"
 	"github.com/startificial/mayi/internal/adapters/outbound/postgres"
 	"github.com/startificial/mayi/internal/services/authentication"
+	grantservice "github.com/startificial/mayi/internal/services/grants"
 	"net/http"
 	"strings"
 )
@@ -38,21 +40,19 @@ func NewBrowser(ctx context.Context, c Config, t TenantConfig, store *postgres.S
 	if err != nil {
 		return nil, err
 	}
-	consent, err := NewAuthorization(store, systemClock{})
-	if len(t.ResourceAuthorities) > 0 {
-		owners := make([]postgres.ResourceConsentConfig, 0, len(t.ResourceAuthorities))
-		for _, uri := range t.ResourceAuthorities {
-			owners = append(owners, postgres.ResourceConsentConfig{Scope: scope, Resource: uri})
-		}
-		authority, buildErr := postgres.NewResourceConsent(store, owners)
-		if buildErr != nil {
-			return nil, buildErr
-		}
-		if err := authority.Check(ctx); err != nil {
-			return nil, err
-		}
-		consent, err = NewObjectAuthorization(store, systemClock{}, authority)
+	hash, err := credentialHasher(t, lookup)
+	if err != nil {
+		return nil, err
 	}
+	consent, err := newAuthorization(ctx, t, scope, store, hash)
+	if err != nil {
+		return nil, err
+	}
+	client, err := newClientAuthentication(c, scope, store, hash)
+	if err != nil {
+		return nil, err
+	}
+	pushed, err := oauth.NewPushed(scope, client, consent)
 	if err != nil {
 		return nil, err
 	}
@@ -60,12 +60,30 @@ func NewBrowser(ctx context.Context, c Config, t TenantConfig, store *postgres.S
 	if err != nil {
 		return nil, err
 	}
+	sessions, err := authentication.NewSessions(store, systemClock{}, scope)
+	if err != nil {
+		return nil, err
+	}
+	grants, err := grantservice.New(store, systemClock{}, scope)
+	if err != nil {
+		return nil, err
+	}
+	controls, err := selfservice.NewControls(sessions, grants, scope)
+	if err != nil {
+		return nil, err
+	}
 	router := http.NewServeMux()
 	base := "/t/" + t.ID
+	router.HandleFunc("POST "+base+"/par", pushed.Push)
 	router.HandleFunc("GET "+base+"/authorize", browser.Authorize)
 	router.HandleFunc("GET "+base+"/upstream/callback", browser.Callback)
 	router.HandleFunc("GET "+base+"/consent", browser.Consent)
 	router.HandleFunc("POST "+base+"/consent", browser.Decide)
 	router.HandleFunc("POST "+base+"/session/end", browser.EndSession)
+	router.HandleFunc("POST "+base+"/session/touch", controls.Touch)
+	router.HandleFunc("GET "+base+"/sessions", controls.Sessions)
+	router.HandleFunc("POST "+base+"/sessions/{id}/revoke", controls.Sessions)
+	router.HandleFunc("GET "+base+"/grants", controls.Grants)
+	router.HandleFunc("POST "+base+"/grants/{id}/revoke", controls.Grants)
 	return router, nil
 }

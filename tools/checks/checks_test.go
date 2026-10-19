@@ -14,6 +14,12 @@ func TestImportBoundaries(t *testing.T) {
 		name, source, imported string
 		test, allowed          bool
 	}{
+		{"SDK constrained transport", "pkg/resource/resource.go", modulePath + "/internal/adapters/outbound/egress/httpclient", false, true},
+		{"SDK privileged egress", "pkg/resource/resource.go", modulePath + "/internal/adapters/outbound/egress", false, false},
+		{"BFF cannot import Mayi persistence", "examples/bff/adapters/store.go", modulePath + "/internal/adapters/outbound/postgres", false, false},
+		{"BFF public SDK", "examples/bff/adapters/resource.go", modulePath + "/pkg/resource", false, true},
+		{"BFF pure service", "examples/bff/services/session.go", "net/http", false, false},
+		{"BFF service cannot construct adapter", "examples/bff/services/session.go", modulePath + "/examples/bff/adapters/crypto", false, false},
 		{"service domain", "internal/services/tokens/service.go", modulePath + "/internal/domain/grants", false, true},
 		{"service driver", "internal/services/tokens/service.go", "github.com/jackc/pgx/v5", false, false},
 		{"service database", "internal/services/tokens/service.go", "database/sql", false, false},
