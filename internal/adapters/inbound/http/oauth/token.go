@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -50,8 +51,12 @@ func (h *TokenHandler) command(ctx context.Context, r fosite.AccessRequester) (t
 	if len(form) > 32 {
 		return tokens.Command{}, fosite.ErrInvalidRequest
 	}
-	for _, values := range form {
-		if len(values) != 1 || len(values[0]) > 8192 {
+	for key, values := range form {
+		limit := 8192
+		if key == "authorization_details" {
+			limit = MaxAuthorizationDetailsBytes
+		}
+		if len(values) != 1 || len(values[0]) > limit {
 			return tokens.Command{}, fosite.ErrInvalidRequest
 		}
 	}
@@ -68,8 +73,21 @@ func (h *TokenHandler) command(ctx context.Context, r fosite.AccessRequester) (t
 	if secret == "" || len(secret) > 4096 {
 		return tokens.Command{}, fosite.ErrInvalidGrant
 	}
+	var objects []grants.ObjectDetail
+	if values, present := form["authorization_details"]; present {
+		var err error
+		objects, err = decodeObjectDetails(values[0], resources[0])
+		if err != nil || len(objects) == 0 {
+			return tokens.Command{}, fosite.ErrInvalidRequest
+		}
+		requested, err := grants.NewObjectCeiling(grants.ObjectCeilingSpec{Scope: caller.Scope, Resource: resources[0], Details: objects})
+		if err != nil {
+			return tokens.Command{}, fosite.ErrInvalidRequest
+		}
+		objects = requested.Snapshot().Details
+	}
 	digest := sha256.Sum256([]byte(secret))
-	return tokens.Command{Caller: caller, Kind: kind, CredentialHash: hex.EncodeToString(digest[:]), Resource: resources[0], Verifier: form.Get("code_verifier"), RedirectURI: form.Get("redirect_uri"), Scopes: []string(r.GetRequestedScopes())}, nil
+	return tokens.Command{Caller: caller, Kind: kind, CredentialHash: hex.EncodeToString(digest[:]), Resource: resources[0], Verifier: form.Get("code_verifier"), RedirectURI: form.Get("redirect_uri"), Scopes: []string(r.GetRequestedScopes()), Objects: objects}, nil
 }
 func (h *TokenHandler) HandleTokenEndpointRequest(ctx context.Context, r fosite.AccessRequester) error {
 	_, err := h.command(ctx, r)
@@ -86,6 +104,13 @@ func (h *TokenHandler) PopulateTokenEndpointResponse(ctx context.Context, r fosi
 	}
 	if err != nil {
 		return fosite.ErrTemporarilyUnavailable
+	}
+	if !result.Claims.ObjectCeiling.IsZero() {
+		details, err := EncodeAuthorizationDetails(result.Claims.ObjectCeiling, result.ObjectProfiles...)
+		if err != nil {
+			return fosite.ErrTemporarilyUnavailable
+		}
+		response.SetExtra("authorization_details", json.RawMessage(details))
 	}
 	response.SetAccessToken(result.AccessToken)
 	response.SetTokenType("Bearer")

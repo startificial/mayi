@@ -24,7 +24,7 @@ type fixtureConsentAuthority struct {
 
 var _ authorization.ObjectConsentAuthority = (*fixtureConsentAuthority)(nil)
 
-func (a *fixtureConsentAuthority) WithObjectConsent(ctx context.Context, q authorization.ObjectConsentQuery, fn func(domain.ObjectConsentProjection) error) error {
+func (a *fixtureConsentAuthority) WithObjectConsent(ctx context.Context, q authorization.ObjectConsentQuery, fn func(context.Context, domain.ObjectConsentProjection) error) error {
 	tx, err := a.e.admin.Begin(ctx)
 	if err != nil {
 		return authorization.ErrUnavailable
@@ -68,7 +68,7 @@ func (a *fixtureConsentAuthority) WithObjectConsent(ctx context.Context, q autho
 	if a.beforeCallback != nil {
 		a.beforeCallback()
 	}
-	err = fn(projection)
+	err = fn(ctx, projection)
 	if a.afterCallback != nil {
 		a.afterCallback()
 	}

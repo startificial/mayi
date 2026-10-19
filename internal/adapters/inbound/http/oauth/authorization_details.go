@@ -20,30 +20,13 @@ var ErrInvalidAuthorizationDetails = errors.New("invalid authorization details")
 // The profiles must be selected from trusted tenant/resource configuration. No
 // endpoint accepts RAR until PAR, approval and credential enforcement are wired.
 func DecodeAuthorizationDetails(raw string, profiles ...resources.ObjectProfile) (grants.ObjectCeiling, error) {
-	if len(raw) == 0 || len(raw) > MaxAuthorizationDetailsBytes || !utf8.ValidString(raw) || len(profiles) == 0 || len(profiles) > resources.MaxObjectRequestProfiles {
+	if len(profiles) == 0 || len(profiles) > resources.MaxObjectRequestProfiles {
 		return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
 	}
 	spec := profiles[0].Snapshot()
-	d := json.NewDecoder(strings.NewReader(raw))
-	if !delimiter(d, '[') {
-		return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
-	}
-	var details []grants.ObjectDetail
-	for d.More() {
-		if len(details) >= grants.MaxObjectDetails {
-			return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
-		}
-		detail, err := objectDetail(d, spec.Resource)
-		if err != nil {
-			return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
-		}
-		details = append(details, detail)
-	}
-	if !delimiter(d, ']') {
-		return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
-	}
-	if _, err := d.Token(); err != io.EOF {
-		return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
+	details, err := decodeObjectDetails(raw, spec.Resource)
+	if err != nil {
+		return grants.ObjectCeiling{}, err
 	}
 	ceiling, err := resources.ValidateObjectRequest(spec.Scope, spec.Resource, profiles, details)
 	if err != nil {
@@ -55,6 +38,37 @@ func DecodeAuthorizationDetails(raw string, profiles ...resources.ObjectProfile)
 		return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
 	}
 	return ceiling, nil
+}
+
+// decodeObjectDetails performs structural boundary validation without loading
+// protected registration data. Token redemption validates the returned tuples
+// against current trusted profiles only after credential possession is proven.
+func decodeObjectDetails(raw, resource string) ([]grants.ObjectDetail, error) {
+	if len(raw) == 0 || len(raw) > MaxAuthorizationDetailsBytes || !utf8.ValidString(raw) {
+		return nil, ErrInvalidAuthorizationDetails
+	}
+	d := json.NewDecoder(strings.NewReader(raw))
+	if !delimiter(d, '[') {
+		return nil, ErrInvalidAuthorizationDetails
+	}
+	var details []grants.ObjectDetail
+	for d.More() {
+		if len(details) >= grants.MaxObjectDetails {
+			return nil, ErrInvalidAuthorizationDetails
+		}
+		detail, err := objectDetail(d, resource)
+		if err != nil {
+			return nil, ErrInvalidAuthorizationDetails
+		}
+		details = append(details, detail)
+	}
+	if !delimiter(d, ']') {
+		return nil, ErrInvalidAuthorizationDetails
+	}
+	if _, err := d.Token(); err != io.EOF {
+		return nil, ErrInvalidAuthorizationDetails
+	}
+	return details, nil
 }
 
 // The fixed grammar accepts exactly array -> object -> strings/string arrays;

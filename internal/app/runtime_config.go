@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/startificial/mayi/internal/domain/resources"
 	"io"
 	"net"
 	"net/url"
@@ -27,13 +28,14 @@ type Config struct {
 	Tenants                []TenantConfig `json:"tenants"`
 }
 type TenantConfig struct {
-	ID                string                  `json:"id"`
-	KeyName           string                  `json:"key_name"`
-	KeyVersions       []int                   `json:"key_versions"`
-	InitialKeyVersion int                     `json:"initial_key_version"`
-	TransitTokenEnv   string                  `json:"transit_token_env"`
-	Administrators    []AdministratorConfig   `json:"administrators"`
-	IdentityProvider  *IdentityProviderConfig `json:"identity_provider,omitempty"`
+	ID                  string                  `json:"id"`
+	ResourceAuthorities []string                `json:"resource_authorities,omitempty"`
+	KeyName             string                  `json:"key_name"`
+	KeyVersions         []int                   `json:"key_versions"`
+	InitialKeyVersion   int                     `json:"initial_key_version"`
+	TransitTokenEnv     string                  `json:"transit_token_env"`
+	Administrators      []AdministratorConfig   `json:"administrators"`
+	IdentityProvider    *IdentityProviderConfig `json:"identity_provider,omitempty"`
 }
 
 // Provider trust is explicit startup configuration. Changing an issuer, client
@@ -100,6 +102,16 @@ func (c Config) Validate() error {
 		}
 		if seenTenants[t.ID] || seenKeys[t.KeyName] || !regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}$`).MatchString(t.KeyName) || !regexp.MustCompile(`^MAYI_[A-Z0-9_]{1,80}$`).MatchString(t.TransitTokenEnv) || len(t.KeyVersions) == 0 || len(t.KeyVersions) > 16 || !slices.Contains(t.KeyVersions, t.InitialKeyVersion) || len(t.Administrators) == 0 || len(t.Administrators) > 8 {
 			return ErrConfiguration
+		}
+		if len(t.ResourceAuthorities) > 32 {
+			return ErrConfiguration
+		}
+		seenResources := map[string]bool{}
+		for _, uri := range t.ResourceAuthorities {
+			if !resources.ValidURI(uri) || seenResources[uri] {
+				return ErrConfiguration
+			}
+			seenResources[uri] = true
 		}
 		seenTenants[t.ID] = true
 		if t.IdentityProvider != nil {

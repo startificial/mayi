@@ -497,7 +497,12 @@ func TestP1ExpandedSchemaPreservesAtomicIssuanceAndEnqueuesAudit(t *testing.T) {
 	if _, err := tx.Exec(ctx, `SELECT set_config('mayi.tenant_id','a',true)`); err != nil {
 		t.Fatal(err)
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO mayi.clients(tenant_id,client_id) VALUES('a','client');
+	_, err = tx.Exec(ctx, `INSERT INTO mayi.clients(tenant_id,client_id,name,redirect_uris,access_token_seconds) VALUES('a','client','Test client',ARRAY['https://client.example/cb'],300);
+ INSERT INTO mayi.resources VALUES('a','api','https://api.example','Test API',300,false);
+ INSERT INTO mayi.resource_scopes VALUES('a','api','read','Read items');
+ INSERT INTO mayi.client_resources VALUES('a','client','api');
+ INSERT INTO mayi.resource_object_profiles VALUES('a','api','https://api.example','https://api.example/types/fixture/v1','object-actions-v1','{"read":"Read items"}');
+ INSERT INTO mayi.client_object_types VALUES('a','client','api','https://api.example/types/fixture/v1');
  INSERT INTO mayi.grants(tenant_id,grant_id,client_id,subject,principal_type,resource,current_scopes,expires_at) VALUES('a','grant','client','user:alice','user','https://api.example',ARRAY['read'],clock_timestamp()+interval '1 hour');
  INSERT INTO mayi.grant_revisions VALUES('a','grant',1,ARRAY['read'],clock_timestamp()+interval '1 hour')`)
 	if err != nil {

@@ -157,7 +157,13 @@ func setup(t *testing.T) *environment {
 		t.Fatal(err)
 	}
 	e := &environment{admin: admin, db: db, store: store, signer: signer, service: service, scope: scope, address: address, token: token, signerToken: result.Auth.ClientToken}
-	e.exec(t, `INSERT INTO mayi.tenants VALUES('a','https://auth.example/t/a',1),('b','https://auth.example/t/b',1); INSERT INTO mayi.clients(tenant_id,client_id) VALUES('a','client'),('b','client');
+	e.exec(t, `INSERT INTO mayi.tenants VALUES('a','https://auth.example/t/a',1),('b','https://auth.example/t/b',1); INSERT INTO mayi.clients(tenant_id,client_id,name,redirect_uris,access_token_seconds) VALUES('a','client','Test client',ARRAY['https://client.example/cb'],300),('b','client','Test client',ARRAY['https://client.example/cb'],300);
+ INSERT INTO mayi.tenant_policies VALUES('a',600,3600,false),('b',600,3600,false);
+ INSERT INTO mayi.resources VALUES('a','api','https://api.example','Test API',300,false),('b','api','https://api.example','Test API',300,false);
+ INSERT INTO mayi.resource_scopes VALUES('a','api','read','Read items'),('a','api','write','Write items'),('b','api','read','Read items');
+ INSERT INTO mayi.client_resources VALUES('a','client','api'),('b','client','api');
+ INSERT INTO mayi.resource_object_profiles VALUES('a','api','https://api.example','https://api.example/types/fixture/v1','object-actions-v1','{"read":"Read items","write":"Write items"}'),('b','api','https://api.example','https://api.example/types/fixture/v1','object-actions-v1','{"read":"Read items"}');
+ INSERT INTO mayi.client_object_types VALUES('a','client','api','https://api.example/types/fixture/v1'),('b','client','api','https://api.example/types/fixture/v1');
  INSERT INTO mayi.grants(tenant_id,grant_id,client_id,subject,principal_type,resource,current_scopes,expires_at) VALUES('a','grant','client','user:alice','user','https://api.example',ARRAY['read','write'],clock_timestamp()+interval '1 hour'),('b','grant','client','user:bob','user','https://api.example',ARRAY['read'],clock_timestamp()+interval '1 hour');
  INSERT INTO mayi.grant_revisions VALUES('a','grant',1,ARRAY['read','write'],clock_timestamp()+interval '1 hour'),('b','grant',1,ARRAY['read'],clock_timestamp()+interval '1 hour')`)
 	e.code(t, "code")

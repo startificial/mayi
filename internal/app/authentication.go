@@ -39,6 +39,20 @@ func NewBrowser(ctx context.Context, c Config, t TenantConfig, store *postgres.S
 		return nil, err
 	}
 	consent, err := NewAuthorization(store, systemClock{})
+	if len(t.ResourceAuthorities) > 0 {
+		owners := make([]postgres.ResourceConsentConfig, 0, len(t.ResourceAuthorities))
+		for _, uri := range t.ResourceAuthorities {
+			owners = append(owners, postgres.ResourceConsentConfig{Scope: scope, Resource: uri})
+		}
+		authority, buildErr := postgres.NewResourceConsent(store, owners)
+		if buildErr != nil {
+			return nil, buildErr
+		}
+		if err := authority.Check(ctx); err != nil {
+			return nil, err
+		}
+		consent, err = NewObjectAuthorization(store, systemClock{}, authority)
+	}
 	if err != nil {
 		return nil, err
 	}

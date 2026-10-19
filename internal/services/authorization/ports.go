@@ -32,9 +32,12 @@ type ObjectConsentQuery struct {
 // exit. Invoke fn exactly once, synchronously; never retry it or call it after
 // returning. All relevant resource permission/display changes must conflict
 // with this guard. A cached allow or unguarded remote boolean is insufficient.
-// No Mayi transaction or pool connection is held while acquiring this guard.
+// No Mayi policy/workflow lock is held while acquiring this guard. The callback
+// context carries cancellation and an adapter-private enlistment capability when
+// the authority and store share one atomic transaction. Callers must propagate
+// that context to the final store operation. Do not inspect its private values.
 type ObjectConsentAuthority interface {
-	WithObjectConsent(context.Context, ObjectConsentQuery, func(domain.ObjectConsentProjection) error) error
+	WithObjectConsent(context.Context, ObjectConsentQuery, func(context.Context, domain.ObjectConsentProjection) error) error
 }
 
 // Store authenticates a narrow session/membership projection and authorizes the

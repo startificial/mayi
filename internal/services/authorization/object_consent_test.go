@@ -20,7 +20,7 @@ type objectAuthority struct {
 	before                                                  func()
 }
 
-func (a *objectAuthority) WithObjectConsent(ctx context.Context, q authorization.ObjectConsentQuery, fn func(domain.ObjectConsentProjection) error) error {
+func (a *objectAuthority) WithObjectConsent(ctx context.Context, q authorization.ObjectConsentQuery, fn func(context.Context, domain.ObjectConsentProjection) error) error {
 	a.t.Helper()
 	a.calls++
 	if a.s.inTransaction {
@@ -44,9 +44,9 @@ func (a *objectAuthority) WithObjectConsent(ctx context.Context, q authorization
 		return nil
 	}
 	a.displayLoads++
-	err := fn(a.projection)
+	err := fn(ctx, a.projection)
 	if a.twice {
-		err = fn(a.projection)
+		err = fn(ctx, a.projection)
 	}
 	if a.ignoreError {
 		return nil

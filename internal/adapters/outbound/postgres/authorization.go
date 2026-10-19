@@ -28,9 +28,20 @@ func (s *Store) RunAuthorization(ctx context.Context, tenantIssuer grants.Scope,
 	if !tenantIssuer.Valid() || fn == nil {
 		return authorization.ErrDenied
 	}
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return authorization.ErrUnavailable
+	var tx pgx.Tx
+	var err error
+	guard, borrowed := ctx.Value(resourceGuardKey{}).(*resourceGuard)
+	if borrowed {
+		if guard.store != s || guard.scope != tenantIssuer || guard.used {
+			return authorization.ErrDenied
+		}
+		guard.used = true
+		tx = guard.tx
+	} else {
+		tx, err = s.pool.Begin(ctx)
+		if err != nil {
+			return authorization.ErrUnavailable
+		}
 	}
 	defer rollback(tx)
 	if err := scopeTransaction(ctx, tx, tenantIssuer); err != nil {
@@ -46,6 +57,9 @@ func (s *Store) RunAuthorization(ctx context.Context, tenantIssuer grants.Scope,
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return authorization.ErrUnavailable
+	}
+	if borrowed {
+		guard.committed = true
 	}
 	return nil
 }
@@ -74,12 +88,16 @@ func (s *Store) AuthorizeConsent(ctx context.Context, p authorization.AccessProo
 	return result, nil
 }
 func (a *authorizationTransaction) Registration(ctx context.Context, clientID, resourceURI string) (domain.Registration, error) {
-	m := &management{tx: a.tx, scope: a.tenantIssuer, version: a.version}
+	return registration(ctx, a.tx, a.tenantIssuer, a.version, clientID, resourceURI)
+}
+
+func registration(ctx context.Context, tx pgx.Tx, scope grants.Scope, version uint64, clientID, resourceURI string) (domain.Registration, error) {
+	m := &management{tx: tx, scope: scope, version: version}
 	var r domain.Registration
 	var err error
 	// Pin enabled/redirect configuration through the final decision commit.
 	var enabled bool
-	if err := a.tx.QueryRow(ctx, `SELECT enabled FROM mayi.clients WHERE tenant_id=$1 AND client_id=$2 FOR SHARE`, a.tenantIssuer.TenantID, clientID).Scan(&enabled); err != nil || !enabled {
+	if err := tx.QueryRow(ctx, `SELECT enabled FROM mayi.clients WHERE tenant_id=$1 AND client_id=$2 FOR SHARE`, scope.TenantID, clientID).Scan(&enabled); err != nil || !enabled {
 		return r, authorization.ErrInvalid
 	}
 	r.Client, err = m.Client(ctx, clientID)
@@ -87,7 +105,7 @@ func (a *authorizationTransaction) Registration(ctx context.Context, clientID, r
 		return r, authorization.ErrInvalid
 	}
 	var resourceID string
-	if err := a.tx.QueryRow(ctx, `SELECT resource_id FROM mayi.resources WHERE tenant_id=$1 AND uri=$2 FOR SHARE`, a.tenantIssuer.TenantID, resourceURI).Scan(&resourceID); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT resource_id FROM mayi.resources WHERE tenant_id=$1 AND uri=$2 FOR SHARE`, scope.TenantID, resourceURI).Scan(&resourceID); err != nil {
 		return r, authorization.ErrInvalid
 	}
 	if !slices.Contains(r.Client.Resources, resourceID) {
@@ -101,7 +119,7 @@ func (a *authorizationTransaction) Registration(ctx context.Context, clientID, r
 	if err != nil {
 		return r, authorization.ErrUnavailable
 	}
-	rows, err := a.tx.Query(ctx, `SELECT type_uri FROM mayi.client_object_types WHERE tenant_id=$1 AND client_id=$2 AND resource_id=$3 ORDER BY type_uri LIMIT $4`, a.tenantIssuer.TenantID, clientID, resourceID, len(r.Client.AuthorizationDetailsTypes)+1)
+	rows, err := tx.Query(ctx, `SELECT type_uri FROM mayi.client_object_types WHERE tenant_id=$1 AND client_id=$2 AND resource_id=$3 ORDER BY type_uri LIMIT $4`, scope.TenantID, clientID, resourceID, len(r.Client.AuthorizationDetailsTypes)+1)
 	if err != nil {
 		return domain.Registration{}, authorization.ErrUnavailable
 	}

@@ -126,11 +126,27 @@ func (s *Transit) SignAccessToken(ctx context.Context, c domaintokens.AccessClai
 	if c.Scope != s.config.Scope || c.ID == "" || c.Resource == "" || c.Subject == "" || c.ClientID == "" || c.GrantID == "" || c.Revision == 0 || (c.PrincipalType != "user" && c.PrincipalType != "machine") || len(c.Scopes) == 0 || !grants.ValidScopes(c.Scopes) || c.IssuedAt.IsZero() || !c.ExpiresAt.After(c.IssuedAt) || c.ExpiresAt.After(c.IssuedAt.Add(15*time.Minute)) {
 		return "", tokens.ErrUnavailable
 	}
+	var details []objectDetailClaim
+	if !c.ObjectCeiling.IsZero() {
+		if !c.ObjectCeiling.BoundTo(c.Scope, c.Resource) || len(c.ObjectCeiling.Snapshot().Details) == 0 {
+			return "", tokens.ErrUnavailable
+		}
+		for _, d := range c.ObjectCeiling.Snapshot().Details {
+			details = append(details, objectDetailClaim{Type: d.Type, Locations: []string{c.Resource}, Identifier: d.Identifier, Actions: d.Actions})
+		}
+		data, err := json.Marshal(details)
+		if err != nil || len(data) > 32<<10 {
+			return "", tokens.ErrUnavailable
+		}
+	}
 	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.ES256, Key: &remoteSigner{transit: s, ctx: ctx}}, (&jose.SignerOptions{}).WithType("at+jwt").WithHeader("kid", s.public.KeyID))
 	if err != nil {
 		return "", tokens.ErrUnavailable
 	}
 	claims := map[string]any{"iss": c.Scope.Issuer, "tenant_id": c.Scope.TenantID, "sub": c.Subject, "aud": c.Resource, "client_id": c.ClientID, "jti": c.ID, "iat": c.IssuedAt.Unix(), "exp": c.ExpiresAt.Unix(), "scope": strings.Join(c.Scopes, " "), "principal_type": c.PrincipalType, "grant_id": c.GrantID, "grant_revision": c.Revision}
+	if details != nil {
+		claims["authorization_details"] = details
+	}
 	if c.BindingThumbprint != "" {
 		claims["cnf"] = map[string]string{"jkt": c.BindingThumbprint}
 	}
@@ -139,6 +155,15 @@ func (s *Transit) SignAccessToken(ctx context.Context, c domaintokens.AccessClai
 		return "", tokens.ErrUnavailable
 	}
 	return token, nil
+}
+
+// Only the standard RFC 9396 fields enter the signed claim. Profiles are
+// checked by the token service before signing; no adapter-owned policy applies.
+type objectDetailClaim struct {
+	Type       string   `json:"type"`
+	Locations  []string `json:"locations"`
+	Identifier string   `json:"identifier"`
+	Actions    []string `json:"actions"`
 }
 
 type remoteSigner struct {

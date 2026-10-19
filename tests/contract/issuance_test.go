@@ -65,15 +65,20 @@ func (s *signer) SignAccessToken(_ context.Context, c domain.AccessClaims) (stri
 }
 
 type memoryState struct {
-	credentials  map[string]tokens.Credential
-	grant        tokens.GrantState
-	issuances    []tokens.Issuance
-	audit        []string
-	revokedCodes map[string]bool
+	credentialObjects map[string]grants.ObjectCeiling
+	credentials       map[string]tokens.Credential
+	grant             tokens.GrantState
+	issuances         []tokens.Issuance
+	audit             []string
+	revokedCodes      map[string]bool
 }
 
 func (s memoryState) clone() memoryState {
 	copy := s
+	copy.credentialObjects = make(map[string]grants.ObjectCeiling, len(s.credentialObjects))
+	for key, value := range s.credentialObjects {
+		copy.credentialObjects[key] = value
+	}
 	copy.revokedCodes = make(map[string]bool, len(s.revokedCodes))
 	for k, v := range s.revokedCodes {
 		copy.revokedCodes[k] = v
@@ -133,6 +138,14 @@ func (t *transaction) Credential(_ context.Context, hash string) (tokens.Credent
 	}
 	return c, nil
 }
+func (t *transaction) CredentialObjects(_ context.Context, c tokens.Credential) (grants.ObjectCeiling, error) {
+	objects, ok := t.state.credentialObjects[c.Hash]
+	if !ok || c.Scope != t.scope {
+		return grants.ObjectCeiling{}, tokens.ErrInvalidCredential
+	}
+	return objects, nil
+}
+
 func (t *transaction) GrantRevision(_ context.Context, id string, revision uint64) (tokens.GrantState, error) {
 	t.store.grantReads++
 	spec := t.state.grant.Revision.Snapshot()
@@ -163,6 +176,9 @@ func (t *transaction) CommitIssuance(_ context.Context, c tokens.Credential, i t
 		next.Hash = i.RefreshHash
 		next.Consumed = false
 		next.CeilingScopes = slices.Clone(i.Claims.Scopes)
+		if !i.Claims.ObjectCeiling.IsZero() {
+			t.state.credentialObjects[next.Hash] = i.Claims.ObjectCeiling
+		}
 		t.state.credentials[next.Hash] = next
 	}
 	if t.store.writeFail {

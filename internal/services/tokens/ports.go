@@ -41,6 +41,9 @@ type UnitOfWork interface {
 type Transaction interface {
 	// Credential is a tenant-scoped authentication projection, not a grant payload.
 	Credential(context.Context, string) (Credential, error)
+	// Called only after client/binding/S256 possession checks. The narrow
+	// credential lookup deliberately contains no protected object identifiers.
+	CredentialObjects(context.Context, Credential) (grants.ObjectCeiling, error)
 	GrantRevision(context.Context, string, uint64) (GrantState, error)
 	// RevokeReplay revokes code descendants or the entire refresh grant/family,
 	// including derived/exchanged credentials, and records the replay audit event.

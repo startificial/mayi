@@ -11,7 +11,7 @@ import (
 // initial authorized read has already committed without binding or other effects.
 func (s *Service) prepareObjectConsent(ctx context.Context, proof AccessProof, actor Principal, candidate domain.Transaction) (Consent, error) {
 	var result Consent
-	err := s.withObjectConsent(ctx, actor, candidate, func(projection domain.ObjectConsentProjection) error {
+	err := s.withObjectConsent(ctx, actor, candidate, func(ctx context.Context, projection domain.ObjectConsentProjection) error {
 		var err error
 		result, err = s.guardedObjectConsent(ctx, proof, actor, candidate, projection)
 		return err
@@ -22,12 +22,12 @@ func (s *Service) prepareObjectConsent(ctx context.Context, proof AccessProof, a
 	return result, nil
 }
 
-func (s *Service) withObjectConsent(ctx context.Context, actor Principal, candidate domain.Transaction, fn func(domain.ObjectConsentProjection) error) error {
+func (s *Service) withObjectConsent(ctx context.Context, actor Principal, candidate domain.Transaction, fn func(context.Context, domain.ObjectConsentProjection) error) error {
 	before := candidate.Snapshot()
 	query := ObjectConsentQuery{TenantIssuer: actor.TenantIssuer, Subject: actor.Subject, AuthorizationHash: before.HandleHash, ClientID: before.Request.ClientID, Ceiling: before.Request.ObjectCeiling}
 	calls := 0
 	var callbackErr error
-	err := s.objects.WithObjectConsent(ctx, query, func(projection domain.ObjectConsentProjection) error {
+	err := s.objects.WithObjectConsent(ctx, query, func(ctx context.Context, projection domain.ObjectConsentProjection) error {
 		calls++
 		if calls != 1 {
 			callbackErr = ErrUnavailable
@@ -37,7 +37,7 @@ func (s *Service) withObjectConsent(ctx context.Context, actor Principal, candid
 			callbackErr = ErrDenied
 			return callbackErr
 		}
-		callbackErr = fn(projection)
+		callbackErr = fn(ctx, projection)
 		return callbackErr
 	})
 	if err != nil {
@@ -66,7 +66,7 @@ func (s *Service) reloadObjectConsent(ctx context.Context, tx Transaction, proof
 
 func (s *Service) approveObjectConsent(ctx context.Context, proof AccessProof, actor Principal, candidate domain.Transaction) (DecisionResult, error) {
 	var result DecisionResult
-	err := s.withObjectConsent(ctx, actor, candidate, func(fresh domain.ObjectConsentProjection) error {
+	err := s.withObjectConsent(ctx, actor, candidate, func(ctx context.Context, fresh domain.ObjectConsentProjection) error {
 		return s.store.RunAuthorization(ctx, proof.TenantIssuer, func(tx Transaction) error {
 			workflow, current, err := s.reloadObjectConsent(ctx, tx, proof, actor, candidate, fresh)
 			if err != nil {

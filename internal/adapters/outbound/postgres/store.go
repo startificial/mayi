@@ -18,10 +18,12 @@ var _ tokens.ProofReplayStore = (*Store)(nil)
 
 type Store struct{ pool *pgxpool.Pool }
 type transaction struct {
-	tx         pgx.Tx
-	scope      grants.Scope
-	version    uint64
-	credential *tokens.Credential
+	tx                pgx.Tx
+	scope             grants.Scope
+	version           uint64
+	credential        *tokens.Credential
+	credentialObjects grants.ObjectCeiling
+	grant             *tokens.GrantState
 }
 
 func (s *Store) ConsumeProof(ctx context.Context, scope grants.Scope, p tokens.VerifiedProof) error {
@@ -117,6 +119,30 @@ func (t *transaction) Credential(ctx context.Context, hash string) (tokens.Crede
 	t.credential = &c
 	return c, nil
 }
+func (t *transaction) CredentialObjects(ctx context.Context, c tokens.Credential) (grants.ObjectCeiling, error) {
+	t.credentialObjects = grants.ObjectCeiling{}
+	if t.credential == nil || t.credential.Hash != c.Hash || !c.ObjectBound || c.Scope != t.scope {
+		return grants.ObjectCeiling{}, tokens.ErrInvalidCredential
+	}
+	var data []byte
+	if err := t.tx.QueryRow(ctx, `SELECT c.object_ceiling FROM mayi.credentials c
+ WHERE c.tenant_id=$1 AND c.hash=$2 AND EXISTS(
+ SELECT 1 FROM mayi.credentials origin JOIN mayi.authorization_transactions w ON w.tenant_id=origin.tenant_id AND w.handle_hash=origin.authorization_hash
+ JOIN mayi.authorization_object_presentations p ON p.tenant_id=w.tenant_id AND p.handle_hash=w.handle_hash
+ WHERE origin.tenant_id=c.tenant_id AND origin.hash=c.origin_code AND origin.kind='authorization_code' AND w.code_hash=origin.hash AND w.status='approved' AND w.pushed_request_hash IS NOT NULL AND p.object_ceiling=w.object_ceiling)`, t.scope.TenantID, c.Hash).Scan(&data); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return grants.ObjectCeiling{}, tokens.ErrInvalidCredential
+		}
+		return grants.ObjectCeiling{}, err
+	}
+	ceiling, err := decodeObjectCeiling(data, t.scope, c.Resource)
+	if err != nil || ceiling.IsZero() {
+		return grants.ObjectCeiling{}, tokens.ErrInvalidCredential
+	}
+	t.credentialObjects = ceiling
+	return ceiling, nil
+}
+
 func (t *transaction) GrantRevision(ctx context.Context, id string, number uint64) (tokens.GrantState, error) {
 	if t.credential == nil || t.credential.GrantID != id || t.credential.Revision != number {
 		return tokens.GrantState{}, tokens.ErrInvalidCredential
@@ -164,6 +190,24 @@ func (t *transaction) GrantRevision(ctx context.Context, id string, number uint6
 			state.AuthorizationDeadline = deadline
 		}
 	}
+	current, err := registration(ctx, t.tx, t.scope, t.version, spec.ClientID, spec.Resource)
+	if err != nil {
+		return tokens.GrantState{}, tokens.ErrInvalidCredential
+	}
+	if !current.Resource.Valid() || !current.Policy.Valid() || (current.Policy.RequireBinding || current.Resource.RequireBinding) && t.credential.BindingThumbprint == "" {
+		return tokens.GrantState{}, tokens.ErrInvalidCredential
+	}
+	catalog := make([]string, 0, len(current.Resource.Scopes))
+	for _, permission := range current.Resource.Scopes {
+		catalog = append(catalog, permission.Name)
+	}
+	state.CurrentScopes, err = state.Revision.Narrow(catalog, nil, state.CurrentScopes)
+	if err != nil {
+		return tokens.GrantState{}, tokens.ErrInvalidCredential
+	}
+	state.ObjectProfiles = current.ObjectProfiles
+	state.MaxAccessTokenSeconds = min(current.Policy.MaxAccessTokenSeconds, current.Client.AccessTokenSeconds, current.Resource.AccessTokenSeconds)
+	t.grant = &state
 	return state, nil
 }
 func (t *transaction) RevokeReplay(ctx context.Context, c tokens.Credential) error {
@@ -204,8 +248,30 @@ func (t *transaction) CommitIssuance(ctx context.Context, c tokens.Credential, i
 	if t.credential == nil || c.Hash != t.credential.Hash || i.Claims.Scope != t.scope || i.Claims.GrantID != c.GrantID || i.Claims.Revision != c.Revision {
 		return tokens.ErrInvalidCredential
 	}
-	if c.ObjectBound || t.credential.ObjectBound {
+	if t.grant == nil || t.grant.Revoked || t.grant.PolicyVersion != t.version {
 		return tokens.ErrInvalidCredential
+	}
+	stored := t.credential
+	spec := t.grant.Revision.Snapshot()
+	if c.Kind != stored.Kind || c.ClientID != stored.ClientID || c.Resource != stored.Resource || c.GrantID != stored.GrantID || c.Revision != stored.Revision || c.BindingThumbprint != stored.BindingThumbprint || c.OriginCode != stored.OriginCode || c.FamilyID != stored.FamilyID || c.ParentIssuanceID != stored.ParentIssuanceID || stored.Consumed || i.Claims.ClientID != spec.ClientID || i.Claims.Subject != spec.Subject || i.Claims.PrincipalType != spec.PrincipalType || i.Claims.Resource != spec.Resource || i.Claims.BindingThumbprint != stored.BindingThumbprint || i.Claims.ID == "" || i.Claims.IssuedAt.IsZero() || !i.Claims.ExpiresAt.After(i.Claims.IssuedAt) || i.Claims.ExpiresAt.After(spec.ExpiresAt) || i.Claims.ExpiresAt.After(t.grant.AuthorizationDeadline) || t.grant.MaxAccessTokenSeconds <= 0 || i.Claims.ExpiresAt.After(i.Claims.IssuedAt.Add(time.Duration(t.grant.MaxAccessTokenSeconds)*time.Second)) {
+		return tokens.ErrInvalidCredential
+	}
+	if scopes, err := t.grant.Revision.Narrow(t.grant.CurrentScopes, i.Claims.Scopes, stored.CeilingScopes); err != nil || len(scopes) == 0 || len(i.Claims.Scopes) == 0 {
+		return tokens.ErrInvalidCredential
+	}
+	if c.ObjectBound != !i.Claims.ObjectCeiling.IsZero() || c.ObjectBound != t.credential.ObjectBound {
+		return tokens.ErrInvalidCredential
+	}
+	var objects []byte
+	if c.ObjectBound {
+		if t.grant == nil || t.credentialObjects.IsZero() || !i.Claims.ObjectCeiling.IsSubsetOf(t.credentialObjects) || !i.Claims.ObjectCeiling.IsSubsetOf(t.grant.Revision.Snapshot().ObjectCeiling) || !i.Claims.ObjectCeiling.IsSubsetOf(t.grant.CurrentObjectCeiling) {
+			return tokens.ErrInvalidCredential
+		}
+		var err error
+		objects, err = encodeObjectCeiling(i.Claims.ObjectCeiling, t.scope, c.Resource)
+		if err != nil {
+			return tokens.ErrInvalidCredential
+		}
 	}
 	tag, err := t.tx.Exec(ctx, `UPDATE mayi.credentials SET consumed=true WHERE tenant_id=$1 AND hash=$2 AND NOT consumed AND expires_at>clock_timestamp() AND $3>clock_timestamp()`, t.scope.TenantID, c.Hash, i.Claims.ExpiresAt)
 	if err != nil {
@@ -214,14 +280,14 @@ func (t *transaction) CommitIssuance(ctx context.Context, c tokens.Credential, i
 	if tag.RowsAffected() != 1 {
 		return tokens.ErrInvalidCredential
 	}
-	if _, err := t.tx.Exec(ctx, `INSERT INTO mayi.issuances(tenant_id,issuance_id,grant_id,revision,origin_code,family_id,parent_id,source_credential,resource,scopes,expires_at)
- VALUES($1,$2,$3,$4,$5,NULLIF($6,''),NULLIF($7,''),$8,$9,$10,$11)`, t.scope.TenantID, i.Claims.ID, c.GrantID, c.Revision, c.OriginCode, c.FamilyID, c.ParentIssuanceID, c.Hash, i.Claims.Resource, i.Claims.Scopes, i.Claims.ExpiresAt); err != nil {
+	if _, err := t.tx.Exec(ctx, `INSERT INTO mayi.issuances(tenant_id,issuance_id,grant_id,revision,origin_code,family_id,parent_id,source_credential,resource,scopes,expires_at,object_ceiling)
+ VALUES($1,$2,$3,$4,$5,NULLIF($6,''),NULLIF($7,''),$8,$9,$10,$11,$12)`, t.scope.TenantID, i.Claims.ID, c.GrantID, c.Revision, c.OriginCode, c.FamilyID, c.ParentIssuanceID, c.Hash, i.Claims.Resource, i.Claims.Scopes, i.Claims.ExpiresAt, objects); err != nil {
 		return err
 	}
 	if c.Kind == tokens.RefreshToken {
-		tag, err := t.tx.Exec(ctx, `INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,binding_thumbprint,origin_code,family_id,parent_issuance_id)
- SELECT $1,$2,'refresh_token',$3,$4,$5,$6,$7,clock_timestamp(),LEAST(clock_timestamp()+make_interval(secs=>f.idle_seconds),f.absolute_deadline),$8,$9,f.family_id,$10
- FROM mayi.refresh_families f WHERE f.tenant_id=$1 AND f.family_id=$11 AND NOT f.revoked AND f.absolute_deadline>clock_timestamp()`, t.scope.TenantID, i.RefreshHash, c.GrantID, c.Revision, c.Resource, c.ClientID, i.Claims.Scopes, c.BindingThumbprint, c.OriginCode, i.Claims.ID, c.FamilyID)
+		tag, err := t.tx.Exec(ctx, `INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,binding_thumbprint,origin_code,family_id,parent_issuance_id,object_ceiling)
+ SELECT $1,$2,'refresh_token',$3,$4,$5,$6,$7,clock_timestamp(),LEAST(clock_timestamp()+make_interval(secs=>f.idle_seconds),f.absolute_deadline),$8,$9,f.family_id,$10,$12
+ FROM mayi.refresh_families f WHERE f.tenant_id=$1 AND f.family_id=$11 AND NOT f.revoked AND f.absolute_deadline>clock_timestamp()`, t.scope.TenantID, i.RefreshHash, c.GrantID, c.Revision, c.Resource, c.ClientID, i.Claims.Scopes, c.BindingThumbprint, c.OriginCode, i.Claims.ID, c.FamilyID, objects)
 		if err != nil {
 			return err
 		}

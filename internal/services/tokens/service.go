@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/startificial/mayi/internal/domain/grants"
+	"github.com/startificial/mayi/internal/domain/resources"
 	domaintokens "github.com/startificial/mayi/internal/domain/tokens"
 )
 
@@ -28,6 +29,7 @@ type Command struct {
 	Kind, CredentialHash, Resource, Verifier string
 	RedirectURI                              string
 	Scopes                                   []string
+	Objects                                  []grants.ObjectDetail
 }
 type Credential struct {
 	Scope                                   grants.Scope
@@ -37,7 +39,7 @@ type Credential struct {
 	RedirectURI                             string
 	CeilingScopes                           []string
 	// ObjectBound is the narrow presence projection used before proof checks.
-	// Closed object redemption needs no object identifiers in this lookup.
+	// Possession checks need no object identifiers in this lookup.
 	ObjectBound                            bool
 	IssuedAt                               time.Time
 	ExpiresAt                              time.Time
@@ -46,6 +48,8 @@ type Credential struct {
 	Consumed                               bool
 }
 type GrantState struct {
+	ObjectProfiles        []resources.ObjectProfile
+	MaxAccessTokenSeconds int
 	Revision              grants.Revision
 	CurrentScopes         []string
 	CurrentObjectCeiling  grants.ObjectCeiling
@@ -61,6 +65,7 @@ type Issuance struct {
 type Result struct {
 	AccessToken, RefreshToken string
 	Claims                    domaintokens.AccessClaims
+	ObjectProfiles            []resources.ObjectProfile
 }
 type Service struct {
 	policy   Authorizer
@@ -120,7 +125,16 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 		if cmd.Kind == AuthorizationCode && (!credential.ExpiresAt.After(credential.IssuedAt) || credential.ExpiresAt.After(credential.IssuedAt.Add(60*time.Second))) {
 			return ErrInvalidCredential
 		}
+		var credentialObjects grants.ObjectCeiling
 		if credential.ObjectBound {
+			credentialObjects, err = tx.CredentialObjects(ctx, credential)
+			if err != nil {
+				return err
+			}
+			if !credentialObjects.BoundTo(cmd.Caller.Scope, cmd.Resource) || len(credentialObjects.Snapshot().Details) == 0 {
+				return ErrInvalidCredential
+			}
+		} else if cmd.Objects != nil {
 			return ErrInvalidCredential
 		}
 		state, err := tx.GrantRevision(ctx, credential.GrantID, credential.Revision)
@@ -128,8 +142,21 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 			return err
 		}
 		spec := state.Revision.Snapshot()
-		if !spec.ObjectCeiling.IsZero() || !state.CurrentObjectCeiling.IsZero() {
+		if credential.ObjectBound != !spec.ObjectCeiling.IsZero() || credential.ObjectBound != !state.CurrentObjectCeiling.IsZero() {
 			return ErrInvalidCredential
+		}
+		var objects grants.ObjectCeiling
+		if credential.ObjectBound {
+			for _, c := range []grants.ObjectCeiling{spec.ObjectCeiling, state.CurrentObjectCeiling, credentialObjects} {
+				cs := c.Snapshot()
+				if _, err := resources.ValidateObjectRequest(cmd.Caller.Scope, cmd.Resource, state.ObjectProfiles, cs.Details); err != nil {
+					return ErrInvalidCredential
+				}
+			}
+			objects, err = spec.ObjectCeiling.Narrow(state.CurrentObjectCeiling, cmd.Objects, credentialObjects)
+			if err != nil || len(objects.Snapshot().Details) == 0 {
+				return ErrInvalidCredential
+			}
 		}
 		if state.Revoked || state.PolicyVersion != version || spec.Scope != credential.Scope || spec.GrantID != credential.GrantID || spec.Number != credential.Revision || spec.ClientID != credential.ClientID || spec.Resource != credential.Resource {
 			return ErrInvalidCredential
@@ -146,7 +173,16 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 		if cmd.Kind == RefreshToken {
 			deadlines = append(deadlines, credential.FamilyDeadline)
 		}
-		claims, err := domaintokens.Derive(state.Revision, effective, effective, material.ID, credential.BindingThumbprint, now, s.lifetime, deadlines...)
+		lifetime := s.lifetime
+		if state.MaxAccessTokenSeconds > 0 && time.Duration(state.MaxAccessTokenSeconds)*time.Second < lifetime {
+			lifetime = time.Duration(state.MaxAccessTokenSeconds) * time.Second
+		}
+		var claims domaintokens.AccessClaims
+		if credential.ObjectBound {
+			claims, err = domaintokens.DeriveObjects(state.Revision, effective, effective, objects, material.ID, credential.BindingThumbprint, now, lifetime, deadlines...)
+		} else {
+			claims, err = domaintokens.Derive(state.Revision, effective, effective, material.ID, credential.BindingThumbprint, now, lifetime, deadlines...)
+		}
 		if err != nil {
 			return ErrInvalidCredential
 		}
@@ -174,7 +210,7 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 		if err := tx.CommitIssuance(ctx, credential, issuance); err != nil {
 			return err
 		}
-		result = Result{AccessToken: token, Claims: claims}
+		result = Result{AccessToken: token, Claims: claims, ObjectProfiles: state.ObjectProfiles}
 		if cmd.Kind == RefreshToken {
 			result.RefreshToken = material.RefreshSecret
 		}

@@ -175,3 +175,11 @@ Durable resource-owned RAR profile registration stays in `domain/resources`,
 `services/administration` and the existing admin/PostgreSQL adapter families.
 It does not introduce a parallel registration service or permission engine.
 See [ADR 0014](adr/0014-durable-resource-object-profiles.md).
+
+The first resource-owner integration remains in the PostgreSQL adapter family,
+`resource_consent.go`, implementing the authorization-owned authority port. It
+uses owner-installed `deploy/resource-authority.sql` in a separate resource-owned
+schema within the same database as Mayi. The final authorization unit of work
+and resource guard enlist in one transaction; no driver type crosses the service
+boundary. See [ADR 0021](adr/0021-postgresql-resource-authority.md). This adds no
+new layer, service locator or public SDK persistence dependency.
