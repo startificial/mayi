@@ -366,6 +366,10 @@ The different discovery-path conventions require dedicated tests; see [RFC 8414]
 
 Define `pkg/resource` around a validator, an authoritative status checker, and a resource-owned permission checker. Return typed principal, tenant, audience, granted ceiling, authentication context and actor history to application handlers. Provide interoperability fixtures for non-Go services; do not require them to trust unsigned identity headers from a gateway.
 
+### Developer errors and recovery (P2 acceptance gate)
+
+Follow [the error strategy and troubleshooting guide](error-handling.md) and [ADR 0016](adr/0016-developer-error-contracts.md). The local JSON transport now preserves stable `error` codes and adds fixed safe messages and optional response request IDs, with a catalog checked by CI. This is partial CORE-13/OPS-4 groundwork, not full protocol coverage. Every enabled P2 endpoint must have documented status/code/header/redirect behavior, safe recovery examples and denial/non-enumeration, dependency-failure and redaction tests before P2 exits. Protocol responses retain their standard formats; field diagnostics must not reveal protected objects or echo rejected values. No automatic replay of one-use credentials, and no rollback guarantee from a timeout/5xx. The resource SDK must document typed Go errors, `errors.Is`/`errors.As`, cancellation and uncertain-outcome handling before advertisement. P3 challenge/discovery extensions retain their existing phase and inherit these controls.
+
 ## 11. Operations and failure behavior
 
 Run API replicas across zones with an HA PostgreSQL deployment, a region-local KMS/HSM, and redundant workers. Choose synchronous replication and failover behavior that does not resurrect acknowledged revocations or consumed credentials. Begin with a single writer region per tenant; route tenant traffic, user data and audit storage according to residency. Defer active-active multi-region writes until there is a proven consistency design.

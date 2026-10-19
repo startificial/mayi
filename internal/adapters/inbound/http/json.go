@@ -37,8 +37,3 @@ func JSON(w http.ResponseWriter, status int, value any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
-func Error(w http.ResponseWriter, status int, code string) {
-	JSON(w, status, struct {
-		Error string `json:"error"`
-	}{code})
-}

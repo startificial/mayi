@@ -8,6 +8,8 @@ Engineering follows [AGENTS.md](AGENTS.md), the [canonical repository structure]
 
 The [ports-and-adapters CI rules](docs/architecture-enforcement.md) define the enforced boundaries and their limits. Run `go run ./tools/checks -only architecture` to check architecture independently.
 
+The [error handling and troubleshooting guide](docs/error-handling.md) defines stable codes, safe diagnostics, request correlation and retry/recovery rules. CI checks the current local JSON catalog and response contracts; full protocol and SDK error coverage remains a P2 acceptance gate.
+
 P0 is complete: [the protocol-spike report](docs/p0/protocol-spike.md) records Fosite selection, real PostgreSQL transactions and OpenBao Transit signing. The [P1 foundation and runbook](docs/p1-foundation.md) add a standalone process, external PostgreSQL configuration, explicit migrations/provisioning, isolated tenant management, key publication/rotation and audit/outbox delivery. Start a disposable two-tenant stack with `go run ./tools/p0 -development`. Login, consent and usable OAuth/OIDC endpoints remain P2; this foundation is not a production authorization server or full README conformance claim.
 
 P2 implementation is in progress: [core authorization milestones](docs/p2-core-authorization.md). Durable consent, configured upstream OIDC login and browser sessions/consent are implemented as a limited preview. Live token endpoints, resource enforcement and usable end-to-end OAuth integration remain under development.

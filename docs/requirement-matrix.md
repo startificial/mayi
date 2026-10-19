@@ -54,7 +54,7 @@ Token endpoints, downstream OIDC, idle/session-list APIs, BFF/resource enforceme
 | CORE-10 | SHOULD | P7 | Protocol and authorization | Device flow enforces expiry, polling interval, slow_down, rate limits and explicit user verification. |
 | CORE-11 | MAY | P8 | Protocol and authorization | CIBA has client authentication, user binding, approval timeout and tested delivery/polling semantics. |
 | CORE-12 | MUST | P2 | Protocol and authorization | Resources reject access tokens in query/body credentials and accept only the configured authorization scheme. |
-| CORE-13 | MUST | P3 | Protocol and authorization | Token errors and resource challenges have endpoint-correct fields and a discoverable resource metadata URL. |
+| CORE-13 | MUST | P2 foundation / P3 completion | Protocol and authorization | P2 requires documented endpoint-specific errors and recovery, typed-error mapping, correlation, redaction and denial/non-enumeration fixtures for every enabled surface. [Local JSON catalog and contract tests](error-handling.md) provide partial evidence only. P3 completes resource challenges and discoverable resource metadata URLs; protocol/SDK coverage remains Planned. |
 
 ## DISC
 

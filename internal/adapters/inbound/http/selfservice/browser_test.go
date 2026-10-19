@@ -31,7 +31,7 @@ func TestScopeOnlyPreviewRejectsRARAndPushedRequestsBeforeServices(t *testing.T)
 				r.AddCookie(&http.Cookie{Name: h.name("browser"), Value: strings.Repeat("A", 43)})
 				w := httptest.NewRecorder()
 				h.Authorize(w, r)
-				if w.Code != http.StatusBadRequest || w.Header().Get("Location") != "" || len(w.Result().Cookies()) != 0 || strings.TrimSpace(w.Body.String()) != `{"error":"invalid_request"}` {
+				if w.Code != http.StatusBadRequest || w.Header().Get("Location") != "" || len(w.Result().Cookies()) != 0 || strings.TrimSpace(w.Body.String()) != `{"error":"invalid_request","message":"The request is malformed or contains unsupported values."}` {
 					t.Fatalf("unsupported authority escaped the boundary: %d %s", w.Code, w.Body.String())
 				}
 			})

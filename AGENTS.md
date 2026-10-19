@@ -70,6 +70,7 @@ These definitions describe Mayi's model; they do not imply that every capability
 - Components render explicit view models. Handlers invoke services to obtain them; components must not resolve services or perform hidden I/O during rendering.
 - Keep wire DTOs, domain entities, persistence records and UI view models distinct where their contracts differ. Translate at the adapter boundary; do not expose ORM/SQL or vendor models as public API contracts.
 - Map typed service errors to protocol-specific responses in inbound adapters. Avoid string comparisons for error classification and never disclose secrets through errors.
+- Follow [the error contract and recovery strategy](docs/error-handling.md). Keep local codes/statuses/messages aligned with the catalog and contract tests; preserve endpoint-specific OAuth formats and challenges. Never expose raw error text or infer safe retries for one-use credentials from an HTTP status. New enabled endpoints need error, denial/non-enumeration and recovery evidence.
 
 ## OAuth and consistency invariants
 

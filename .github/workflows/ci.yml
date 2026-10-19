@@ -49,6 +49,8 @@ jobs:
           fi
       - name: Test including policy rejection fixtures
         run: go test -race -count=1 ./...
+      - name: Enforce documented error contracts and safe responses
+        run: go test -race -count=1 ./internal/adapters/inbound/http/... -run '^TestErrorContract'
       - name: Vet
         run: go vet ./...
       - name: Prove authorization boundaries against isolated PostgreSQL and OpenBao
