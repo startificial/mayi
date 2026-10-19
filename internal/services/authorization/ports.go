@@ -12,6 +12,31 @@ type MaterialSource interface {
 	NewAuthorizationMaterial(context.Context) (Material, error)
 }
 
+// ObjectConsentQuery contains only authenticated actor/workflow correlation and
+// requested object references. It contains no state, redirect, CSRF or payload.
+type ObjectConsentQuery struct {
+	TenantIssuer      grants.Scope
+	Subject           string
+	AuthorizationHash string
+	ClientID          string
+	Ceiling           grants.ObjectCeiling
+}
+
+// ObjectConsentAuthority is the resource owner's authoritative integration.
+// Authorize every requested tuple for the principal before reading display
+// metadata. Deny missing/foreign/forbidden objects generically, as ErrDenied;
+// availability failures are ErrUnavailable. Return only exact requested tuples.
+//
+// Acquire a current permission/display guard before invoking fn, hold it until
+// fn returns (including the Mayi transaction's commit), and release on every
+// exit. Invoke fn exactly once, synchronously; never retry it or call it after
+// returning. All relevant resource permission/display changes must conflict
+// with this guard. A cached allow or unguarded remote boolean is insufficient.
+// No Mayi transaction or pool connection is held while acquiring this guard.
+type ObjectConsentAuthority interface {
+	WithObjectConsent(context.Context, ObjectConsentQuery, func(domain.ObjectConsentProjection) error) error
+}
+
 // Store authenticates a narrow session/membership projection and authorizes the
 // browser/CSRF reference before permitting a protected transaction load.
 type Store interface {

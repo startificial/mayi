@@ -42,6 +42,8 @@ Token endpoints, downstream OIDC, idle/session-list APIs, BFF/resource enforceme
 
 [ADR 0018](adr/0018-strict-par-wire-profile.md) adds partial SEC-2/RES-10 boundary evidence: shared mixed-type vocabulary validation, bounded PAR form/reference/success codecs, rejection of duplicate/replacement/fetchable references, and [real wire-to-storage tests](../tests/integration/pushed_wire_test.go) for exact snapshots, client binding, replay and registration rechecks. These codecs are unmounted; public endpoints, object consent and full protocol conformance remain pending. Full requirement status is unchanged.
 
+[ADR 0019](adr/0019-guarded-object-consent-display.md) adds partial RES-10/GRANT-1 display evidence: immutable exact object projections, a resource-owner guard spanning final session/policy checks and binding commit, safe rendering, and [PostgreSQL guard/rollback tests](../tests/integration/object_consent_test.go). The guard implementation is a test-only authoritative resource fixture; default production composition, durable displayed-version evidence, object approval and token enforcement remain pending. Full requirement status is unchanged.
+
 ## CORE
 
 | ID | Level | Phase | Owner | Acceptance condition |

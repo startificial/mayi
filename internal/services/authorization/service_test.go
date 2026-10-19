@@ -41,6 +41,8 @@ type store struct {
 	pushed                                              domain.PushedRequest
 	pushedLoads, pushedConsumptions                     int
 	pushedAuthorized                                    bool
+	inTransaction                                       bool
+	objectGuard                                         *objectAuthority
 }
 
 func (s *store) AuthorizeConsent(_ context.Context, p authorization.AccessProof, _ time.Time) (authorization.Principal, error) {
@@ -51,6 +53,8 @@ func (s *store) AuthorizeConsent(_ context.Context, p authorization.AccessProof,
 }
 func (s *store) RunAuthorization(ctx context.Context, _ grants.Scope, fn func(authorization.Transaction) error) error {
 	s.runs++
+	s.inTransaction = true
+	defer func() { s.inTransaction = false }()
 	candidate := *s
 	candidate.pushedAuthorized = false
 	if err := fn(&candidate); err != nil {
@@ -96,7 +100,7 @@ func setup(t *testing.T) (*authorization.Service, *store, *clock, *material, dom
 	s := &store{principal: authorization.Principal{TenantIssuer: scope, SessionHash: strings.Repeat("a", 64), Subject: "user:alice"}, registration: domain.Registration{Client: clients.Client{ID: "web", Name: "Web", RedirectURIs: []string{request.RedirectURI}, Resources: []string{"api"}, AuthorizationDetailsTypes: []string{"https://api.example/types/fixture/v1"}, AccessTokenSeconds: 300, Enabled: true}, Resource: resources.Resource{ID: "api", URI: request.ResourceURI, Name: "API", Scopes: []resources.Scope{{Name: "read", Description: "Read items"}}, AccessTokenSeconds: 300}, Policy: policy.Tenant{Version: 1, MaxAccessTokenSeconds: 600, MaxGrantSeconds: 3600}}}
 	c := &clock{now: time.Unix(1700000000, 0)}
 	m := &material{}
-	service, _ := authorization.New(s, c, m)
+	service, _ := authorization.New(s, c, m, nil)
 	browser := strings.Repeat("b", 64)
 	if _, err := service.Begin(context.Background(), request, browser); err != nil {
 		t.Fatal(err)
@@ -193,6 +197,9 @@ func TestBeginFailureNeverReturnsHandles(t *testing.T) {
 }
 
 func (s *store) BindConsentSession(_ context.Context, w domain.Transaction) error {
+	if s.objectGuard != nil && !s.objectGuard.held {
+		return authorization.ErrUnavailable
+	}
 	s.workflow = w
 	return nil
 }

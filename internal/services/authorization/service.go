@@ -32,6 +32,13 @@ type Consent struct {
 	ClientID, ResourceURI                 string
 	PermissionScopes                      []resources.Scope
 	ExpiresAt                             time.Time
+	Objects                               []ConsentObject
+	PermissionVersion                     uint64
+	DecisionAvailable                     bool
+}
+type ConsentObject struct {
+	Type, Identifier, Name string
+	Actions                []resources.ObjectAction
 }
 type Decision struct {
 	Approve bool
@@ -42,13 +49,16 @@ type Service struct {
 	store    Store
 	clock    Clock
 	material MaterialSource
+	objects  ObjectConsentAuthority
 }
 
-func New(store Store, clock Clock, material MaterialSource) (*Service, error) {
+// A nil object authority keeps typed consent closed. Composition must explicitly
+// select a reviewed resource-owner integration before enabling object display.
+func New(store Store, clock Clock, material MaterialSource, objects ObjectConsentAuthority) (*Service, error) {
 	if store == nil || clock == nil || material == nil {
 		return nil, ErrUnavailable
 	}
-	return &Service{store: store, clock: clock, material: material}, nil
+	return &Service{store: store, clock: clock, material: material, objects: objects}, nil
 }
 func validMaterial(m Material) bool {
 	return resources.ValidID(m.ID) && len(m.Secret) >= 43 && len(m.Secret) <= 128 && domain.ValidHandleHash(m.Hash) && m.Secret != m.Hash
@@ -120,25 +130,28 @@ func (s *Service) PrepareConsent(ctx context.Context, p AccessProof) (Consent, e
 		return Consent{}, err
 	}
 	var result Consent
+	var candidate domain.Transaction
 	err = s.store.RunAuthorization(ctx, p.TenantIssuer, func(tx Transaction) error {
-		workflow, current, err := s.consent(ctx, tx, p, actor)
+		workflow, current, err := s.loadConsent(ctx, tx, p, actor, s.objects != nil)
 		if err != nil {
 			return err
 		}
-		spec := workflow.Snapshot()
-		result = Consent{ClientName: current.Client.Name, ClientID: current.Client.ID, ResourceName: current.Resource.Name, ResourceURI: current.Resource.URI, RedirectURI: spec.Request.RedirectURI, ExpiresAt: spec.ExpiresAt}
-		for _, name := range spec.Request.PermissionScopes {
-			for _, permission := range current.Resource.Scopes {
-				if name == permission.Name {
-					result.PermissionScopes = append(result.PermissionScopes, permission)
-					break
-				}
-			}
+		if !workflow.Snapshot().Request.ObjectCeiling.IsZero() {
+			candidate = workflow
+			return nil
 		}
+		workflow, err = s.bindConsent(ctx, tx, p, actor, workflow)
+		if err != nil {
+			return err
+		}
+		result = consentView(workflow, current)
 		return nil
 	})
 	if err != nil {
 		return Consent{}, classified(err)
+	}
+	if candidate.Snapshot().HandleHash != "" {
+		return s.prepareObjectConsent(ctx, p, actor, candidate)
 	}
 	return result, nil
 }
@@ -190,9 +203,9 @@ func classified(err error) error {
 	return ErrUnavailable
 }
 
-// consent is the shared authorization, rehydration and session-binding path for
-// presentation and approval. A transaction-local recheck precedes payload load.
-func (s *Service) consent(ctx context.Context, tx Transaction, p AccessProof, actor Principal) (domain.Transaction, domain.Registration, error) {
+// loadConsent shares authorization and rehydration for presentation/approval.
+// A transaction-local recheck precedes payload load; it never binds a session.
+func (s *Service) loadConsent(ctx context.Context, tx Transaction, p AccessProof, actor Principal, allowObjects bool) (domain.Transaction, domain.Registration, error) {
 	empty := domain.Transaction{}
 	none := domain.Registration{}
 	if err := tx.RecheckConsent(ctx, p, actor, s.clock.Now()); err != nil {
@@ -211,23 +224,44 @@ func (s *Service) consent(ctx context.Context, tx Transaction, p AccessProof, ac
 	if err != nil {
 		return empty, none, err
 	}
-	if spec.PolicyVersion != current.Policy.Version || !spec.Request.AllowedBy(current) {
+	allowed := spec.Request.AllowedBy(current)
+	if allowObjects && spec.PushedRequestHash != "" && !spec.Request.ObjectCeiling.IsZero() {
+		allowed = spec.Request.MatchesObjectRegistration(current)
+	}
+	if spec.PolicyVersion != current.Policy.Version || !allowed || spec.ConsentSessionHash != "" && spec.ConsentSessionHash != actor.SessionHash {
 		return empty, none, ErrDenied
 	}
+	return workflow, current, nil
+}
+
+func (s *Service) bindConsent(ctx context.Context, tx Transaction, p AccessProof, actor Principal, workflow domain.Transaction) (domain.Transaction, error) {
+	spec := workflow.Snapshot()
+	now := s.clock.Now()
 	if spec.ConsentSessionHash == "" {
 		bound, err := workflow.BindSession(actor.SessionHash, now)
 		if err != nil {
-			return empty, none, ErrDenied
+			return domain.Transaction{}, ErrDenied
 		}
 		if err := tx.BindConsentSession(ctx, bound); err != nil {
-			return empty, none, err
+			return domain.Transaction{}, err
 		}
 		workflow = bound
 	} else if spec.ConsentSessionHash != actor.SessionHash {
-		return empty, none, ErrDenied
+		return domain.Transaction{}, ErrDenied
 	}
 	if err := tx.RecheckConsent(ctx, p, actor, s.clock.Now()); err != nil {
-		return empty, none, err
+		return domain.Transaction{}, err
 	}
-	return workflow, current, nil
+	return workflow, nil
+}
+
+// The approval path remains scope-only until durable object presentation and
+// commit-time permission evidence are wired. Both paths reuse these checks.
+func (s *Service) consent(ctx context.Context, tx Transaction, p AccessProof, actor Principal) (domain.Transaction, domain.Registration, error) {
+	w, current, err := s.loadConsent(ctx, tx, p, actor, false)
+	if err != nil {
+		return domain.Transaction{}, domain.Registration{}, err
+	}
+	w, err = s.bindConsent(ctx, tx, p, actor, w)
+	return w, current, err
 }

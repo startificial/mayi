@@ -268,9 +268,16 @@ func (h *Handler) Consent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Security-Policy", policy)
-	model := web.Consent{ClientName: view.ClientName, ClientID: view.ClientID, ResourceName: view.ResourceName, ResourceURI: view.ResourceURI, RedirectURI: view.RedirectURI, CSRF: f.CSRF, Action: h.base + "/consent", LogoutAction: h.base + "/session/end"}
+	model := web.Consent{ClientName: view.ClientName, ClientID: view.ClientID, ResourceName: view.ResourceName, ResourceURI: view.ResourceURI, RedirectURI: view.RedirectURI, CSRF: f.CSRF, Action: h.base + "/consent", LogoutAction: h.base + "/session/end", DecisionAvailable: view.DecisionAvailable}
 	for _, p := range view.PermissionScopes {
 		model.Permissions = append(model.Permissions, web.Permission{Name: p.Name, Description: p.Description})
+	}
+	for _, object := range view.Objects {
+		item := web.ConsentObject{Type: object.Type, Identifier: object.Identifier, Name: object.Name}
+		for _, action := range object.Actions {
+			item.Actions = append(item.Actions, web.Permission{Name: action.Name, Description: action.Description})
+		}
+		model.Objects = append(model.Objects, item)
 	}
 	page, err := web.ConsentPage(model)
 	if err != nil {

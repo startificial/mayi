@@ -39,7 +39,7 @@ func (spec RevisionSpec) ValidReferences() bool {
 	}
 	switch spec.PrincipalType {
 	case "user":
-		if !strings.HasPrefix(spec.Subject, "user:") {
+		if !ValidUserSubject(spec.Subject) {
 			return false
 		}
 	case "machine":
@@ -50,6 +50,12 @@ func (spec RevisionSpec) ValidReferences() bool {
 		return false
 	}
 	return true
+}
+
+// ValidUserSubject is the existing local user-reference grammar shared by
+// grant references and consent correlation, not an upstream identity assertion.
+func ValidUserSubject(subject string) bool {
+	return validID(subject) && strings.HasPrefix(subject, "user:")
 }
 
 func NewRevision(spec RevisionSpec) (Revision, error) {
