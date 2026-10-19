@@ -124,6 +124,7 @@ func (r Request) matchesRegistration(current Registration) bool {
 
 type Spec struct {
 	ID, HandleHash, BrowserBindingHash, CSRFHash, ConsentSessionHash string
+	PushedRequestHash                                                string
 	Request                                                          Request
 	PolicyVersion                                                    uint64
 	CreatedAt, ExpiresAt                                             time.Time
@@ -134,6 +135,9 @@ type Spec struct {
 type Transaction struct{ spec Spec }
 
 func New(spec Spec) (Transaction, error) {
+	if spec.PushedRequestHash != "" && (!ValidHandleHash(spec.PushedRequestHash) || spec.Request.ObjectCeiling.IsZero() || spec.PushedRequestHash == spec.HandleHash || spec.PushedRequestHash == spec.CSRFHash) {
+		return Transaction{}, ErrInvalid
+	}
 	if !resources.ValidID(spec.ID) || !ValidHandleHash(spec.HandleHash) || !ValidHandleHash(spec.BrowserBindingHash) || !ValidHandleHash(spec.CSRFHash) || !spec.Request.Valid() || spec.ConsentSessionHash != "" && !ValidHandleHash(spec.ConsentSessionHash) || spec.PolicyVersion == 0 || spec.CreatedAt.IsZero() || !spec.ExpiresAt.After(spec.CreatedAt) || spec.ExpiresAt.After(spec.CreatedAt.Add(5*time.Minute)) {
 		return Transaction{}, ErrInvalid
 	}

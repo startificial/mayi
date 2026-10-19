@@ -38,6 +38,9 @@ type store struct {
 	workflow                                            domain.Transaction
 	denied, recheckDenied, commitFailure, createFailure bool
 	runs, loads, completions                            int
+	pushed                                              domain.PushedRequest
+	pushedLoads, pushedConsumptions                     int
+	pushedAuthorized                                    bool
 }
 
 func (s *store) AuthorizeConsent(_ context.Context, p authorization.AccessProof, _ time.Time) (authorization.Principal, error) {
@@ -49,8 +52,10 @@ func (s *store) AuthorizeConsent(_ context.Context, p authorization.AccessProof,
 func (s *store) RunAuthorization(ctx context.Context, _ grants.Scope, fn func(authorization.Transaction) error) error {
 	s.runs++
 	candidate := *s
+	candidate.pushedAuthorized = false
 	if err := fn(&candidate); err != nil {
 		s.loads += candidate.loads - s.loads
+		s.pushedLoads += candidate.pushedLoads - s.pushedLoads
 		return err
 	}
 	if s.commitFailure {

@@ -38,6 +38,8 @@ Token endpoints, downstream OIDC, idle/session-list APIs, BFF/resource enforceme
 
 [ADR 0015](adr/0015-client-rar-type-allowlists.md) and [client-type integration tests](../tests/integration/client_object_types_test.go) add explicit nonempty client allowlists, composite client/resource/type bindings, resource-specific vocabulary projections, atomic creation/outbox and foreign/invalid-type denial. Domain/service tests distinguish registration validity from object authorization; the current object consent gate remains closed. Client-type registration is implemented; required PAR, public RAR and resource enforcement remain pending, and full requirement status is unchanged.
 
+[ADR 0017](adr/0017-pushed-request-storage-and-binding.md) and [pushed-request integration tests](../tests/integration/pushed_test.go) add partial SEC-2/RES-10 evidence: bounded hashed references, proof-before-payload ordering, exact request/policy/client binding, one concurrent browser workflow, replay/expiry/foreign denial, deferred snapshot/half-commit guards and audit/outbox rollback. No public PAR/RAR route or object consent/token enforcement is enabled; mandatory public cutover and full requirement status remain pending.
+
 ## CORE
 
 | ID | Level | Phase | Owner | Acceptance condition |

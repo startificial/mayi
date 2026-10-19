@@ -43,3 +43,5 @@ Domain/service tests cover nonempty/bounded exact metadata, duplicate/foreign/mi
 Next: required RFC 9126 PAR storage/reference/client binding, strict multi-type wire selection through the shared registered profiles, authorized resource-owned consent projections and the universally required RAR/PAR cutover. Object-aware token/refresh/introspection/SDK propagation, current object ACL enforcement and the BFF/resource demonstration remain pending. Discovery still advertises no RAR type or PAR endpoint, and specification `implemented_sections` stay empty. No dependency, tool, license exception or public SDK type is added.
 
 Source: [RFC 9396 section 10](https://www.rfc-editor.org/rfc/rfc9396.html#section-10). This slice uses its metadata name in Mayi's operator registration API; it does not implement RFC 7591 dynamic registration or claim full RAR interoperability.
+
+Subsequent work: [ADR 0017](0017-pushed-request-storage-and-binding.md) implements PAR application/storage binding. Public wire integration, authorized object consent and the universal required-flow cutover remain pending.
