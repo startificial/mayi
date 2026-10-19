@@ -10,7 +10,7 @@ Apply the policy to direct and transitive Go modules, test/build tools, GitHub A
 
 The CI workflow runs on GitHub's hosted platform. Its pre-existing operating system, runner runtime and system utilities are platform infrastructure, not packages this repository installs or redistributes. This gate does not certify every component of that hosted environment. Repository-selected actions, compiler and added tools are inventoried. Any requirement to certify the entire execution platform needs a separately inventoried runner image; do not claim the current workflow provides that audit.
 
-Specifications linked as documentation are references, not bundled software. Do not copy specification text, test assets or code into a release without reviewing their applicable terms. This policy does not select a license for Mayi's own first-party source.
+Specifications linked as documentation are references, not bundled software. Do not copy specification text, test assets or code into a release without reviewing their applicable terms. Mayi's first-party source and documentation are licensed under [Apache License 2.0](../LICENSE), with project attribution in [NOTICE](../NOTICE). Third-party materials retain their own terms; the first-party license does not replace this dependency admission policy or the distribution obligations in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md). Release packaging must retain LICENSE, NOTICE and the applicable third-party materials.
 
 ## Admission workflow
 

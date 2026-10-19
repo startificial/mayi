@@ -2,6 +2,10 @@
 
 Oct 17, 2026 · @JJ
 
+**Experimental development preview — no published release or production-supported version.** Read [support and preview limitations](SUPPORT.md) before evaluation. Mayi's first-party source and documentation use [Apache License 2.0](LICENSE); third-party terms are retained separately in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) to participate and [SECURITY.md](SECURITY.md) to report a vulnerability privately. Ordinary questions and bugs belong in [GitHub Issues](https://github.com/startificial/mayi/issues).
+
 See the [Go implementation plan](docs/implementation-plan.md) for the proposed architecture, delivery phases and verification strategy, and the [requirement delivery matrix](docs/requirement-matrix.md) for coverage of every requirement below.
 
 Engineering follows [AGENTS.md](AGENTS.md), the [canonical repository structure](docs/repository-structure.md), and the [dependency license policy](docs/dependency-policy.md). CI checks architecture boundaries, license evidence, formatting, tests and static analysis. Run `go run ./tools/checks`, `go test -race ./...` and `go vet ./...` locally with the pinned Go toolchain.

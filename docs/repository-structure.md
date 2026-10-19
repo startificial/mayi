@@ -6,6 +6,11 @@ Mayi uses a modular monolith with ports and adapters. This is the target layout;
 .
 ├── AGENTS.md                       Engineering rules for every change
 ├── README.md                       Product requirements and document entrypoint
+├── LICENSE                         Apache-2.0 license for first-party work
+├── NOTICE                          Project attribution; separate third-party terms
+├── SECURITY.md                     Private reporting and vulnerability response
+├── CONTRIBUTING.md                 Contribution workflow and verification
+├── SUPPORT.md                      Supported versions and preview limitations
 ├── go.mod                          Single module and toolchain baseline
 ├── go.sum                          Generated when external Go modules are admitted
 ├── .github/workflows/ci.yml         Architecture, license, formatting and Go checks

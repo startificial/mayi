@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/startificial/mayi/security/advisories/new
+    about: Use the private reporting form; do not include vulnerability details or credentials in public issues.
+  - name: Support and preview limitations
+    url: https://github.com/startificial/mayi/blob/main/SUPPORT.md
+    about: Check current capabilities, version support and safe evaluation guidance before opening a support request.
