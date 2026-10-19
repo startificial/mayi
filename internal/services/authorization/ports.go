@@ -58,6 +58,13 @@ type Transaction interface {
 	CreateAuthorization(context.Context, domain.Transaction) error
 	Authorization(context.Context, string) (domain.Transaction, error)
 	BindConsentSession(context.Context, domain.Transaction) error
+	// Record the first exact presentation atomically with session binding/audit.
+	// Repeated identical presentation is idempotent; replacement is denied.
+	RecordObjectPresentation(context.Context, domain.Transaction, domain.ObjectConsentProjection, time.Time) error
+	// Authenticate the stored presentation against this transaction's consent
+	// proof and fresh resource decision before entropy. Return its exact snapshot
+	// and pin a transaction-local approval authorization for CompleteAuthorization.
+	AuthorizeObjectApproval(context.Context, domain.Transaction, domain.ObjectConsentProjection, time.Time) (domain.ObjectConsentProjection, error)
 	// RecheckConsent validates session/membership and the reference before payload
 	// load, under RunAuthorization's coordination lock. All identity invalidation
 	// must use the conflicting tenant write lock; direct DBA writes are trusted.

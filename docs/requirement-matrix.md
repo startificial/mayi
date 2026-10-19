@@ -44,6 +44,8 @@ Token endpoints, downstream OIDC, idle/session-list APIs, BFF/resource enforceme
 
 [ADR 0019](adr/0019-guarded-object-consent-display.md) adds partial RES-10/GRANT-1 display evidence: immutable exact object projections, a resource-owner guard spanning final session/policy checks and binding commit, safe rendering, and [PostgreSQL guard/rollback tests](../tests/integration/object_consent_test.go). The guard implementation is a test-only authoritative resource fixture; default production composition, durable displayed-version evidence, object approval and token enforcement remain pending. Full requirement status is unchanged.
 
+[ADR 0020](adr/0020-durable-object-presentation-and-approval.md) adds partial RES-10/GRANT-1/GRANT-2 application evidence: immutable first presentation/version/session evidence, exact fresh resource-guarded approval, atomic object-bound revision/code/audit, denial before entropy on changed evidence, cancellation without provider availability and [real approval/replay/concurrency/rollback tests](../tests/integration/object_approval_test.go). Production resource-provider/public PAR composition, mandatory cutover and object token/resource enforcement remain pending. Full requirement status is unchanged.
+
 ## CORE
 
 | ID | Level | Phase | Owner | Acceptance condition |

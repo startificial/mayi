@@ -84,7 +84,7 @@ func TestObjectConsentDisplaysOnlyAuthorizedExactRequestedActions(t *testing.T) 
 	svc, s, _, m, p, a := objectConsentSetup(t)
 	before := m.next
 	view, err := svc.PrepareConsent(context.Background(), p)
-	if err != nil || view.DecisionAvailable || view.PermissionVersion != 7 || len(view.Objects) != 1 || view.Objects[0].Name != "Resource-owned object" || view.Objects[0].Identifier != "workflow:123" || len(view.Objects[0].Actions) != 1 || view.Objects[0].Actions[0].Name != "read" || view.Objects[0].Actions[0].Description != "Read object" {
+	if err != nil || !view.DecisionAvailable || view.PermissionVersion != 7 || len(view.Objects) != 1 || view.Objects[0].Name != "Resource-owned object" || view.Objects[0].Identifier != "workflow:123" || len(view.Objects[0].Actions) != 1 || view.Objects[0].Actions[0].Name != "read" || view.Objects[0].Actions[0].Description != "Read object" {
 		t.Fatal("invalid object display", view, err)
 	}
 	if a.held || a.calls != 1 || a.displayLoads != 1 || s.workflow.Snapshot().ConsentSessionHash != p.SessionHash || m.next != before {
@@ -95,9 +95,10 @@ func TestObjectConsentDisplaysOnlyAuthorizedExactRequestedActions(t *testing.T) 
 	if err != nil || again.Objects[0].Actions[0].Name != "read" {
 		t.Fatal("caller mutated view", err)
 	}
-	if result, err := svc.Decide(context.Background(), authorization.Decision{Proof: p, Approve: true}); !errors.Is(err, authorization.ErrDenied) || result.Code != "" || m.next != before || s.completions != 0 {
-		t.Fatal("display enabled approval before durable evidence", err)
+	if result, err := svc.Decide(context.Background(), authorization.Decision{Proof: p, Approve: true}); err != nil || result.Code == "" || m.next != before+1 || s.completions != 1 {
+		t.Fatal("guarded exact object approval failed", err)
 	}
+
 }
 
 func TestObjectConsentDeniesBeforeResourceDisplay(t *testing.T) {
@@ -185,5 +186,91 @@ func TestObjectConsentRechecksAfterGuardAcquisitionAndNeverReturnsUncommittedDis
 				t.Fatal("failed operation bound session")
 			}
 		})
+	}
+}
+
+func (s *store) RecordObjectPresentation(_ context.Context, w domain.Transaction, p domain.ObjectConsentProjection, _ time.Time) error {
+	if s.objectGuard == nil || !s.objectGuard.held || !p.Matches(w, s.principal.Subject) {
+		return authorization.ErrDenied
+	}
+	if s.presentation.Snapshot().AuthorizationHash != "" && !s.presentation.Equal(p) {
+		return authorization.ErrDenied
+	}
+	s.presentation = p
+	return nil
+}
+func (s *store) AuthorizeObjectApproval(_ context.Context, w domain.Transaction, p domain.ObjectConsentProjection, _ time.Time) (domain.ObjectConsentProjection, error) {
+	if s.objectGuard == nil || !s.objectGuard.held || w.Snapshot().ConsentSessionHash != s.principal.SessionHash || !s.presentation.Matches(w, s.principal.Subject) || !s.presentation.Equal(p) {
+		return domain.ObjectConsentProjection{}, authorization.ErrDenied
+	}
+	s.objectApproved = true
+	return s.presentation, nil
+}
+
+func TestObjectApprovalRejectsChangedEvidenceBeforeEntropy(t *testing.T) {
+	for _, mode := range []string{"missing presentation", "permission version", "label", "resource denial", "resource outage", "revoked during guard", "commit failure", "invalid csrf", "foreign tenant"} {
+		t.Run(mode, func(t *testing.T) {
+			svc, s, _, m, p, a := objectConsentSetup(t)
+			if mode != "missing presentation" {
+				if _, err := svc.PrepareConsent(context.Background(), p); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before, calls := m.next, a.calls
+			switch mode {
+			case "permission version", "label":
+				v := a.projection.Snapshot()
+				if mode == "permission version" {
+					v.PermissionVersion++
+				} else {
+					v.Objects[0].Name = "Changed name"
+				}
+				var err error
+				a.projection, err = domain.NewObjectConsentProjection(v)
+				if err != nil {
+					t.Fatal(err)
+				}
+			case "resource denial":
+				a.deny = true
+			case "resource outage":
+				a.unavailable = true
+			case "revoked during guard":
+				a.before = func() { s.recheckDenied = true }
+			case "commit failure":
+				a.before = func() { s.commitFailure = true }
+			case "invalid csrf":
+				p.CSRFHash = ""
+			case "foreign tenant":
+				p.TenantIssuer.TenantID = "b"
+			}
+			out, err := svc.Decide(context.Background(), authorization.Decision{Proof: p, Approve: true})
+			if err == nil || out.Code != "" || out.RedirectURI != "" || a.held || s.completions != 0 {
+				t.Fatal("failed approval returned authority", err)
+			}
+			if (mode == "invalid csrf" || mode == "foreign tenant") && a.calls != calls {
+				t.Fatal("unauthenticated approval reached resource provider")
+			}
+			if mode != "commit failure" && m.next != before {
+				t.Fatal("denied approval reached entropy")
+			}
+			if mode == "permission version" || mode == "label" {
+				if view, err := svc.PrepareConsent(context.Background(), p); !errors.Is(err, authorization.ErrDenied) || view.ClientID != "" {
+					t.Fatal("display evidence replaced", err)
+				}
+			}
+		})
+	}
+}
+
+func TestObjectDenialDoesNotRequireResourceAvailability(t *testing.T) {
+	svc, s, _, m, p, a := objectConsentSetup(t)
+	if _, err := svc.PrepareConsent(context.Background(), p); err != nil {
+		t.Fatal(err)
+	}
+	before, calls := m.next, a.calls
+	a.unavailable = true
+	out, err := svc.Decide(context.Background(), authorization.Decision{Proof: p, Approve: false})
+	if err != nil || out.Code != "" || out.RedirectURI == "" || s.workflow.Snapshot().Status != domain.Denied || a.calls != calls || m.next != before {
+		t.Fatal("denial depended on resource provider or issued code", err)
 	}
 }

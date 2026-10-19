@@ -43,6 +43,8 @@ type store struct {
 	pushedAuthorized                                    bool
 	inTransaction                                       bool
 	objectGuard                                         *objectAuthority
+	presentation                                        domain.ObjectConsentProjection
+	objectApproved                                      bool
 }
 
 func (s *store) AuthorizeConsent(_ context.Context, p authorization.AccessProof, _ time.Time) (authorization.Principal, error) {
@@ -57,6 +59,7 @@ func (s *store) RunAuthorization(ctx context.Context, _ grants.Scope, fn func(au
 	defer func() { s.inTransaction = false }()
 	candidate := *s
 	candidate.pushedAuthorized = false
+	candidate.objectApproved = false
 	if err := fn(&candidate); err != nil {
 		s.loads += candidate.loads - s.loads
 		s.pushedLoads += candidate.pushedLoads - s.pushedLoads
@@ -89,6 +92,9 @@ func (s *store) RecheckConsent(context.Context, authorization.AccessProof, autho
 	return nil
 }
 func (s *store) CompleteAuthorization(_ context.Context, w domain.Transaction, _ grants.Revision, _ time.Time) error {
+	if w.Snapshot().Status == domain.Approved && w.Snapshot().PushedRequestHash != "" && !s.objectApproved {
+		return authorization.ErrDenied
+	}
 	s.completions++
 	s.workflow = w
 	return nil

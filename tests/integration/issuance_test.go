@@ -103,7 +103,7 @@ func setup(t *testing.T) *environment {
 	}
 	// The shared adapter always targets the current additive schema. Keep the
 	// original P0 behavioral fixtures, but run them against every migration.
-	for _, source := range []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed} {
+	for _, source := range []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed, migrations.ObjectPresentations} {
 		if _, err := admin.Exec(ctx, source); err != nil {
 			t.Fatal(err)
 		}

@@ -3,6 +3,7 @@ package authorization
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/startificial/mayi/internal/domain/grants"
 )
@@ -21,6 +22,61 @@ func objectConsentExample(t *testing.T) (Transaction, ObjectConsentSpec) {
 		t.Fatal(err)
 	}
 	return workflow, ObjectConsentSpec{AuthorizationHash: w.HandleHash, ClientID: w.Request.ClientID, Subject: "user:alice", PermissionVersion: 7, Ceiling: w.Request.ObjectCeiling, Objects: []ConsentObject{{Type: "https://api.example/types/file/v1", Identifier: "file:123", Name: "Resource-owned file name"}}}
+}
+
+func TestObjectApprovalRequiresUnchangedPresentationAndPermissionVersion(t *testing.T) {
+	w, spec := objectConsentExample(t)
+	w, err := w.BindSession(w.Snapshot().ConsentSessionHash, w.Snapshot().CreatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := NewObjectConsentProjection(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := w.Snapshot().CreatedAt.Add(time.Second)
+	approved, revision, err := w.ApproveObjects(p, p, spec.Subject, "grant-1", strings.Repeat("f", 64), now, time.Hour)
+	if err != nil || approved.Snapshot().Status != Approved || !revision.Snapshot().ObjectCeiling.Equal(spec.Ceiling) {
+		t.Fatal("exact object approval failed", err)
+	}
+	for _, mode := range []string{"missing presentation", "version", "label", "subject", "workflow", "permission expansion"} {
+		t.Run(mode, func(t *testing.T) {
+			s := p.Snapshot()
+			switch mode {
+			case "version":
+				s.PermissionVersion++
+			case "label":
+				s.Objects[0].Name = "Different title"
+			case "subject":
+				s.Subject = "user:bob"
+			case "workflow":
+				s.AuthorizationHash = strings.Repeat("e", 64)
+			case "permission expansion":
+				c := s.Ceiling.Snapshot()
+				c.Details[0].Actions = append(c.Details[0].Actions, "write")
+				var err error
+				s.Ceiling, err = grants.NewObjectCeiling(c)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			fresh, err := NewObjectConsentProjection(s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			presented := p
+			if mode == "missing presentation" {
+				presented = ObjectConsentProjection{}
+			}
+			if _, _, err := w.ApproveObjects(presented, fresh, spec.Subject, "grant-1", strings.Repeat("f", 64), now, time.Hour); err == nil {
+				t.Fatal("changed presentation approved")
+			}
+		})
+	}
+	spec.PermissionVersion = MaxPermissionVersion + 1
+	if _, err := NewObjectConsentProjection(spec); err == nil {
+		t.Fatal("unsupported permission version accepted")
+	}
 }
 
 func TestObjectConsentProjectionBindsExactWorkflowActorAndObjects(t *testing.T) {

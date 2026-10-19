@@ -2,10 +2,14 @@ package authorization
 
 import (
 	"slices"
+	"time"
 
 	"github.com/startificial/mayi/internal/domain/grants"
 	"github.com/startificial/mayi/internal/domain/resources"
 )
+
+// Permission versions use the positive signed-64-bit revision space.
+const MaxPermissionVersion uint64 = 1<<63 - 1
 
 // ConsentObject is a minimal resource-owned display projection, never an
 // object payload or a client-supplied title. Type/identifier remain visible.
@@ -25,7 +29,7 @@ type ObjectConsentProjection struct{ spec ObjectConsentSpec }
 
 func NewObjectConsentProjection(s ObjectConsentSpec) (ObjectConsentProjection, error) {
 	c := s.Ceiling.Snapshot()
-	if !ValidHandleHash(s.AuthorizationHash) || !resources.ValidID(s.ClientID) || !grants.ValidUserSubject(s.Subject) || s.PermissionVersion == 0 || !s.Ceiling.BoundTo(c.Scope, c.Resource) || len(c.Details) == 0 || len(s.Objects) != len(c.Details) {
+	if !ValidHandleHash(s.AuthorizationHash) || !resources.ValidID(s.ClientID) || !grants.ValidUserSubject(s.Subject) || s.PermissionVersion == 0 || s.PermissionVersion > MaxPermissionVersion || !s.Ceiling.BoundTo(c.Scope, c.Resource) || len(c.Details) == 0 || len(s.Objects) != len(c.Details) {
 		return ObjectConsentProjection{}, ErrInvalid
 	}
 	type target struct{ typ, id string }
@@ -42,6 +46,36 @@ func NewObjectConsentProjection(s ObjectConsentSpec) (ObjectConsentProjection, e
 	}
 	s.Objects = slices.Clone(s.Objects)
 	return ObjectConsentProjection{spec: s}, nil
+}
+
+// Equal preserves the exact displayed labels and permission revision. Order of
+// provider entries is irrelevant; the workflow determines presentation order.
+func (p ObjectConsentProjection) Equal(other ObjectConsentProjection) bool {
+	if _, err := NewObjectConsentProjection(p.spec); err != nil {
+		return false
+	}
+	if _, err := NewObjectConsentProjection(other.spec); err != nil {
+		return false
+	}
+	a, b := p.spec, other.spec
+	if a.AuthorizationHash != b.AuthorizationHash || a.ClientID != b.ClientID || a.Subject != b.Subject || a.PermissionVersion != b.PermissionVersion || !a.Ceiling.Equal(b.Ceiling) || len(a.Objects) != len(b.Objects) {
+		return false
+	}
+	for _, object := range a.Objects {
+		if !slices.Contains(b.Objects, object) {
+			return false
+		}
+	}
+	return true
+}
+
+// ApproveObjects requires immutable presentation evidence and a matching fresh
+// guarded decision. Resource guard lifetime is the consuming service's duty.
+func (t Transaction) ApproveObjects(presented, current ObjectConsentProjection, subject, grantID, codeHash string, now time.Time, lifetime time.Duration) (Transaction, grants.Revision, error) {
+	if !presented.Matches(t, subject) || !current.Matches(t, subject) || !presented.Equal(current) {
+		return Transaction{}, grants.Revision{}, ErrInvalid
+	}
+	return t.Decide(true, subject, grantID, codeHash, now, lifetime)
 }
 
 func (p ObjectConsentProjection) Snapshot() ObjectConsentSpec {

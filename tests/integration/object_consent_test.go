@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 // adapter. Its own PostgreSQL rows authoritatively own permission/display state.
 type fixtureConsentAuthority struct {
 	e                             *foundation
-	displayReads                  int
+	displayReads                  atomic.Int32
 	beforeCallback, afterCallback func()
 }
 
@@ -57,7 +58,7 @@ func (a *fixtureConsentAuthority) WithObjectConsent(ctx context.Context, q autho
 		if err := tx.QueryRow(ctx, `SELECT name FROM consent_fixture.labels WHERE tenant_id=$1 AND resource=$2 AND type_uri=$3 AND identifier=$4 FOR SHARE`, q.TenantIssuer.TenantID, c.Resource, d.Type, d.Identifier).Scan(&o.Name); err != nil {
 			return authorization.ErrDenied
 		}
-		a.displayReads++
+		a.displayReads.Add(1)
 		s.Objects = append(s.Objects, o)
 	}
 	projection, err := domain.NewObjectConsentProjection(s)
@@ -125,18 +126,16 @@ func TestP2ObjectConsentUsesResourceGuardThroughSessionBindingCommit(t *testing.
 		}
 	}
 	view, err := svc.PrepareConsent(ctx, p)
-	if err != nil || view.DecisionAvailable || view.PermissionVersion != 7 || len(view.Objects) != 1 || view.Objects[0].Identifier != "workflow:123" || view.Objects[0].Name != "Resource-owned <workflow>" || len(view.Objects[0].Actions) != 1 || view.Objects[0].Actions[0].Name != "read" || a.displayReads != 1 {
+	if err != nil || !view.DecisionAvailable || view.PermissionVersion != 7 || len(view.Objects) != 1 || view.Objects[0].Identifier != "workflow:123" || view.Objects[0].Name != "Resource-owned <workflow>" || len(view.Objects[0].Actions) != 1 || view.Objects[0].Actions[0].Name != "read" || a.displayReads.Load() != 1 {
 		t.Fatal("resource display expanded request", view, err)
 	}
-	if out, err := svc.Decide(ctx, authorization.Decision{Proof: p, Approve: true}); !errors.Is(err, authorization.ErrDenied) || out.Code != "" {
-		t.Fatal("display enabled object code issuance", err)
-	}
+
 	a.beforeCallback = nil
 	a.afterCallback = nil
 	if _, err := e.admin.Exec(ctx, `UPDATE consent_fixture.permissions SET actions=ARRAY['write'],version=8 WHERE identifier='workflow:123'`); err != nil {
 		t.Fatal("guard not released", err)
 	}
-	if view, err := svc.PrepareConsent(ctx, p); !errors.Is(err, authorization.ErrDenied) || view.ClientID != "" || a.displayReads != 1 {
+	if view, err := svc.PrepareConsent(ctx, p); !errors.Is(err, authorization.ErrDenied) || view.ClientID != "" || a.displayReads.Load() != 1 {
 		t.Fatal("stale permission/display accepted", err)
 	}
 	var credentials int
@@ -183,7 +182,7 @@ func TestP2ObjectConsentRechecksSessionAndRollsBackDisplayBinding(t *testing.T) 
 			if !errors.Is(err, want) || view.ClientID != "" || len(view.Objects) != 0 || view.PermissionVersion != 0 {
 				t.Fatal("failed consent leaked display", err)
 			}
-			if (mode == "forbidden" || mode == "missing" || mode == "foreign owner") && a.displayReads != 0 {
+			if (mode == "forbidden" || mode == "missing" || mode == "foreign owner") && a.displayReads.Load() != 0 {
 				t.Fatal("denial loaded object labels")
 			}
 			var bound bool

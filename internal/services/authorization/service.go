@@ -161,38 +161,64 @@ func (s *Service) Decide(ctx context.Context, d Decision) (DecisionResult, error
 		return DecisionResult{}, err
 	}
 	var result DecisionResult
+	var candidate domain.Transaction
 	err = s.store.RunAuthorization(ctx, d.Proof.TenantIssuer, func(tx Transaction) error {
-		workflow, current, err := s.consent(ctx, tx, d.Proof, actor)
+		workflow, current, err := s.loadConsent(ctx, tx, d.Proof, actor, s.objects != nil)
 		if err != nil {
 			return err
 		}
-		spec := workflow.Snapshot()
-		var material Material
-		if d.Approve {
-			material, err = s.material.NewAuthorizationMaterial(ctx)
-			if err != nil || !validMaterial(material) {
-				return ErrUnavailable
-			}
+		if d.Approve && !workflow.Snapshot().Request.ObjectCeiling.IsZero() {
+			candidate = workflow
+			return nil
 		}
-		now := s.clock.Now()
-		completed, revision, err := workflow.Decide(d.Approve, actor.Subject, material.ID, material.Hash, now, time.Duration(current.Policy.MaxGrantSeconds)*time.Second)
+		workflow, err = s.bindConsent(ctx, tx, d.Proof, actor, workflow)
 		if err != nil {
-			return ErrDenied
-		}
-		if err := tx.CompleteAuthorization(ctx, completed, revision, now); err != nil {
 			return err
 		}
-		result = DecisionResult{RedirectURI: spec.Request.RedirectURI, State: spec.Request.State}
-		if d.Approve {
-			result.Code = material.Secret
-		}
-		return nil
+		result, err = s.completeDecision(ctx, tx, workflow, current, actor, d.Approve, domain.ObjectConsentProjection{}, domain.ObjectConsentProjection{})
+		return err
 	})
 	if err != nil {
 		return DecisionResult{}, classified(err)
 	}
+	if candidate.Snapshot().HandleHash != "" {
+		return s.approveObjectConsent(ctx, d.Proof, actor, candidate)
+	}
 	return result, nil
 }
+
+func (s *Service) completeDecision(ctx context.Context, tx Transaction, workflow domain.Transaction, current domain.Registration, actor Principal, approve bool, presented, fresh domain.ObjectConsentProjection) (DecisionResult, error) {
+	var material Material
+	var err error
+	if approve {
+		material, err = s.material.NewAuthorizationMaterial(ctx)
+		if err != nil || !validMaterial(material) {
+			return DecisionResult{}, ErrUnavailable
+		}
+	}
+	now := s.clock.Now()
+	lifetime := time.Duration(current.Policy.MaxGrantSeconds) * time.Second
+	var completed domain.Transaction
+	var revision grants.Revision
+	if approve && !workflow.Snapshot().Request.ObjectCeiling.IsZero() {
+		completed, revision, err = workflow.ApproveObjects(presented, fresh, actor.Subject, material.ID, material.Hash, now, lifetime)
+	} else {
+		completed, revision, err = workflow.Decide(approve, actor.Subject, material.ID, material.Hash, now, lifetime)
+	}
+	if err != nil {
+		return DecisionResult{}, ErrDenied
+	}
+	if err := tx.CompleteAuthorization(ctx, completed, revision, now); err != nil {
+		return DecisionResult{}, err
+	}
+	r := workflow.Snapshot().Request
+	result := DecisionResult{RedirectURI: r.RedirectURI, State: r.State}
+	if approve {
+		result.Code = material.Secret
+	}
+	return result, nil
+}
+
 func classified(err error) error {
 	if errors.Is(err, ErrDenied) {
 		return ErrDenied
@@ -253,15 +279,4 @@ func (s *Service) bindConsent(ctx context.Context, tx Transaction, p AccessProof
 		return domain.Transaction{}, err
 	}
 	return workflow, nil
-}
-
-// The approval path remains scope-only until durable object presentation and
-// commit-time permission evidence are wired. Both paths reuse these checks.
-func (s *Service) consent(ctx context.Context, tx Transaction, p AccessProof, actor Principal) (domain.Transaction, domain.Registration, error) {
-	w, current, err := s.loadConsent(ctx, tx, p, actor, false)
-	if err != nil {
-		return domain.Transaction{}, domain.Registration{}, err
-	}
-	w, err = s.bindConsent(ctx, tx, p, actor, w)
-	return w, current, err
 }

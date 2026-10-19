@@ -117,7 +117,7 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, runtimeRole string
 		`REVOKE UPDATE ON mayi.grant_revisions,mayi.authorization_transactions FROM ` + role,
 		`REVOKE UPDATE ON mayi.resource_object_profiles FROM ` + role,
 		`REVOKE UPDATE ON mayi.client_object_types FROM ` + role,
-		`REVOKE UPDATE ON mayi.pushed_requests FROM ` + role,
+		`REVOKE UPDATE ON mayi.pushed_requests,mayi.authorization_object_presentations FROM ` + role,
 		`GRANT UPDATE(consumed_at,authorization_hash) ON mayi.pushed_requests TO ` + role,
 		`GRANT UPDATE(status,subject,grant_id,code_hash,decided_at,consent_session_hash) ON mayi.authorization_transactions TO ` + role,
 		// Current lifecycle operations only consume credentials and revoke
@@ -187,5 +187,5 @@ func rollback(tx pgx.Tx) {
 }
 
 func migrationSources() []string {
-	return []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed}
+	return []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed, migrations.ObjectPresentations}
 }

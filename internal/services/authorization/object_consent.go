@@ -10,9 +10,21 @@ import (
 // Acquire resource permission before opening the final Mayi transaction. The
 // initial authorized read has already committed without binding or other effects.
 func (s *Service) prepareObjectConsent(ctx context.Context, proof AccessProof, actor Principal, candidate domain.Transaction) (Consent, error) {
+	var result Consent
+	err := s.withObjectConsent(ctx, actor, candidate, func(projection domain.ObjectConsentProjection) error {
+		var err error
+		result, err = s.guardedObjectConsent(ctx, proof, actor, candidate, projection)
+		return err
+	})
+	if err != nil {
+		return Consent{}, err
+	}
+	return result, nil
+}
+
+func (s *Service) withObjectConsent(ctx context.Context, actor Principal, candidate domain.Transaction, fn func(domain.ObjectConsentProjection) error) error {
 	before := candidate.Snapshot()
 	query := ObjectConsentQuery{TenantIssuer: actor.TenantIssuer, Subject: actor.Subject, AuthorizationHash: before.HandleHash, ClientID: before.Request.ClientID, Ceiling: before.Request.ObjectCeiling}
-	var result Consent
 	calls := 0
 	var callbackErr error
 	err := s.objects.WithObjectConsent(ctx, query, func(projection domain.ObjectConsentProjection) error {
@@ -21,17 +33,58 @@ func (s *Service) prepareObjectConsent(ctx context.Context, proof AccessProof, a
 			callbackErr = ErrUnavailable
 			return callbackErr
 		}
-		result, callbackErr = s.guardedObjectConsent(ctx, proof, actor, candidate, projection)
+		if !projection.Matches(candidate, actor.Subject) {
+			callbackErr = ErrDenied
+			return callbackErr
+		}
+		callbackErr = fn(projection)
 		return callbackErr
 	})
 	if err != nil {
-		return Consent{}, classified(err)
+		return classified(err)
 	}
 	if callbackErr != nil {
-		return Consent{}, classified(callbackErr)
+		return classified(callbackErr)
 	}
-	if calls != 1 || result.ClientID == "" {
-		return Consent{}, ErrUnavailable
+	if calls != 1 {
+		return ErrUnavailable
+	}
+	return nil
+}
+
+func (s *Service) reloadObjectConsent(ctx context.Context, tx Transaction, proof AccessProof, actor Principal, candidate domain.Transaction, projection domain.ObjectConsentProjection) (domain.Transaction, domain.Registration, error) {
+	workflow, current, err := s.loadConsent(ctx, tx, proof, actor, true)
+	if err != nil {
+		return domain.Transaction{}, domain.Registration{}, err
+	}
+	before, after := candidate.Snapshot(), workflow.Snapshot()
+	if !projection.Matches(workflow, actor.Subject) || before.PolicyVersion != after.PolicyVersion || before.PushedRequestHash != after.PushedRequestHash || !before.Request.Equal(after.Request) {
+		return domain.Transaction{}, domain.Registration{}, ErrDenied
+	}
+	return workflow, current, nil
+}
+
+func (s *Service) approveObjectConsent(ctx context.Context, proof AccessProof, actor Principal, candidate domain.Transaction) (DecisionResult, error) {
+	var result DecisionResult
+	err := s.withObjectConsent(ctx, actor, candidate, func(fresh domain.ObjectConsentProjection) error {
+		return s.store.RunAuthorization(ctx, proof.TenantIssuer, func(tx Transaction) error {
+			workflow, current, err := s.reloadObjectConsent(ctx, tx, proof, actor, candidate, fresh)
+			if err != nil {
+				return err
+			}
+			presented, err := tx.AuthorizeObjectApproval(ctx, workflow, fresh, s.clock.Now())
+			if err != nil {
+				return err
+			}
+			if !presented.Matches(workflow, actor.Subject) || !presented.Equal(fresh) {
+				return ErrDenied
+			}
+			result, err = s.completeDecision(ctx, tx, workflow, current, actor, true, presented, fresh)
+			return err
+		})
+	})
+	if err != nil {
+		return DecisionResult{}, err
 	}
 	return result, nil
 }
@@ -40,19 +93,17 @@ func (s *Service) guardedObjectConsent(ctx context.Context, proof AccessProof, a
 	if !projection.Matches(candidate, actor.Subject) {
 		return Consent{}, ErrDenied
 	}
-	before := candidate.Snapshot()
 	var result Consent
 	err := s.store.RunAuthorization(ctx, proof.TenantIssuer, func(tx Transaction) error {
-		workflow, current, err := s.loadConsent(ctx, tx, proof, actor, true)
+		workflow, current, err := s.reloadObjectConsent(ctx, tx, proof, actor, candidate, projection)
 		if err != nil {
 			return err
 		}
-		after := workflow.Snapshot()
-		if !projection.Matches(workflow, actor.Subject) || before.PolicyVersion != after.PolicyVersion || before.PushedRequestHash != after.PushedRequestHash || !before.Request.Equal(after.Request) {
-			return ErrDenied
-		}
 		workflow, err = s.bindConsent(ctx, tx, proof, actor, workflow)
 		if err != nil {
+			return err
+		}
+		if err := tx.RecordObjectPresentation(ctx, workflow, projection, s.clock.Now()); err != nil {
 			return err
 		}
 		result = objectConsentView(workflow, current, projection)
@@ -64,7 +115,6 @@ func (s *Service) guardedObjectConsent(ctx context.Context, proof AccessProof, a
 func objectConsentView(workflow domain.Transaction, current domain.Registration, projection domain.ObjectConsentProjection) Consent {
 	result := consentView(workflow, current)
 	result.PermissionVersion = projection.Snapshot().PermissionVersion
-	result.DecisionAvailable = false
 	type reference struct{ typ, id string }
 	labels := make(map[reference]string)
 	for _, object := range projection.Snapshot().Objects {

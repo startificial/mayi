@@ -15,11 +15,13 @@ import (
 var _ authorization.Store = (*Store)(nil)
 
 type authorizationTransaction struct {
-	tx           pgx.Tx
-	tenantIssuer grants.Scope
-	version      uint64
-	principal    *authorization.Principal
-	pushed       *authorization.PushedProof
+	tx             pgx.Tx
+	tenantIssuer   grants.Scope
+	version        uint64
+	principal      *authorization.Principal
+	pushed         *authorization.PushedProof
+	consentHash    string
+	objectApproval *domain.ObjectConsentProjection
 }
 
 func (s *Store) RunAuthorization(ctx context.Context, tenantIssuer grants.Scope, fn func(authorization.Transaction) error) error {
@@ -167,6 +169,9 @@ func (a *authorizationTransaction) Authorization(ctx context.Context, hash strin
 	return w, nil
 }
 func (a *authorizationTransaction) RecheckConsent(ctx context.Context, proof authorization.AccessProof, p authorization.Principal, now time.Time) error {
+	a.principal = nil
+	a.consentHash = ""
+	a.objectApproval = nil
 	if p.TenantIssuer != a.tenantIssuer || proof.TenantIssuer != a.tenantIssuer || p.SessionHash != proof.SessionHash {
 		return authorization.ErrDenied
 	}
@@ -184,6 +189,7 @@ func (a *authorizationTransaction) RecheckConsent(ctx context.Context, proof aut
 		return authorization.ErrDenied
 	}
 	a.principal = &p
+	a.consentHash = proof.AuthorizationHash
 	return nil
 }
 func (a *authorizationTransaction) CompleteAuthorization(ctx context.Context, w domain.Transaction, revision grants.Revision, now time.Time) error {
@@ -198,6 +204,15 @@ func (a *authorizationTransaction) CompleteAuthorization(ctx context.Context, w 
 		return authorization.ErrDenied
 	}
 	if s.Status == domain.Approved {
+		if s.PushedRequestHash != "" {
+			if a.objectApproval == nil || a.consentHash != s.HandleHash {
+				return authorization.ErrDenied
+			}
+			evidence := a.objectApproval.Snapshot()
+			if evidence.AuthorizationHash != s.HandleHash || evidence.ClientID != r.ClientID || evidence.Subject != s.Subject || !evidence.Ceiling.Equal(r.ObjectCeiling) {
+				return authorization.ErrDenied
+			}
+		}
 		g := revision.Snapshot()
 		if _, err := grants.NewRevision(g); err != nil || g.Scope != a.tenantIssuer || g.GrantID != s.GrantID || g.ClientID != r.ClientID || g.Subject != s.Subject || g.Resource != r.ResourceURI || g.Number != 1 || !slices.Equal(g.Scopes, r.PermissionScopes) || !g.ObjectCeiling.Equal(r.ObjectCeiling) || g.Subject != a.principal.Subject {
 			return authorization.ErrDenied
