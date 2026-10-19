@@ -17,13 +17,13 @@ var ErrInvalidAuthorizationDetails = errors.New("invalid authorization details")
 
 // DecodeAuthorizationDetails maps RFC 9396's envelope into the exact object/action
 // profile. It is not a handler and does not establish client/user authority.
-// The profile must be selected from trusted tenant/resource configuration. No
+// The profiles must be selected from trusted tenant/resource configuration. No
 // endpoint accepts RAR until PAR, approval and credential enforcement are wired.
-func DecodeAuthorizationDetails(raw string, profile resources.ObjectProfile) (grants.ObjectCeiling, error) {
-	if len(raw) == 0 || len(raw) > MaxAuthorizationDetailsBytes || !utf8.ValidString(raw) {
+func DecodeAuthorizationDetails(raw string, profiles ...resources.ObjectProfile) (grants.ObjectCeiling, error) {
+	if len(raw) == 0 || len(raw) > MaxAuthorizationDetailsBytes || !utf8.ValidString(raw) || len(profiles) == 0 || len(profiles) > resources.MaxObjectRequestProfiles {
 		return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
 	}
-	spec := profile.Snapshot()
+	spec := profiles[0].Snapshot()
 	d := json.NewDecoder(strings.NewReader(raw))
 	if !delimiter(d, '[') {
 		return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
@@ -45,13 +45,13 @@ func DecodeAuthorizationDetails(raw string, profile resources.ObjectProfile) (gr
 	if _, err := d.Token(); err != io.EOF {
 		return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
 	}
-	ceiling, err := profile.ValidateRequest(spec.Scope, spec.Resource, details)
+	ceiling, err := resources.ValidateObjectRequest(spec.Scope, spec.Resource, profiles, details)
 	if err != nil {
 		return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
 	}
 	// Keep the accepted envelope representable under the same response bound,
 	// including JSON escaping expansion. Never accept authority we cannot emit.
-	if _, err := EncodeAuthorizationDetails(ceiling, profile); err != nil {
+	if _, err := EncodeAuthorizationDetails(ceiling, profiles...); err != nil {
 		return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
 	}
 	return ceiling, nil
@@ -140,11 +140,11 @@ type objectDetailDTO struct {
 }
 
 // EncodeAuthorizationDetails emits only validated standard fields. It requires
-// the same trusted profile snapshot used for the assigned ceiling, rather than
+// the same trusted profile snapshots used for the assigned ceiling, rather than
 // serializing arbitrary JSON supplied by a client or persistence record.
-func EncodeAuthorizationDetails(ceiling grants.ObjectCeiling, profile resources.ObjectProfile) ([]byte, error) {
+func EncodeAuthorizationDetails(ceiling grants.ObjectCeiling, profiles ...resources.ObjectProfile) ([]byte, error) {
 	s := ceiling.Snapshot()
-	if _, err := profile.ValidateRequest(s.Scope, s.Resource, s.Details); err != nil {
+	if _, err := resources.ValidateObjectRequest(s.Scope, s.Resource, profiles, s.Details); err != nil {
 		return nil, ErrInvalidAuthorizationDetails
 	}
 	details := make([]objectDetailDTO, 0, len(s.Details))

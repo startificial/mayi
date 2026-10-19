@@ -40,6 +40,8 @@ Token endpoints, downstream OIDC, idle/session-list APIs, BFF/resource enforceme
 
 [ADR 0017](adr/0017-pushed-request-storage-and-binding.md) and [pushed-request integration tests](../tests/integration/pushed_test.go) add partial SEC-2/RES-10 evidence: bounded hashed references, proof-before-payload ordering, exact request/policy/client binding, one concurrent browser workflow, replay/expiry/foreign denial, deferred snapshot/half-commit guards and audit/outbox rollback. No public PAR/RAR route or object consent/token enforcement is enabled; mandatory public cutover and full requirement status remain pending.
 
+[ADR 0018](adr/0018-strict-par-wire-profile.md) adds partial SEC-2/RES-10 boundary evidence: shared mixed-type vocabulary validation, bounded PAR form/reference/success codecs, rejection of duplicate/replacement/fetchable references, and [real wire-to-storage tests](../tests/integration/pushed_wire_test.go) for exact snapshots, client binding, replay and registration rechecks. These codecs are unmounted; public endpoints, object consent and full protocol conformance remain pending. Full requirement status is unchanged.
+
 ## CORE
 
 | ID | Level | Phase | Owner | Acceptance condition |

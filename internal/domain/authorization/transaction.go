@@ -77,27 +77,13 @@ func (r Request) MatchesObjectRegistration(current Registration) bool {
 	if !r.matchesRegistration(current) || r.ObjectCeiling.IsZero() || len(current.ObjectProfiles) == 0 || len(current.ObjectProfiles) > clients.MaxAuthorizationDetailsTypes {
 		return false
 	}
-	profiles := make(map[string]resources.ObjectProfile, len(current.ObjectProfiles))
 	for _, profile := range current.ObjectProfiles {
-		s := profile.Snapshot()
-		if s.Scope != r.TenantIssuer || s.Resource != r.ResourceURI || !current.Client.AllowsObjectProfile(current.Resource, profile) {
-			return false
-		}
-		if _, duplicate := profiles[s.Type]; duplicate {
-			return false
-		}
-		profiles[s.Type] = profile
-	}
-	for _, detail := range r.ObjectCeiling.Snapshot().Details {
-		profile, ok := profiles[detail.Type]
-		if !ok {
-			return false
-		}
-		if _, err := profile.ValidateRequest(r.TenantIssuer, r.ResourceURI, []grants.ObjectDetail{detail}); err != nil {
+		if !current.Client.AllowsObjectProfile(current.Resource, profile) {
 			return false
 		}
 	}
-	return true
+	_, err := resources.ValidateObjectRequest(r.TenantIssuer, r.ResourceURI, current.ObjectProfiles, r.ObjectCeiling.Snapshot().Details)
+	return err == nil
 }
 
 func (r Request) matchesRegistration(current Registration) bool {
