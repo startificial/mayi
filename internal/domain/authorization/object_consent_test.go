@@ -145,6 +145,12 @@ func TestObjectConsentProjectionBindsExactWorkflowActorAndObjects(t *testing.T) 
 				}
 			}
 			other, err := New(spec)
+			if mode == "no PAR" {
+				if err == nil {
+					t.Fatal("missing PAR accepted")
+				}
+				return
+			}
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -40,8 +40,8 @@ func (a *authorizationTransaction) AuthorizePushed(ctx context.Context, proof au
 	var hash string
 	err := a.tx.QueryRow(ctx, `SELECT p.reference_hash FROM mayi.pushed_requests p JOIN mayi.clients c USING(tenant_id,client_id)
  WHERE p.tenant_id=$1 AND p.reference_hash=$2 AND p.client_id=$3 AND c.enabled AND p.policy_version=$4
- AND p.consumed_at IS NULL AND p.created_at<=$5 AND p.expires_at>$5 AND p.expires_at>clock_timestamp()
- FOR UPDATE OF p FOR SHARE OF c`, a.tenantIssuer.TenantID, proof.ReferenceHash, proof.ClientID, a.version, now).Scan(&hash)
+ AND p.consumed_at IS NULL AND p.created_at<=$5 AND p.expires_at>$5 AND p.expires_at>clock_timestamp() AND ($6='' OR p.resource_uri=$6)
+ FOR UPDATE OF p FOR SHARE OF c`, a.tenantIssuer.TenantID, proof.ReferenceHash, proof.ClientID, a.version, now, proof.ResourceURI).Scan(&hash)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return authorization.ErrDenied
@@ -72,7 +72,7 @@ func (a *authorizationTransaction) Pushed(ctx context.Context, hash string) (dom
 	if err != nil {
 		return domain.PushedRequest{}, authorization.ErrDenied
 	}
-	if err := a.tx.QueryRow(ctx, `SELECT oidc,nonce,offline_access FROM mayi.pushed_options WHERE tenant_id=$1 AND reference_hash=$2`, a.tenantIssuer.TenantID, hash).Scan(&s.Request.OIDC, &s.Request.Nonce, &s.Request.OfflineAccess); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err := a.tx.QueryRow(ctx, `SELECT oidc,nonce,offline_access FROM mayi.pushed_options WHERE tenant_id=$1 AND reference_hash=$2`, a.tenantIssuer.TenantID, hash).Scan(&s.Request.OIDC, &s.Request.Nonce, &s.Request.OfflineAccess); err != nil {
 		return domain.PushedRequest{}, authorization.ErrUnavailable
 	}
 	p, err := domain.NewPushed(s)

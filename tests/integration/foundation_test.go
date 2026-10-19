@@ -503,16 +503,17 @@ func TestP1ExpandedSchemaPreservesAtomicIssuanceAndEnqueuesAudit(t *testing.T) {
  INSERT INTO mayi.client_resources VALUES('a','client','api');
  INSERT INTO mayi.resource_object_profiles VALUES('a','api','https://api.example','https://api.example/types/fixture/v1','object-actions-v1','{"read":"Read items"}');
  INSERT INTO mayi.client_object_types VALUES('a','client','api','https://api.example/types/fixture/v1');
- INSERT INTO mayi.grants(tenant_id,grant_id,client_id,subject,principal_type,resource,current_scopes,expires_at) VALUES('a','grant','client','user:alice','user','https://api.example',ARRAY['read'],clock_timestamp()+interval '1 hour');
- INSERT INTO mayi.grant_revisions VALUES('a','grant',1,ARRAY['read'],clock_timestamp()+interval '1 hour')`)
+ INSERT INTO mayi.grants(tenant_id,grant_id,client_id,subject,principal_type,resource,current_scopes,expires_at,current_object_ceiling) VALUES('a','grant','client','user:alice','user','https://api.example',ARRAY['read'],clock_timestamp()+interval '1 hour','`+fixtureObjectJSON+`');
+ INSERT INTO mayi.grant_revisions(tenant_id,grant_id,revision,scopes,expires_at,object_ceiling) VALUES('a','grant',1,ARRAY['read'],clock_timestamp()+interval '1 hour','`+fixtureObjectJSON+`')`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,pkce_challenge,redirect_uri,binding_thumbprint,origin_code)
- VALUES('a','code','authorization_code','grant',1,'https://api.example','client',ARRAY['read'],clock_timestamp()-interval '1 second',clock_timestamp()+interval '50 seconds',$1,'https://client.example/cb','binding','code')`, challenge)
+	_, err = tx.Exec(ctx, `INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,pkce_challenge,redirect_uri,binding_thumbprint,origin_code,object_ceiling,authorization_hash)
+ VALUES('a','code','authorization_code','grant',1,'https://api.example','client',ARRAY['read'],clock_timestamp()-interval '1 second',clock_timestamp()+interval '50 seconds',$1,'https://client.example/cb','binding','code',$2,$3)`, challenge, fixtureObjectJSON, secretHash("acodeworkflow"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	seedCodeApproval(t, tx, "a", "code")
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}

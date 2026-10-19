@@ -20,6 +20,7 @@ func errorDefinitions() []errorDefinition {
 		{"not_found", 404, "The requested resource is unavailable."},
 		{"not_ready", 503, "The service is not ready."},
 		{"temporarily_unavailable", 503, "The service is temporarily unavailable."},
+		{"rate_limited", 429, "The request budget is exhausted. Try again after the indicated delay."},
 		{"internal_error", 500, "The request could not be completed."},
 	}
 }

@@ -113,7 +113,7 @@ func TestPushedWireRejectsUnsupportedOrAmbiguousRequests(t *testing.T) {
 func assertPushedInvalid(t *testing.T, raw string, p resources.ObjectProfile) {
 	t.Helper()
 	out, err := DecodePushedRequest(raw, p.Snapshot().Scope, p)
-	if !errors.Is(err, ErrInvalidPushedRequest) || out.ClientID != "" || !out.ObjectCeiling.IsZero() || err.Error() != "invalid pushed authorization request" {
+	if !errors.Is(err, ErrInvalidPushedRequest) || out.ClientID != "" || !out.ObjectCeiling.IsZero() || (err.Error() != "invalid pushed authorization request" && err.Error() != "invalid pushed authorization request\ninvalid authorization details") {
 		t.Fatal("invalid wire request returned data or unsafe diagnostics", err)
 	}
 }

@@ -29,12 +29,24 @@ func storedObjectWorkflow(t *testing.T) (*foundation, domain.Request, authorizat
 	request.ObjectCeiling = objects
 	proof.AuthorizationHash, proof.CSRFHash = secretHash("object-workflow"), secretHash("object-csrf")
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	w, err := domain.New(domain.Spec{ID: "object-workflow", HandleHash: proof.AuthorizationHash, BrowserBindingHash: proof.BrowserBindingHash, CSRFHash: proof.CSRFHash, Request: request, PolicyVersion: 1, CreatedAt: now, ExpiresAt: now.Add(5 * time.Minute), Status: domain.Pending})
+	pushed, err := domain.NewPushed(domain.PushedSpec{ID: "object-par", ReferenceHash: secretHash("object-par"), Request: request, PolicyVersion: 1, CreatedAt: now, ExpiresAt: now.Add(domain.PushedLifetime)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, w, err := pushed.Begin("object-workflow", proof.AuthorizationHash, proof.BrowserBindingHash, proof.CSRFHash, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if err := e.store.RunAuthorization(ctx, request.TenantIssuer, func(tx authorization.Transaction) error { return tx.CreateAuthorization(ctx, w) }); err != nil {
+	if err := e.store.RunAuthorization(ctx, request.TenantIssuer, func(tx authorization.Transaction) error {
+		if err := tx.CreatePushed(ctx, pushed); err != nil {
+			return err
+		}
+		if err := tx.AuthorizePushed(ctx, authorization.PushedProof{TenantIssuer: request.TenantIssuer, ClientID: request.ClientID, ReferenceHash: pushed.Snapshot().ReferenceHash, BrowserBindingHash: proof.BrowserBindingHash}, now); err != nil {
+			return err
+		}
+		return tx.ConsumePushed(ctx, next, w, now)
+	}); err != nil {
 		t.Fatal(err)
 	}
 	principal, err := e.store.AuthorizeConsent(ctx, proof, time.Now())
@@ -49,7 +61,12 @@ func storedObjectWorkflow(t *testing.T) (*foundation, domain.Request, authorizat
 		if err != nil {
 			return err
 		}
-		return tx.BindConsentSession(ctx, bound)
+		if err := tx.BindConsentSession(ctx, bound); err != nil {
+			return err
+		}
+		return consentAuthorityFixture{}.WithObjectConsent(ctx, authorization.ObjectConsentQuery{TenantIssuer: proof.TenantIssuer, Subject: principal.Subject, ClientID: request.ClientID, AuthorizationHash: proof.AuthorizationHash, Ceiling: request.ObjectCeiling}, func(ctx context.Context, p domain.ObjectConsentProjection) error {
+			return tx.RecordObjectPresentation(ctx, bound, p, time.Now())
+		})
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -77,12 +94,18 @@ func completeStoredObject(ctx context.Context, e *foundation, p authorization.Ac
 				return err
 			}
 		}
-		now := time.Now()
-		completed, revision, err := w.Decide(true, principal.Subject, "object-grant", secretHash("object-code"), now, time.Hour)
-		if err != nil {
-			return err
-		}
-		return tx.CompleteAuthorization(ctx, completed, revision, now)
+		return consentAuthorityFixture{}.WithObjectConsent(ctx, authorization.ObjectConsentQuery{TenantIssuer: p.TenantIssuer, Subject: principal.Subject, ClientID: w.Snapshot().Request.ClientID, AuthorizationHash: p.AuthorizationHash, Ceiling: w.Snapshot().Request.ObjectCeiling}, func(ctx context.Context, fresh domain.ObjectConsentProjection) error {
+			now := time.Now()
+			presented, err := tx.AuthorizeObjectApproval(ctx, w, fresh, now)
+			if err != nil {
+				return err
+			}
+			completed, revision, err := w.ApproveObjects(presented, fresh, principal.Subject, "object-grant", secretHash("object-code"), now, time.Hour)
+			if err != nil {
+				return err
+			}
+			return tx.CompleteAuthorization(ctx, completed, revision, now)
+		})
 	})
 }
 
@@ -159,8 +182,8 @@ func TestP2ObjectSnapshotsAreImmutableAndCannotBeDroppedFromLineage(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.admin.Exec(ctx, `INSERT INTO mayi.issuances(tenant_id,issuance_id,grant_id,revision,origin_code,source_credential,resource,scopes,expires_at,object_ceiling)
- SELECT 'a','fixture-issuance',grant_id,revision,hash,hash,resource,ceiling_scopes,clock_timestamp()+interval '5 minutes',object_ceiling FROM mayi.credentials WHERE tenant_id='a'`); err != nil {
+	if _, err := e.admin.Exec(ctx, `INSERT INTO mayi.issuances(tenant_id,issuance_id,grant_id,revision,origin_code,source_credential,resource,scopes,expires_at,object_ceiling,token_hash)
+ SELECT 'a','fixture-issuance',grant_id,revision,hash,hash,resource,ceiling_scopes,clock_timestamp()+interval '5 minutes',object_ceiling,'`+secretHash("fixture-issuance")+`' FROM mayi.credentials WHERE tenant_id='a'`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.admin.Exec(ctx, `INSERT INTO mayi.grant_revisions(tenant_id,grant_id,revision,scopes,expires_at,object_ceiling)
@@ -183,9 +206,9 @@ func TestP2ObjectSnapshotsAreImmutableAndCannotBeDroppedFromLineage(t *testing.T
 	}
 	for _, sql := range []string{
 		`INSERT INTO mayi.grant_revisions(tenant_id,grant_id,revision,scopes,expires_at) SELECT tenant_id,grant_id,3,scopes,expires_at FROM mayi.grant_revisions WHERE tenant_id='a' AND revision=1`,
-		`INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,origin_code) SELECT tenant_id,'lost-object','authorization_code',grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,'lost-object' FROM mayi.credentials WHERE tenant_id='a'`,
+		`INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,origin_code,authorization_hash) SELECT tenant_id,'lost-object','authorization_code',grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,'lost-object',authorization_hash FROM mayi.credentials WHERE tenant_id='a'`,
 		`INSERT INTO mayi.refresh_families(tenant_id,family_id,grant_id,revision,origin_code,absolute_deadline,idle_seconds) SELECT tenant_id,'lost-object',grant_id,revision,origin_code,absolute_deadline,idle_seconds FROM mayi.refresh_families WHERE tenant_id='a'`,
-		`INSERT INTO mayi.issuances(tenant_id,issuance_id,grant_id,revision,origin_code,source_credential,resource,scopes,expires_at) SELECT tenant_id,'lost-object',grant_id,revision,origin_code,source_credential,resource,scopes,expires_at FROM mayi.issuances WHERE tenant_id='a'`,
+		`INSERT INTO mayi.issuances(tenant_id,issuance_id,grant_id,revision,origin_code,source_credential,resource,scopes,expires_at,token_hash) SELECT tenant_id,'lost-object',grant_id,revision,origin_code,source_credential,resource,scopes,expires_at,'` + secretHash("lost-object") + `' FROM mayi.issuances WHERE tenant_id='a'`,
 	} {
 		if _, err := e.admin.Exec(ctx, sql); err == nil {
 			t.Fatal("object descendant lost restrictions", sql)
@@ -304,8 +327,8 @@ func TestP2CredentialAuthenticationDoesNotRehydrateObjectPayload(t *testing.T) {
 	}
 	// An owner-inserted malformed authority body must not be needed to check
 	// client/PKCE possession. The closed path reads only its presence, then denies.
-	if _, err := e.admin.Exec(ctx, `INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,origin_code,pkce_challenge,redirect_uri,object_ceiling)
- SELECT tenant_id,'malformed-object-code',kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,'malformed-object-code',pkce_challenge,redirect_uri,
+	if _, err := e.admin.Exec(ctx, `INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,origin_code,pkce_challenge,redirect_uri,authorization_hash,object_ceiling)
+ SELECT tenant_id,'malformed-object-code',kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,'malformed-object-code',pkce_challenge,redirect_uri,authorization_hash,
  jsonb_set(object_ceiling,'{details,0,identifier}','false'::jsonb) FROM mayi.credentials WHERE tenant_id='a'`); err != nil {
 		t.Fatal(err)
 	}

@@ -36,3 +36,42 @@ func (h *GrantControls) Revoke(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(204)
 }
+
+func (h *GrantControls) List(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	if len(query) > 1 || len(query["after"]) > 1 || len(query) == 1 && !query.Has("after") {
+		transport.Error(w, 400, "invalid_request")
+		return
+	}
+	actor := middleware.Actor(r)
+	result, err := h.service.AdminList(r.Context(), grants.Operator{Scope: actor.Scope, ID: actor.ID, Permissions: actor.Permissions}, query.Get("after"))
+	if errors.Is(err, grants.ErrDenied) {
+		transport.Error(w, 403, "forbidden")
+		return
+	}
+	if err != nil {
+		transport.Error(w, 503, "temporarily_unavailable")
+		return
+	}
+	type summary struct {
+		ID           string   `json:"id"`
+		Client       string   `json:"client_id"`
+		Subject      string   `json:"subject"`
+		Resource     string   `json:"resource"`
+		Revision     uint64   `json:"revision"`
+		Scopes       []string `json:"scopes"`
+		TokensIssued uint64   `json:"tokens_issued"`
+	}
+	values := make([]summary, 0, len(result))
+	for _, g := range result {
+		values = append(values, summary{g.ID, g.ClientID, g.Subject, g.Resource, g.Revision, g.Scopes, g.TokensIssued})
+	}
+	next := ""
+	if len(result) == 100 {
+		next = result[len(result)-1].ID
+	}
+	transport.JSON(w, 200, struct {
+		Grants []summary `json:"grants"`
+		Next   string    `json:"after,omitempty"`
+	}{values, next})
+}

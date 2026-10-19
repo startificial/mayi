@@ -12,6 +12,8 @@ import (
 
 var ErrDenied = errors.New("authorization denied")
 var ErrInvalid = errors.New("invalid authorization request")
+var ErrInvalidDetails = errors.New("invalid authorization details")
+var ErrInvalidScope = errors.New("invalid authorization scope")
 var ErrUnavailable = errors.New("authorization unavailable")
 
 type Material struct{ ID, Secret, Hash string }
@@ -64,45 +66,11 @@ func New(store Store, clock Clock, material MaterialSource, objects ObjectConsen
 func validMaterial(m Material) bool {
 	return resources.ValidID(m.ID) && len(m.Secret) >= 43 && len(m.Secret) <= 128 && domain.ValidHandleHash(m.Hash) && m.Secret != m.Hash
 }
-func (s *Service) Begin(ctx context.Context, request domain.Request, browserBindingHash string) (BeginResult, error) {
-	if !request.Valid() || !request.ObjectCeiling.IsZero() || !domain.ValidHandleHash(browserBindingHash) {
-		return BeginResult{}, ErrInvalid
-	}
-	now := s.clock.Now()
-	if now.IsZero() {
-		return BeginResult{}, ErrUnavailable
-	}
-	var result BeginResult
-	err := s.store.RunAuthorization(ctx, request.TenantIssuer, func(tx Transaction) error {
-		registration, err := tx.Registration(ctx, request.ClientID, request.ResourceURI)
-		if err != nil {
-			return err
-		}
-		if !request.AllowedBy(registration) {
-			return ErrInvalid
-		}
-		handle, err := s.material.NewAuthorizationMaterial(ctx)
-		if err != nil || !validMaterial(handle) {
-			return ErrUnavailable
-		}
-		csrf, err := s.material.NewAuthorizationMaterial(ctx)
-		if err != nil || !validMaterial(csrf) || csrf.Hash == handle.Hash {
-			return ErrUnavailable
-		}
-		workflow, err := domain.New(domain.Spec{ID: handle.ID, HandleHash: handle.Hash, BrowserBindingHash: browserBindingHash, CSRFHash: csrf.Hash, Request: request, PolicyVersion: registration.Policy.Version, CreatedAt: now, ExpiresAt: now.Add(5 * time.Minute), Status: domain.Pending})
-		if err != nil {
-			return ErrInvalid
-		}
-		if err := tx.CreateAuthorization(ctx, workflow); err != nil {
-			return err
-		}
-		result = BeginResult{Handle: handle.Secret, CSRFToken: csrf.Secret, ExpiresAt: workflow.Snapshot().ExpiresAt}
-		return nil
-	})
-	if err != nil {
-		return BeginResult{}, classified(err)
-	}
-	return result, nil
+
+// Begin rejects direct authorization. Every interactive request must first be
+// authenticated and persisted through PAR, then consumed by BeginPushed.
+func (s *Service) Begin(context.Context, domain.Request, string) (BeginResult, error) {
+	return BeginResult{}, ErrInvalid
 }
 func validProof(p AccessProof, mutation bool) bool {
 	return p.TenantIssuer.Valid() && domain.ValidHandleHash(p.SessionHash) && domain.ValidHandleHash(p.AuthorizationHash) && domain.ValidHandleHash(p.BrowserBindingHash) && (!mutation || domain.ValidHandleHash(p.CSRFHash))
@@ -190,8 +158,13 @@ func (s *Service) Decide(ctx context.Context, d Decision) (DecisionResult, error
 
 func (s *Service) completeDecision(ctx context.Context, tx Transaction, workflow domain.Transaction, current domain.Registration, actor Principal, approve bool, presented, fresh domain.ObjectConsentProjection) (DecisionResult, error) {
 	var material Material
+	var previous *grants.Revision
 	var err error
 	if approve {
+		previous, err = tx.CurrentApproval(ctx, workflow, s.clock.Now())
+		if err != nil {
+			return DecisionResult{}, err
+		}
 		material, err = s.material.NewCodeMaterial(ctx, actor.TenantIssuer)
 		if err != nil || !validMaterial(material) {
 			return DecisionResult{}, ErrUnavailable
@@ -202,7 +175,7 @@ func (s *Service) completeDecision(ctx context.Context, tx Transaction, workflow
 	var completed domain.Transaction
 	var revision grants.Revision
 	if approve && !workflow.Snapshot().Request.ObjectCeiling.IsZero() {
-		completed, revision, err = workflow.ApproveObjects(presented, fresh, actor.Subject, material.ID, material.Hash, now, lifetime)
+		completed, revision, err = workflow.ApproveIncrementalObjects(presented, fresh, actor.Subject, material.ID, material.Hash, now, lifetime, previous)
 	} else {
 		completed, revision, err = workflow.Decide(approve, actor.Subject, material.ID, material.Hash, now, lifetime)
 	}
@@ -224,6 +197,12 @@ func classified(err error) error {
 	if errors.Is(err, ErrDenied) {
 		return ErrDenied
 	}
+	if errors.Is(err, ErrInvalidDetails) {
+		return errors.Join(ErrInvalid, ErrInvalidDetails)
+	}
+	if errors.Is(err, ErrInvalidScope) {
+		return errors.Join(ErrInvalid, ErrInvalidScope)
+	}
 	if errors.Is(err, ErrInvalid) {
 		return ErrInvalid
 	}
@@ -243,6 +222,9 @@ func (s *Service) loadConsent(ctx context.Context, tx Transaction, p AccessProof
 		return empty, none, err
 	}
 	spec := workflow.Snapshot()
+	if _, err := domain.New(spec); err != nil {
+		return empty, none, ErrDenied
+	}
 	now := s.clock.Now()
 	if spec.Status != domain.Pending || spec.HandleHash != p.AuthorizationHash || spec.Request.TenantIssuer != p.TenantIssuer || spec.BrowserBindingHash != p.BrowserBindingHash || p.CSRFHash != "" && spec.CSRFHash != p.CSRFHash || now.Before(spec.CreatedAt) || !now.Before(spec.ExpiresAt) {
 		return empty, none, ErrDenied
@@ -251,7 +233,7 @@ func (s *Service) loadConsent(ctx context.Context, tx Transaction, p AccessProof
 	if err != nil {
 		return empty, none, err
 	}
-	allowed := spec.Request.AllowedBy(current)
+	allowed := false
 	if allowObjects && spec.PushedRequestHash != "" && !spec.Request.ObjectCeiling.IsZero() {
 		allowed = spec.Request.MatchesObjectRegistration(current)
 	}
@@ -263,6 +245,9 @@ func (s *Service) loadConsent(ctx context.Context, tx Transaction, p AccessProof
 
 func (s *Service) bindConsent(ctx context.Context, tx Transaction, p AccessProof, actor Principal, workflow domain.Transaction) (domain.Transaction, error) {
 	spec := workflow.Snapshot()
+	if _, err := domain.New(spec); err != nil {
+		return domain.Transaction{}, ErrDenied
+	}
 	now := s.clock.Now()
 	if spec.ConsentSessionHash == "" {
 		bound, err := workflow.BindSession(actor.SessionHash, now)

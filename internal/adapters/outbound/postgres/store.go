@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/startificial/mayi/internal/domain/grants"
+	"github.com/startificial/mayi/internal/services/delivery"
 	"github.com/startificial/mayi/internal/services/tokens"
 )
 
@@ -50,7 +51,8 @@ func scopeTransaction(ctx context.Context, tx pgx.Tx, scope grants.Scope) error 
 	if !scope.Valid() {
 		return tokens.ErrInvalidCredential
 	}
-	_, err := tx.Exec(ctx, "SELECT set_config('mayi.tenant_id',$1,true)", scope.TenantID)
+	metadata := delivery.Metadata(ctx)
+	_, err := tx.Exec(ctx, "SELECT set_config('mayi.tenant_id',$1,true),set_config('mayi.request_id',$2,true),set_config('mayi.remote_ip',$3,true),set_config('mayi.user_agent',$4,true)", scope.TenantID, metadata.RequestID, metadata.IP, metadata.UserAgent)
 	return err
 }
 func (s *Store) AuthorizeRedemption(ctx context.Context, caller tokens.Caller, _ string) (uint64, error) {
@@ -199,7 +201,9 @@ func (t *transaction) GrantRevision(ctx context.Context, id string, number uint6
 	}
 	catalog := make([]string, 0, len(current.Resource.Scopes))
 	for _, permission := range current.Resource.Scopes {
-		catalog = append(catalog, permission.Name)
+		if !permission.RequiresAdmin {
+			catalog = append(catalog, permission.Name)
+		}
 	}
 	state.CurrentScopes, err = state.Revision.Narrow(catalog, nil, state.CurrentScopes)
 	if err != nil {
@@ -230,8 +234,8 @@ func (t *transaction) GrantRevision(ctx context.Context, id string, number uint6
 	}
 	var authTime *time.Time
 	err = t.tx.QueryRow(ctx, `SELECT o.oidc,o.nonce,o.offline_access,e.authenticated_at FROM mayi.credentials c JOIN mayi.authorization_transactions w ON w.tenant_id=c.tenant_id AND w.handle_hash=c.authorization_hash JOIN mayi.authorization_options o ON o.tenant_id=w.tenant_id AND o.handle_hash=w.handle_hash LEFT JOIN mayi.session_authentication e ON e.tenant_id=w.tenant_id AND e.session_hash=w.consent_session_hash WHERE c.tenant_id=$1 AND c.hash=$2 AND w.status='approved'`, t.scope.TenantID, t.credential.OriginCode).Scan(&state.OIDC, &state.Nonce, &state.OfflineAccess, &authTime)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return tokens.GrantState{}, err
+	if err != nil {
+		return tokens.GrantState{}, tokens.ErrInvalidCredential
 	}
 	if authTime != nil {
 		state.AuthenticatedAt = *authTime

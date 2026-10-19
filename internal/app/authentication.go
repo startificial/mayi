@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/startificial/mayi/internal/adapters/inbound/http/middleware"
 	"github.com/startificial/mayi/internal/adapters/inbound/http/oauth"
 	"github.com/startificial/mayi/internal/adapters/inbound/http/selfservice"
 	cryptoadapter "github.com/startificial/mayi/internal/adapters/outbound/crypto"
@@ -36,7 +37,15 @@ func NewBrowser(ctx context.Context, c Config, t TenantConfig, store *postgres.S
 	if err != nil {
 		return nil, ErrConfiguration
 	}
-	login, err := authentication.New(store, systemClock{}, cryptoadapter.NewLoginSecrets(), provider, scope)
+	admission, err := authentication.NewAdmission(store, c.BudgetRules())
+	if err != nil {
+		return nil, err
+	}
+	ipAdmission, err := middleware.NewAdmission(admission, c.TrustedProxies)
+	if err != nil {
+		return nil, err
+	}
+	login, err := authentication.New(store, systemClock{}, cryptoadapter.NewLoginSecrets(), provider, scope, admission)
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +85,18 @@ func NewBrowser(ctx context.Context, c Config, t TenantConfig, store *postgres.S
 	base := "/t/" + t.ID
 	router.HandleFunc("POST "+base+"/par", pushed.Push)
 	router.HandleFunc("GET "+base+"/authorize", browser.Authorize)
+	for _, binding := range t.ResourceBindings {
+		pushed, err := oauth.NewResourcePushed(scope, client, consent, binding.Resource)
+		if err != nil {
+			return nil, err
+		}
+		boundBrowser, err := selfservice.NewResourceBound(login, consent, scope, p.Issuer, binding.Resource)
+		if err != nil {
+			return nil, err
+		}
+		router.HandleFunc("POST "+base+"/r/"+binding.ID+"/par", pushed.Push)
+		router.HandleFunc("GET "+base+"/r/"+binding.ID+"/authorize", boundBrowser.Authorize)
+	}
 	router.HandleFunc("GET "+base+"/upstream/callback", browser.Callback)
 	router.HandleFunc("GET "+base+"/consent", browser.Consent)
 	router.HandleFunc("POST "+base+"/consent", browser.Decide)
@@ -84,6 +105,13 @@ func NewBrowser(ctx context.Context, c Config, t TenantConfig, store *postgres.S
 	router.HandleFunc("GET "+base+"/sessions", controls.Sessions)
 	router.HandleFunc("POST "+base+"/sessions/{id}/revoke", controls.Sessions)
 	router.HandleFunc("GET "+base+"/grants", controls.Grants)
+	router.HandleFunc("GET "+base+"/connected-apps", controls.ConnectedApps)
 	router.HandleFunc("POST "+base+"/grants/{id}/revoke", controls.Grants)
-	return router, nil
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		operation := "login"
+		if r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/par") {
+			operation = "token"
+		}
+		ipAdmission.Protect(scope, operation, router).ServeHTTP(w, r)
+	}), nil
 }

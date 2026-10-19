@@ -20,10 +20,11 @@ type PushedResult struct {
 type PushedProof struct {
 	TenantIssuer                                grants.Scope
 	ClientID, ReferenceHash, BrowserBindingHash string
+	ResourceURI                                 string
 }
 
 func (p PushedProof) Valid() bool {
-	return p.TenantIssuer.Valid() && resources.ValidID(p.ClientID) && domain.ValidHandleHash(p.ReferenceHash) && domain.ValidHandleHash(p.BrowserBindingHash)
+	return (p.ResourceURI == "" || resources.ValidURI(p.ResourceURI)) && p.TenantIssuer.Valid() && resources.ValidID(p.ClientID) && domain.ValidHandleHash(p.ReferenceHash) && domain.ValidHandleHash(p.BrowserBindingHash)
 }
 
 // Push supports the currently registered public web-client model only. Future
@@ -52,7 +53,13 @@ func (s *Service) push(ctx context.Context, request domain.Request, authVersion 
 		if err != nil {
 			return err
 		}
-		if current.Client.Machine || authVersion != 0 && current.Client.AuthenticationVersion != authVersion || !request.MatchesObjectRegistration(current) {
+		if !current.Resource.AllowsUserScopes(request.PermissionScopes) {
+			return ErrInvalidScope
+		}
+		if _, err := resources.ValidateObjectRequest(request.TenantIssuer, request.ResourceURI, current.ObjectProfiles, request.ObjectCeiling.Snapshot().Details); err != nil {
+			return ErrInvalidDetails
+		}
+		if current.Client.Machine || authVersion == 0 && current.Client.AuthMethod != "" && current.Client.AuthMethod != "none" || authVersion != 0 && current.Client.AuthenticationVersion != authVersion || !request.MatchesObjectRegistration(current) {
 			return ErrInvalid
 		}
 		m, err := s.material.NewAuthorizationMaterial(ctx)
@@ -89,7 +96,7 @@ func (s *Service) BeginPushed(ctx context.Context, proof PushedProof) (BeginResu
 			return err
 		}
 		p := pushed.Snapshot()
-		if !pushed.ActiveAt(s.clock.Now()) || p.ReferenceHash != proof.ReferenceHash || p.Request.TenantIssuer != proof.TenantIssuer || p.Request.ClientID != proof.ClientID {
+		if !pushed.ActiveAt(s.clock.Now()) || p.ReferenceHash != proof.ReferenceHash || p.Request.TenantIssuer != proof.TenantIssuer || p.Request.ClientID != proof.ClientID || proof.ResourceURI != "" && proof.ResourceURI != p.Request.ResourceURI {
 			return ErrDenied
 		}
 		current, err := tx.Registration(ctx, proof.ClientID, p.Request.ResourceURI)

@@ -102,3 +102,25 @@ The operator correlates the ID with restricted structured logs and, where availa
 The workflow explicitly runs `go test -race -count=1 ./internal/adapters/inbound/http/... -run '^TestErrorContract'`; the full race suite also includes these tests. The tests compare every local transport definition with the catalog, require recovery guidance/documentation anchors, check status/body/headers and unknown-mapping fallback, exercise wrapped service-error mappings and prevent raw exception disclosure in those responses. They also preserve generic browser denials and safe authorization redirects.
 
 CI cannot prove that every new endpoint uses the right semantics or that every diagnostic is safe. Every enabled endpoint needs positive, denial, foreign-tenant/non-enumeration, dependency-failure and protocol-format tests where applicable. Keep implemented, planned and verified distinct; full SDK/protocol coverage is a P2 gate, not a claim made by the catalog test.
+
+### rate_limited
+
+Local browser admission returns HTTP 429 with `Retry-After` when a configured shared budget is exhausted. Honor the delay and restart expired workflows. OAuth token/introspection admission uses `temporarily_unavailable` with HTTP 429 and the same header. No credential is issued by a request rejected at admission. This does not resolve an earlier request whose outcome was lost; do not automatically retry one-use credentials after an ambiguous failure.
+
+## Enabled P2 protocol surfaces
+
+OAuth adapters use fixed standard error names and no rejected values or raw internal errors. Successful token/PAR/introspection responses and errors use no-store. Registered client authentication failure is 401 invalid_client with a Basic challenge. Unknown credentials remain generic.
+
+| Surface | Success | Denial / recovery |
+| --- | --- | --- |
+| PAR | 201 request_uri + finite expires_in | 400 invalid_request for malformed form; invalid_scope for unavailable user scopes; invalid_authorization_details for invalid/unknown typed authority; invalid_target for a conflicting provisioned binding. Correct the request and submit a new PAR. |
+| Authorize / consent | 303 registered redirect with code/state/iss; explicit denial access_denied/state/iss | Untrusted or expired references fail locally without redirecting. Restart PAR/login. Cookie POSTs require exact Origin/CSRF as applicable. |
+| Token | 200 exact bounded access authority, optional ID/refresh | 400 invalid_grant, invalid_scope, invalid_authorization_details, invalid_dpop_proof or unsupported_grant_type; 401 invalid_client. Invalid proof/expansion never issues authority. Authenticated credential reuse may revoke the lineage. |
+| Introspection | 200 active claims or exactly active:false | 401 invalid_client for an unauthorized caller/target; invalid/inactive credentials reveal no extra state; 503 if authoritative status or audit state is unavailable. |
+| Revocation | 200 empty, including unknown/non-owned token | Client authentication remains required according to registration. Hints are advisory. Retry is not a way to discover credential state. |
+| User controls / connected apps | 200 views, 204 mutation | Generic invalid_request for foreign/invalid browser proof; same-origin cookie mutation; 503 on authority failure. |
+| Administrator controls | 200/201/204 | 403 forbidden before protected reads/mutations; 400 invalid_request for malformed values; 409 conflict for version/uniqueness races; 503 dependency failure. |
+
+Shared budget rejection is 429 with Retry-After. Known rejection before issuance does not resolve an earlier ambiguous one-use request. Never infer retry safety from timeout/5xx. The SDK returns typed ErrDenied/ErrUnavailable and preserves context cancellation; application callback errors remain the application's responsibility. See its integration guide for bounded form handling and body validation.
+
+Generated X-Request-ID values link responses, transport logs and durable audit/outbox. Trusted peer IP and bounded printable User-Agent are stored as metadata; rejected credentials, bodies and arbitrary key URLs never become diagnostic text. Missing denial-audit storage is itself logged as security_audit_unavailable and never permits a rejected action.

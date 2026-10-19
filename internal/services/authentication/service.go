@@ -21,6 +21,7 @@ type Service struct {
 	secrets      Secrets
 	provider     Provider
 	tenantIssuer grants.Scope
+	admission    RequestAdmission
 }
 type Start struct {
 	BrowserHash, AuthorizationHash string
@@ -40,11 +41,11 @@ type Session struct {
 	LifetimeSeconds int
 }
 
-func New(store Store, clock Clock, secrets Secrets, provider Provider, tenantIssuer grants.Scope) (*Service, error) {
-	if store == nil || clock == nil || secrets == nil || provider == nil || !tenantIssuer.Valid() || !resources.ValidID(provider.ID()) || !authorization.ValidHandleHash(provider.Fingerprint()) {
+func New(store Store, clock Clock, secrets Secrets, provider Provider, tenantIssuer grants.Scope, admission RequestAdmission) (*Service, error) {
+	if admission == nil || store == nil || clock == nil || secrets == nil || provider == nil || !tenantIssuer.Valid() || !resources.ValidID(provider.ID()) || !authorization.ValidHandleHash(provider.Fingerprint()) {
 		return nil, ErrUnavailable
 	}
-	return &Service{store, clock, secrets, provider, tenantIssuer}, nil
+	return &Service{store, clock, secrets, provider, tenantIssuer, admission}, nil
 }
 func validSecret(s string) bool {
 	if len(s) != 43 {
@@ -62,6 +63,13 @@ func (s *Service) Start(ctx context.Context, request Start) (Challenge, error) {
 	if now.IsZero() || !request.ExpiresAt.After(now) || request.ExpiresAt.After(now.Add(5*time.Minute)) || !authorization.ValidHandleHash(request.BrowserHash) || !authorization.ValidHandleHash(request.AuthorizationHash) {
 		return Challenge{}, ErrDenied
 	}
+	client, err := s.store.LoginClient(ctx, s.tenantIssuer, request.AuthorizationHash, request.BrowserHash, now)
+	if err != nil || client == "" {
+		return Challenge{}, ErrDenied
+	}
+	if err := s.admission.Check(ctx, s.tenantIssuer, "login", "client", client); err != nil {
+		return Challenge{}, err
+	}
 	out := Challenge{CreatedAt: now, ExpiresAt: request.ExpiresAt}
 	for _, target := range []*string{&out.State, &out.Nonce, &out.Verifier} {
 		v, err := s.secrets.NewSecret(ctx)
@@ -73,7 +81,6 @@ func (s *Service) Start(ctx context.Context, request Start) (Challenge, error) {
 	if out.State == out.Nonce || out.State == out.Verifier || out.Nonce == out.Verifier {
 		return Challenge{}, ErrUnavailable
 	}
-	var err error
 	out.URL, err = s.provider.AuthorizationURL(out.State, out.Nonce, out.Verifier)
 	if err != nil {
 		return Challenge{}, ErrUnavailable
@@ -112,6 +119,9 @@ func (s *Service) Complete(ctx context.Context, input Callback) (Session, error)
 	now := s.clock.Now()
 	if !evidence.ValidFor(l, now) {
 		return Session{}, ErrDenied
+	}
+	if err := s.admission.Check(ctx, s.tenantIssuer, "login", "user", evidence.Issuer+" "+evidence.Subject); err != nil {
+		return Session{}, err
 	}
 	handle, err := s.secrets.NewSecret(ctx)
 	if err != nil || !validSecret(handle) {

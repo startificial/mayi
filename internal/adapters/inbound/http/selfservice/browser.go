@@ -16,6 +16,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/startificial/mayi/internal/adapters/inbound/web"
 	"github.com/startificial/mayi/internal/domain/clients"
 	"github.com/startificial/mayi/internal/domain/grants"
+	"github.com/startificial/mayi/internal/domain/resources"
 	"github.com/startificial/mayi/internal/services/authentication"
 	"github.com/startificial/mayi/internal/services/authorization"
 )
@@ -33,6 +35,7 @@ type Handler struct {
 	consent                      *authorization.Service
 	scope                        grants.Scope
 	origin, upstreamIssuer, base string
+	boundResource                string
 }
 
 func New(login *authentication.Service, consent *authorization.Service, scope grants.Scope, upstreamIssuer string) (*Handler, error) {
@@ -40,7 +43,19 @@ func New(login *authentication.Service, consent *authorization.Service, scope gr
 	if err != nil || !scope.Valid() || login == nil || consent == nil {
 		return nil, authentication.ErrUnavailable
 	}
-	return &Handler{login, consent, scope, u.Scheme + "://" + u.Host, upstreamIssuer, u.Path}, nil
+	return &Handler{login: login, consent: consent, scope: scope, origin: u.Scheme + "://" + u.Host, upstreamIssuer: upstreamIssuer, base: u.Path}, nil
+}
+
+func NewResourceBound(login *authentication.Service, consent *authorization.Service, scope grants.Scope, upstreamIssuer, resource string) (*Handler, error) {
+	if !resources.ValidURI(resource) {
+		return nil, authentication.ErrUnavailable
+	}
+	h, err := New(login, consent, scope, upstreamIssuer)
+	if err != nil {
+		return nil, err
+	}
+	h.boundResource = resource
+	return h, nil
 }
 
 type flowCookie struct {
@@ -127,6 +142,12 @@ func consentPolicy(redirect string) (string, error) {
 	return pagePolicy(u.Scheme + "://" + u.Host), nil
 }
 func (h *Handler) failure(w http.ResponseWriter, err error) {
+	var limited *authentication.LimitError
+	if errors.As(err, &limited) {
+		w.Header().Set("Retry-After", strconv.Itoa(limited.RetryAfterSeconds))
+		httptransport.Error(w, 429, "rate_limited")
+		return
+	}
 	status := 400
 	code := "invalid_request"
 	if errors.Is(err, authentication.ErrUnavailable) || errors.Is(err, authorization.ErrUnavailable) {
@@ -182,6 +203,7 @@ func (h *Handler) Authorize(w http.ResponseWriter, r *http.Request) {
 		h.failure(w, err)
 		return
 	}
+	proof.ResourceURI = h.boundResource
 	begun, err := h.consent.BeginPushed(ctx, proof)
 	if err != nil {
 		h.failure(w, err)

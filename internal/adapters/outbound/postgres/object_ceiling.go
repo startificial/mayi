@@ -25,7 +25,7 @@ const maxObjectCeilingRecordBytes = 1 << 20
 
 func encodeObjectCeiling(c grants.ObjectCeiling, scope grants.Scope, resource string) ([]byte, error) {
 	if c.IsZero() {
-		return nil, nil // Staged missing authority, never unrestricted objects.
+		return nil, grants.ErrInvalidObjectCeiling
 	}
 	s := c.Snapshot()
 	if !c.BoundTo(scope, resource) || len(s.Details) == 0 {
@@ -60,7 +60,7 @@ func recordMembers(data []byte, names ...string) (map[string]json.RawMessage, er
 
 func decodeObjectCeiling(data []byte, scope grants.Scope, resource string) (grants.ObjectCeiling, error) {
 	if data == nil {
-		return grants.ObjectCeiling{}, nil
+		return grants.ObjectCeiling{}, grants.ErrInvalidObjectCeiling
 	}
 	if len(data) == 0 || len(data) > maxObjectCeilingRecordBytes {
 		return grants.ObjectCeiling{}, grants.ErrInvalidObjectCeiling

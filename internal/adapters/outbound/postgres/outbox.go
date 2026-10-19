@@ -31,8 +31,8 @@ func (s *Store) ClaimEvent(ctx context.Context, scope grants.Scope, now time.Tim
 ), claimed AS (
  UPDATE mayi.outbox_events o SET attempts=o.attempts+1,available_at=$4 FROM candidate c
  WHERE o.tenant_id=c.tenant_id AND o.event_id=c.event_id RETURNING o.event_id,o.attempts
-) SELECT c.event_id,c.attempts,a.event_type,a.actor_id,a.object_ref,COALESCE(a.grant_id,''),COALESCE(a.issuance_id,''),a.created_at FROM claimed c
- JOIN mayi.audit_events a ON a.event_id=c.event_id AND a.tenant_id=$1`, scope.TenantID, scope.Issuer, now, now.Add(lease)).Scan(&d.Event.ID, &d.Attempt, &d.Event.Type, &d.Event.Actor, &d.Event.Object, &d.Event.GrantID, &d.Event.IssuanceID, &d.Event.OccurredAt)
+) SELECT c.event_id,c.attempts,a.event_type,a.actor_id,a.object_ref,COALESCE(a.grant_id,''),COALESCE(a.issuance_id,''),a.created_at,a.request_id,a.remote_ip,a.user_agent,a.user_id,a.client_id,a.resource,a.status_code FROM claimed c
+ JOIN mayi.audit_events a ON a.event_id=c.event_id AND a.tenant_id=$1`, scope.TenantID, scope.Issuer, now, now.Add(lease)).Scan(&d.Event.ID, &d.Attempt, &d.Event.Type, &d.Event.Actor, &d.Event.Object, &d.Event.GrantID, &d.Event.IssuanceID, &d.Event.OccurredAt, &d.Event.RequestID, &d.Event.IP, &d.Event.UserAgent, &d.Event.UserID, &d.Event.ClientID, &d.Event.Resource, &d.Event.StatusCode)
 	if err == pgx.ErrNoRows {
 		return audit.Delivery{}, false, nil
 	}

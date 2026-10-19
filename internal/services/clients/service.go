@@ -20,8 +20,9 @@ type Service struct {
 	assertions AssertionVerifier
 	secrets    Secrets
 	scope      grants.Scope
+	admission  AuthenticationAdmission
 }
-type Proof struct{ ClientID, Method, Secret, Assertion, Audience string }
+type Proof struct{ ClientID, Method, Secret, Assertion, Audience, Operation string }
 type Principal struct {
 	Resources []string
 	Client    domain.Client
@@ -34,15 +35,25 @@ type Operator struct {
 	Permissions []string
 }
 
-func New(store Store, c Clock, a AssertionVerifier, secrets Secrets, scope grants.Scope) (*Service, error) {
-	if store == nil || c == nil || a == nil || secrets == nil || !scope.Valid() {
+func New(store Store, c Clock, a AssertionVerifier, secrets Secrets, scope grants.Scope, admission AuthenticationAdmission) (*Service, error) {
+	if admission == nil || store == nil || c == nil || a == nil || secrets == nil || !scope.Valid() {
 		return nil, ErrUnavailable
 	}
-	return &Service{store, c, a, secrets, scope}, nil
+	return &Service{store, c, a, secrets, scope, admission}, nil
 }
 func (s *Service) Authenticate(ctx context.Context, p Proof) (Principal, error) {
 	if !domain.ValidClientID(p.ClientID) || len(p.Secret) > 256 || len(p.Assertion) > 16384 || p.Method != "none" && p.Method != "client_secret_basic" && p.Method != "private_key_jwt" {
 		return Principal{}, ErrDenied
+	}
+	operation := p.Operation
+	if operation == "" {
+		operation = "token"
+	}
+	if operation != "token" && operation != "introspection" {
+		return Principal{}, ErrDenied
+	}
+	if err := s.admission.Check(ctx, s.scope, operation, "client", "authentication:"+p.ClientID); err != nil {
+		return Principal{}, err
 	}
 	a, err := s.store.Authentication(ctx, s.scope, p.ClientID)
 	if err != nil {

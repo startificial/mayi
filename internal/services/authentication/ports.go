@@ -23,6 +23,7 @@ type Provider interface {
 // tenant coordination row FOR UPDATE before identity rows. No external I/O is
 // performed while holding these locks. Membership/mapping are never auto-created.
 type Store interface {
+	LoginClient(context.Context, grants.Scope, string, string, time.Time) (string, error)
 	StartLogin(context.Context, identity.Login) error
 	ClaimLogin(context.Context, identity.Login, time.Time) error
 	CompleteLogin(context.Context, identity.Login, identity.Assertion, string, string, time.Time) error

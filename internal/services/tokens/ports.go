@@ -2,6 +2,7 @@ package tokens
 
 import (
 	"context"
+	"github.com/startificial/mayi/internal/services/authentication"
 	"time"
 
 	"github.com/startificial/mayi/internal/domain/grants"
@@ -46,10 +47,12 @@ type MaterialSource interface {
 // Callback/commit errors roll back all writes. A nil result means durable commit.
 // It must not retry callbacks: signing and entropy are external effects.
 type UnitOfWork interface {
+	authentication.AdmissionStore
 	Run(context.Context, grants.Scope, func(Transaction) error) error
 }
 
 type Transaction interface {
+	authentication.AdmissionStore
 	// Credential is a tenant-scoped authentication projection, not a grant payload.
 	Credential(context.Context, string) (Credential, error)
 	// Called only after client/binding/S256 possession checks. The narrow
@@ -62,4 +65,11 @@ type Transaction interface {
 	// CommitIssuance checks uniqueness, consumes the credential, and writes a
 	// successor (refresh only), lineage, and audit in the current transaction.
 	CommitIssuance(context.Context, Credential, Issuance) error
+}
+
+// UsageAdmission keeps shared abuse policy in the authentication capability.
+// CheckUsing enlists the current issuance transaction to avoid nested pooling.
+type UsageAdmission interface {
+	Check(context.Context, grants.Scope, string, string, string) error
+	CheckUsing(context.Context, authentication.AdmissionStore, grants.Scope, string, string, string) error
 }

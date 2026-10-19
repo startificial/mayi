@@ -28,7 +28,7 @@ func TestObjectRedemptionCannotFallBackToScopeOnlyIssuance(t *testing.T) {
 				switch position {
 				case "credential":
 					c := f.store.state.credentials[f.cmd.CredentialHash]
-					c.ObjectBound = true
+					c.ObjectBound = false
 					f.store.state.credentials[c.Hash] = c
 				case "revision":
 					s := f.store.state.grant.Revision.Snapshot()

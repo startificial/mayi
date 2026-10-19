@@ -31,6 +31,7 @@ import (
 	"github.com/startificial/mayi/internal/app"
 	"github.com/startificial/mayi/internal/domain/grants"
 	domain "github.com/startificial/mayi/internal/domain/tokens"
+	"github.com/startificial/mayi/internal/services/authentication"
 	"github.com/startificial/mayi/internal/services/tokens"
 )
 
@@ -103,12 +104,12 @@ func setup(t *testing.T) *environment {
 	}
 	// The shared adapter always targets the current additive schema. Keep the
 	// original P0 behavioral fixtures, but run them against every migration.
-	for _, source := range []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed, migrations.ObjectPresentations, migrations.Lifecycle} {
+	for _, source := range []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed, migrations.ObjectPresentations, migrations.Lifecycle, migrations.RequiredAuthority, migrations.RequestBudgets, migrations.Incremental, migrations.AuditContext} {
 		if _, err := admin.Exec(ctx, source); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := admin.Exec(ctx, `GRANT USAGE ON SCHEMA mayi TO mayi_runtime; GRANT SELECT,INSERT,UPDATE ON ALL TABLES IN SCHEMA mayi TO mayi_runtime; GRANT USAGE ON ALL SEQUENCES IN SCHEMA mayi TO mayi_runtime; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA mayi TO mayi_runtime; REVOKE INSERT,UPDATE ON mayi.grant_revisions FROM mayi_runtime`); err != nil {
+	if _, err := admin.Exec(ctx, `GRANT USAGE ON SCHEMA mayi TO mayi_runtime; GRANT SELECT,INSERT,UPDATE ON ALL TABLES IN SCHEMA mayi TO mayi_runtime; GRANT USAGE ON ALL SEQUENCES IN SCHEMA mayi TO mayi_runtime; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA mayi TO mayi_runtime; REVOKE INSERT,UPDATE ON mayi.grant_revisions FROM mayi_runtime; GRANT DELETE ON mayi.request_budgets TO mayi_runtime`); err != nil {
 		t.Fatal(err)
 	}
 	config, err := pgxpool.ParseConfig(os.Getenv("MAYI_P0_POSTGRES"))
@@ -164,8 +165,8 @@ func setup(t *testing.T) *environment {
  INSERT INTO mayi.client_resources VALUES('a','client','api'),('b','client','api');
  INSERT INTO mayi.resource_object_profiles VALUES('a','api','https://api.example','https://api.example/types/fixture/v1','object-actions-v1','{"read":"Read items","write":"Write items"}'),('b','api','https://api.example','https://api.example/types/fixture/v1','object-actions-v1','{"read":"Read items"}');
  INSERT INTO mayi.client_object_types VALUES('a','client','api','https://api.example/types/fixture/v1'),('b','client','api','https://api.example/types/fixture/v1');
- INSERT INTO mayi.grants(tenant_id,grant_id,client_id,subject,principal_type,resource,current_scopes,expires_at) VALUES('a','grant','client','user:alice','user','https://api.example',ARRAY['read','write'],clock_timestamp()+interval '1 hour'),('b','grant','client','user:bob','user','https://api.example',ARRAY['read'],clock_timestamp()+interval '1 hour');
- INSERT INTO mayi.grant_revisions VALUES('a','grant',1,ARRAY['read','write'],clock_timestamp()+interval '1 hour'),('b','grant',1,ARRAY['read'],clock_timestamp()+interval '1 hour')`)
+ INSERT INTO mayi.grants(tenant_id,grant_id,client_id,subject,principal_type,resource,current_scopes,expires_at,current_object_ceiling) VALUES('a','grant','client','user:alice','user','https://api.example',ARRAY['read','write'],clock_timestamp()+interval '1 hour','`+fixtureObjectJSON+`'),('b','grant','client','user:bob','user','https://api.example',ARRAY['read'],clock_timestamp()+interval '1 hour','`+fixtureObjectJSON+`');
+ INSERT INTO mayi.grant_revisions(tenant_id,grant_id,revision,scopes,expires_at,object_ceiling) VALUES('a','grant',1,ARRAY['read','write'],clock_timestamp()+interval '1 hour','`+fixtureObjectJSON+`'),('b','grant',1,ARRAY['read'],clock_timestamp()+interval '1 hour','`+fixtureObjectJSON+`')`)
 	e.code(t, "code")
 	return e
 }
@@ -176,16 +177,30 @@ func (e *environment) exec(t *testing.T, sql string, args ...any) {
 	}
 }
 func (e *environment) code(t *testing.T, hash string) {
-	e.exec(t, `INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,pkce_challenge,redirect_uri,binding_thumbprint,origin_code)
- VALUES('a',$1,'authorization_code','grant',1,'https://api.example','client',ARRAY['read','write'],clock_timestamp()-interval '1 second',clock_timestamp()+interval '50 seconds',$2,'https://client.example/cb','binding',$1)`, hash, challenge)
+	t.Helper()
+	ctx := context.Background()
+	tx, err := e.admin.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	_, err = tx.Exec(ctx, `INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,pkce_challenge,redirect_uri,binding_thumbprint,origin_code,object_ceiling,authorization_hash)
+ VALUES('a',$1,'authorization_code','grant',1,'https://api.example','client',ARRAY['read','write'],clock_timestamp()-interval '1 second',clock_timestamp()+interval '50 seconds',$2,'https://client.example/cb','binding',$1,$3,$4)`, hash, challenge, fixtureObjectJSON, secretHash("a"+hash+"workflow"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedCodeApproval(t, tx, "a", hash)
+	if err = tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
 }
 func (e *environment) command(hash string) tokens.Command {
 	return tokens.Command{Caller: tokens.Caller{Scope: e.scope, ClientID: "client", BindingThumbprint: "binding"}, Kind: tokens.AuthorizationCode, CredentialHash: hash, Resource: "https://api.example", Verifier: verifier, RedirectURI: "https://client.example/cb", Scopes: []string{"read"}}
 }
 func (e *environment) refresh(t *testing.T) {
-	e.exec(t, `INSERT INTO mayi.refresh_families VALUES('a','family','grant',1,'code',clock_timestamp()+interval '10 minutes',120,false);
- INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,binding_thumbprint,origin_code,family_id)
- VALUES('a','refresh','refresh_token','grant',1,'https://api.example','client',ARRAY['read'],clock_timestamp()-interval '1 second',clock_timestamp()+interval '60 seconds','binding','code','family')`)
+	e.exec(t, `INSERT INTO mayi.refresh_families(tenant_id,family_id,grant_id,revision,origin_code,absolute_deadline,idle_seconds,object_ceiling) VALUES('a','family','grant',1,'code',clock_timestamp()+interval '10 minutes',120,'`+fixtureObjectJSON+`');
+ INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,binding_thumbprint,origin_code,family_id,object_ceiling)
+ VALUES('a','refresh','refresh_token','grant',1,'https://api.example','client',ARRAY['read'],clock_timestamp()-interval '1 second',clock_timestamp()+interval '60 seconds','binding','code','family','`+fixtureObjectJSON+`')`)
 }
 func TestRealSigningJWKSAndNonExportability(t *testing.T) {
 	e := setup(t)
@@ -633,4 +648,8 @@ func TestRealFamilyDeadlineRecheckedAfterGrantLock(t *testing.T) {
 	if result.Claims.ExpiresAt.After(deadline) {
 		t.Fatal("family deadline changed before its lock but was not rechecked")
 	}
+}
+
+func (s afterCredentialStore) ConsumeBudget(ctx context.Context, scope grants.Scope, b authentication.Budget) (bool, error) {
+	return s.inner.ConsumeBudget(ctx, scope, b)
 }

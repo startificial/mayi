@@ -1,0 +1,273 @@
+{
+  "version": 1,
+  "phase": "P2",
+  "profile": "experimental-object-actions-v1",
+  "certified": false,
+  "required_commands": [
+    "go run ./tools/checks",
+    "go test -race -count=1 ./...",
+    "go vet ./...",
+    "go run ./tools/p0"
+  ],
+  "specifications": [
+    {
+      "id": "rfc9396",
+      "revision": "RFC 9396",
+      "sections": [
+        "2",
+        "3",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10"
+      ]
+    },
+    {
+      "id": "rfc9126",
+      "revision": "RFC 9126",
+      "sections": [
+        "2",
+        "3",
+        "4"
+      ]
+    },
+    {
+      "id": "rfc7009",
+      "revision": "RFC 7009",
+      "sections": [
+        "2"
+      ]
+    },
+    {
+      "id": "rfc7662",
+      "revision": "RFC 7662",
+      "sections": [
+        "2"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "capability": "interactive",
+      "requirements": [
+        "CORE-1",
+        "CORE-2",
+        "CORE-3",
+        "CORE-5",
+        "DISC-4",
+        "GRANT-1",
+        "GRANT-3",
+        "SEC-2",
+        "SEC-6",
+        "SEC-7",
+        "SEC-8",
+        "WEB-4",
+        "WEB-7",
+        "WEB-8",
+        "WEB-10",
+        "OIDC-9"
+      ],
+      "checks": [
+        {
+          "path": "tests/integration/browser_test.go",
+          "test": "TestP2BrowserOIDCConsentAndSessionLifecycle"
+        },
+        {
+          "path": "tests/integration/authorization_test.go",
+          "test": "TestP2ConsentRejectsForeignBrowserCSRFSessionAndMembership"
+        },
+        {
+          "path": "tests/integration/pushed_test.go",
+          "test": "TestP2PushedReferenceBindsExactWorkflowWithoutApprovingObjects"
+        },
+        {
+          "path": "tests/integration/p2_completion_test.go",
+          "test": "TestP2AuthorizationOptionsCannotBeMissingOrSwappedAtCommit"
+        }
+      ]
+    },
+    {
+      "capability": "token-lifecycle",
+      "requirements": [
+        "CORE-6",
+        "CLI-8",
+        "CLI-10",
+        "GRANT-4",
+        "GRANT-6",
+        "LIFE-1",
+        "LIFE-2",
+        "LIFE-3",
+        "LIFE-4",
+        "LIFE-5",
+        "LIFE-11",
+        "OIDC-1",
+        "OIDC-2",
+        "SEC-9"
+      ],
+      "checks": [
+        {
+          "path": "tests/integration/live_protocol_test.go",
+          "test": "TestP2PublicProtocolAndSDKEnforceObjectAuthorityAndImmediateCutoff"
+        },
+        {
+          "path": "tests/integration/live_protocol_test.go",
+          "test": "TestP2ClientAuthenticationRotationAssertionsAndMachinePolicy"
+        },
+        {
+          "path": "tests/integration/issuance_test.go",
+          "test": "TestRealConcurrentCodeOneWinnerAndReplayInvalidation"
+        },
+        {
+          "path": "tests/integration/issuance_test.go",
+          "test": "TestRealSigningAuditAndCommitFailuresRollback"
+        },
+        {
+          "path": "tests/contract/object_issuance_test.go",
+          "test": "TestObjectRedemptionPreservesExactTuplesAndRefreshCannotRegainAuthority"
+        }
+      ]
+    },
+    {
+      "capability": "resource-and-bff",
+      "requirements": [
+        "CORE-12",
+        "RES-1",
+        "RES-3",
+        "RES-5",
+        "RES-6",
+        "RES-8",
+        "RES-9",
+        "RES-10",
+        "GRANT-2",
+        "WEB-1"
+      ],
+      "checks": [
+        {
+          "path": "tests/integration/live_protocol_test.go",
+          "test": "TestP2ReferenceBFFCompletesPARLoginAndProtectsResources"
+        },
+        {
+          "path": "tests/integration/live_protocol_test.go",
+          "test": "TestP2PublicProtocolAndSDKEnforceObjectAuthorityAndImmediateCutoff"
+        },
+        {
+          "path": "tests/integration/p2_completion_test.go",
+          "test": "TestP2BoundPARRejectsConflictsAndCrossResourceReferenceUse"
+        },
+        {
+          "path": "tests/integration/p2_completion_test.go",
+          "test": "TestP2CredentialBoundResourceFallbackAndAdminScopeCutoff"
+        },
+        {
+          "path": "pkg/resource/resource_test.go",
+          "test": "TestResourceCredentialsComeOnlyFromOneAuthorizationHeader"
+        }
+      ]
+    },
+    {
+      "capability": "management",
+      "requirements": [
+        "GRANT-5",
+        "GRANT-7",
+        "GRANT-10",
+        "LIFE-9",
+        "ADM-8"
+      ],
+      "checks": [
+        {
+          "path": "tests/integration/p2_completion_test.go",
+          "test": "TestP2IncrementalConsentAppendsRevisionWithoutExpandingOldRefresh"
+        },
+        {
+          "path": "tests/integration/p2_completion_test.go",
+          "test": "TestP2ConnectedGrantUsageAndTenantAdministratorListing"
+        },
+        {
+          "path": "tests/integration/live_protocol_test.go",
+          "test": "TestP2UserAndAdministratorControlsAuthenticateBeforeLoading"
+        }
+      ]
+    },
+    {
+      "capability": "machine",
+      "requirements": [
+        "CORE-7",
+        "RES-7",
+        "DEL-10",
+        "M2M-1",
+        "M2M-4",
+        "M2M-5"
+      ],
+      "checks": [
+        {
+          "path": "tests/integration/live_protocol_test.go",
+          "test": "TestP2ClientAuthenticationRotationAssertionsAndMachinePolicy"
+        },
+        {
+          "path": "tests/integration/p2_completion_test.go",
+          "test": "TestP2MachinePolicyManagementRequiresAuthorityAndCutsOffExistingTokens"
+        }
+      ]
+    },
+    {
+      "capability": "federation",
+      "requirements": [
+        "FED-1",
+        "FED-3"
+      ],
+      "checks": [
+        {
+          "path": "tests/integration/authentication_test.go",
+          "test": "TestP2MembershipLossAndUnmappedIdentityNeverCreateSession"
+        },
+        {
+          "path": "tests/integration/authentication_test.go",
+          "test": "TestP2LoginRejectsAuthenticationBeforeAttemptWithoutSessionEffects"
+        }
+      ]
+    },
+    {
+      "capability": "admission-audit-discovery-errors",
+      "requirements": [
+        "SEC-11",
+        "ADM-5",
+        "DISC-2",
+        "CORE-13"
+      ],
+      "checks": [
+        {
+          "path": "tests/integration/p2_completion_test.go",
+          "test": "TestP2RequestBudgetsAreAtomicAcrossReplicasAndTenantScoped"
+        },
+        {
+          "path": "tests/contract/issuance_test.go",
+          "test": "TestDirectRedemptionCannotBypassClientOrUserAdmission"
+        },
+        {
+          "path": "tests/integration/p2_completion_test.go",
+          "test": "TestP2SecurityAuditRetainsTrustedCorrelationAndNoCredentials"
+        },
+        {
+          "path": "tests/integration/p2_completion_test.go",
+          "test": "TestP2LiveDiscoveryAdvertisesOnlyTheEnforcedProfile"
+        },
+        {
+          "path": "tests/integration/p2_completion_test.go",
+          "test": "TestP2ProtocolBoundaryErrorsAreStableAndCredentialFree"
+        },
+        {
+          "path": "tests/integration/p2_completion_test.go",
+          "test": "TestP2FailedClientAuthenticationConsumesSharedClientBudget"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Local automated preview evidence only; no external certification or real-browser interoperability claim.",
+    "Core errors are P2; P3 completes resource challenge/discovery behavior.",
+    "ES256 server signing profile, separate UserInfo/logout and MCP/native integrations remain later phases.",
+    "One physical PostgreSQL database for atomic resource-owner guards."
+  ]
+}

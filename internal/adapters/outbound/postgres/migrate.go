@@ -119,7 +119,7 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, runtimeRole string
 		`REVOKE UPDATE ON mayi.client_object_types FROM ` + role,
 		`REVOKE UPDATE ON mayi.pushed_requests,mayi.authorization_object_presentations FROM ` + role,
 		`GRANT UPDATE(consumed_at,authorization_hash) ON mayi.pushed_requests TO ` + role,
-		`GRANT UPDATE(status,subject,grant_id,code_hash,decided_at,consent_session_hash) ON mayi.authorization_transactions TO ` + role,
+		`GRANT UPDATE(status,subject,grant_id,code_hash,decided_at,consent_session_hash,grant_revision) ON mayi.authorization_transactions TO ` + role,
 		// Current lifecycle operations only consume credentials and revoke
 		// authority. Identity, ancestry and ceilings need explicit future use cases.
 		`REVOKE UPDATE ON mayi.grants,mayi.credentials,mayi.refresh_families,mayi.issuances FROM ` + role,
@@ -128,6 +128,7 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, runtimeRole string
 		`GRANT UPDATE(policy_version) ON mayi.tenants TO ` + role,
 		`REVOKE UPDATE ON mayi.audit_events,mayi.authorization_options,mayi.pushed_options FROM ` + role,
 		`GRANT UPDATE(last_used_at) ON mayi.browser_sessions TO ` + role,
+		`GRANT DELETE ON mayi.machine_authorizations,mayi.request_budgets TO ` + role,
 	} {
 		if _, err = tx.Exec(ctx, sql); err != nil {
 			return err
@@ -188,5 +189,5 @@ func rollback(tx pgx.Tx) {
 }
 
 func migrationSources() []string {
-	return []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed, migrations.ObjectPresentations, migrations.Lifecycle}
+	return []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed, migrations.ObjectPresentations, migrations.Lifecycle, migrations.RequiredAuthority, migrations.RequestBudgets, migrations.Incremental, migrations.AuditContext}
 }

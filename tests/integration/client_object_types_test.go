@@ -141,7 +141,7 @@ func TestP2AuthorizationProjectionSelectsOnlyClientAllowedResourceProfiles(t *te
 		if err != nil {
 			return err
 		}
-		if len(current.Client.AuthorizationDetailsTypes) != 2 || len(current.ObjectProfiles) != 1 || current.ObjectProfiles[0].Snapshot().Type != spec.Type || !request.MatchesObjectRegistration(current) || request.AllowedBy(current) {
+		if len(current.Client.AuthorizationDetailsTypes) != 2 || len(current.ObjectProfiles) != 1 || current.ObjectProfiles[0].Snapshot().Type != spec.Type || !request.MatchesObjectRegistration(current) {
 			t.Fatal("projection mixed resource/type authority or enabled consent")
 		}
 		unallowed := current

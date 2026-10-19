@@ -43,7 +43,7 @@ func TestObjectCeilingRecordRehydratesStrictly(t *testing.T) {
 		})
 	}
 	missing, err := decodeObjectCeiling(nil, scope, resource)
-	if err != nil || !missing.IsZero() || missing.Equal(ceiling) {
+	if err == nil || !missing.IsZero() || missing.Equal(ceiling) {
 		t.Fatal("SQL NULL acquired object authority", err)
 	}
 

@@ -3,6 +3,7 @@ package selfservice
 import (
 	"errors"
 	transport "github.com/startificial/mayi/internal/adapters/inbound/http"
+	"github.com/startificial/mayi/internal/adapters/inbound/web"
 	domain "github.com/startificial/mayi/internal/domain/grants"
 	"github.com/startificial/mayi/internal/services/authentication"
 	"github.com/startificial/mayi/internal/services/grants"
@@ -112,17 +113,21 @@ func (c *Controls) Grants(w http.ResponseWriter, r *http.Request) {
 		Actions    []string `json:"actions"`
 	}
 	type grantDTO struct {
-		ID       string    `json:"id"`
-		Client   string    `json:"client_id"`
-		Resource string    `json:"resource"`
-		Revision uint64    `json:"revision"`
-		Scopes   []string  `json:"scopes"`
-		Details  []detail  `json:"authorization_details"`
-		Expires  time.Time `json:"expires_at"`
+		TokensIssued uint64     `json:"tokens_issued"`
+		LastIssued   *time.Time `json:"last_issued_at"`
+		LastUsed     *time.Time `json:"last_token_check_at"`
+		TokenChecks  uint64     `json:"token_checks"`
+		ID           string     `json:"id"`
+		Client       string     `json:"client_id"`
+		Resource     string     `json:"resource"`
+		Revision     uint64     `json:"revision"`
+		Scopes       []string   `json:"scopes"`
+		Details      []detail   `json:"authorization_details"`
+		Expires      time.Time  `json:"expires_at"`
 	}
 	values := make([]grantDTO, 0, len(result))
 	for _, g := range result {
-		v := grantDTO{ID: g.ID, Client: g.ClientID, Resource: g.Resource, Revision: g.Revision, Scopes: g.Scopes, Expires: g.ExpiresAt}
+		v := grantDTO{TokensIssued: g.TokensIssued, LastIssued: g.LastIssuedAt, LastUsed: g.LastUsedAt, TokenChecks: g.TokenChecks, ID: g.ID, Client: g.ClientID, Resource: g.Resource, Revision: g.Revision, Scopes: g.Scopes, Expires: g.ExpiresAt}
 		for _, d := range g.Objects.Snapshot().Details {
 			v.Details = append(v.Details, detail{d.Type, []string{g.Resource}, d.Identifier, d.Actions})
 		}
@@ -141,4 +146,43 @@ func (c *Controls) Touch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(204)
+}
+
+// ConnectedApps renders only the service-authorized view; templates have no I/O.
+func (c *Controls) ConnectedApps(w http.ResponseWriter, r *http.Request) {
+	p, ok := c.proof(w, r)
+	if !ok {
+		return
+	}
+	result, err := c.grants.List(r.Context(), grants.BrowserProof{Scope: p.Scope, SessionHash: p.SessionHash, BrowserHash: p.BrowserHash})
+	if err != nil {
+		controlFailure(w, err)
+		return
+	}
+	view := web.ConnectedApps{}
+	for _, g := range result {
+		item := web.ConnectedGrant{ID: g.ID, Client: g.ClientID, Resource: g.Resource, Permissions: g.Scopes, Expires: g.ExpiresAt.UTC().Format(time.RFC3339), TokensIssued: g.TokensIssued, LastIssued: "Never", RevokeAction: "/t/" + c.scope.TenantID + "/grants/" + url.PathEscape(g.ID) + "/revoke"}
+		if g.LastUsedAt != nil {
+			item.LastUsed = g.LastUsedAt.UTC().Format(time.RFC3339)
+		}
+		if g.LastIssuedAt != nil {
+			item.LastIssued = g.LastIssuedAt.UTC().Format(time.RFC3339)
+		}
+		for _, d := range g.Objects.Snapshot().Details {
+			object := web.ConsentObject{Type: d.Type, Identifier: d.Identifier}
+			for _, action := range d.Actions {
+				object.Actions = append(object.Actions, web.Permission{Name: action})
+			}
+			item.Objects = append(item.Objects, object)
+		}
+		view.Grants = append(view.Grants, item)
+	}
+	body, err := web.ConnectedAppsPage(view)
+	if err != nil {
+		controlFailure(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(200)
+	_, _ = w.Write(body)
 }

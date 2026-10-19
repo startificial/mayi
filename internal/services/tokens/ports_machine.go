@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/startificial/mayi/internal/domain/grants"
 	"github.com/startificial/mayi/internal/domain/resources"
+	"github.com/startificial/mayi/internal/services/authentication"
 )
 
 type MachinePolicy struct {
@@ -17,6 +18,7 @@ type MachineStore interface {
 	RunMachine(context.Context, Caller, string, func(MachineTransaction) error) error
 }
 type MachineTransaction interface {
+	authentication.AdmissionStore
 	MachinePolicy(context.Context) (MachinePolicy, error)
 	CommitMachine(context.Context, Issuance) error
 }

@@ -219,3 +219,30 @@ func (c ObjectCeiling) Narrow(current ObjectCeiling, requested []ObjectDetail, a
 	}
 	return wanted, nil
 }
+
+// Union combines approvals for the same tenant, issuer and registered resource.
+// Full tuples remain intact; cross-resource and oversized unions fail closed.
+func (c ObjectCeiling) Union(other ObjectCeiling) (ObjectCeiling, error) {
+	a, b := c.Snapshot(), other.Snapshot()
+	if c.IsZero() || other.IsZero() || a.Scope != b.Scope || a.Resource != b.Resource {
+		return ObjectCeiling{}, ErrInvalidObjectCeiling
+	}
+	for _, detail := range b.Details {
+		found := false
+		for i := range a.Details {
+			if a.Details[i].Type == detail.Type && a.Details[i].Identifier == detail.Identifier {
+				for _, action := range detail.Actions {
+					if !slices.Contains(a.Details[i].Actions, action) {
+						a.Details[i].Actions = append(a.Details[i].Actions, action)
+					}
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			a.Details = append(a.Details, detail)
+		}
+	}
+	return NewObjectCeiling(a)
+}

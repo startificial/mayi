@@ -56,11 +56,17 @@ func (h *machineHandler) PopulateTokenEndpointResponse(ctx context.Context, r fo
 		cmd.Objects = ceiling.Snapshot().Details
 	}
 	result, err := h.service.Issue(ctx, cmd)
+	if errors.Is(err, tokens.ErrInvalidDetails) {
+		return (&fosite.RFC6749Error{ErrorField: "invalid_authorization_details", CodeField: 400}).WithWrap(err)
+	}
+	if errors.Is(err, tokens.ErrInvalidScope) {
+		return fosite.ErrInvalidScope
+	}
 	if errors.Is(err, tokens.ErrInvalidCredential) {
 		return fosite.ErrInvalidGrant
 	}
 	if err != nil {
-		return fosite.ErrTemporarilyUnavailable
+		return fosite.ErrTemporarilyUnavailable.WithWrap(err)
 	}
 	return writeTokenResponse(response, result)
 }

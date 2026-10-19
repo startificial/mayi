@@ -13,7 +13,9 @@ import (
 
 	"github.com/startificial/mayi/internal/app"
 	"github.com/startificial/mayi/internal/domain/grants"
+	"github.com/startificial/mayi/internal/domain/resources"
 	domain "github.com/startificial/mayi/internal/domain/tokens"
+	"github.com/startificial/mayi/internal/services/authentication"
 	"github.com/startificial/mayi/internal/services/tokens"
 )
 
@@ -99,6 +101,7 @@ type store struct {
 	state                             memoryState
 	runs, grantReads                  int
 	commitFail, writeFail, revokeFail bool
+	budgetDeniedDimension             string
 	afterCallback                     func()
 }
 type transaction struct {
@@ -202,12 +205,20 @@ func newFixture(t *testing.T, kind string) *fixture {
 	t.Helper()
 	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
 	scope := grants.Scope{TenantID: "tenant-a", Issuer: "https://auth.example/t/a"}
-	revision, err := grants.NewRevision(grants.RevisionSpec{Scope: scope, GrantID: "grant-1", Number: 7, ClientID: "client:web", Subject: "user:alice", PrincipalType: "user", Resource: "https://api.example/a", Scopes: []string{"read", "write"}, ExpiresAt: now.Add(time.Hour)})
+	objects, err := grants.NewObjectCeiling(grants.ObjectCeilingSpec{Scope: scope, Resource: "https://api.example/a", Details: []grants.ObjectDetail{{Type: "https://api.example/types/fixture/v1", Identifier: "123", Actions: []string{"read", "write"}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	credential := tokens.Credential{Scope: scope, Hash: "original-hash", Kind: kind, ClientID: "client:web", Resource: "https://api.example/a", GrantID: "grant-1", Revision: 7, RedirectURI: "https://client.example/callback", IssuedAt: now, CeilingScopes: []string{"read", "write"}, PKCEChallenge: challenge, BindingThumbprint: "dpop-key", ExpiresAt: now.Add(60 * time.Second), FamilyDeadline: now.Add(2 * time.Minute)}
-	state := memoryState{credentials: map[string]tokens.Credential{credential.Hash: credential}, grant: tokens.GrantState{Revision: revision, CurrentScopes: []string{"read", "write"}, PolicyVersion: 1, AuthorizationDeadline: now.Add(time.Hour)}}
+	profile, err := resources.NewObjectProfile(resources.ObjectProfileSpec{Scope: scope, Resource: "https://api.example/a", Type: "https://api.example/types/fixture/v1", Semantics: resources.ObjectActionsV1, Actions: []resources.ObjectAction{{Name: "read", Description: "Read items"}, {Name: "write", Description: "Write items"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision, err := grants.NewRevision(grants.RevisionSpec{ObjectCeiling: objects, Scope: scope, GrantID: "grant-1", Number: 7, ClientID: "client:web", Subject: "user:alice", PrincipalType: "user", Resource: "https://api.example/a", Scopes: []string{"read", "write"}, ExpiresAt: now.Add(time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential := tokens.Credential{ObjectBound: true, Scope: scope, Hash: "original-hash", Kind: kind, ClientID: "client:web", Resource: "https://api.example/a", GrantID: "grant-1", Revision: 7, RedirectURI: "https://client.example/callback", IssuedAt: now, CeilingScopes: []string{"read", "write"}, PKCEChallenge: challenge, BindingThumbprint: "dpop-key", ExpiresAt: now.Add(60 * time.Second), FamilyDeadline: now.Add(2 * time.Minute)}
+	state := memoryState{credentialObjects: map[string]grants.ObjectCeiling{credential.Hash: objects}, credentials: map[string]tokens.Credential{credential.Hash: credential}, grant: tokens.GrantState{ObjectProfiles: []resources.ObjectProfile{profile}, CurrentObjectCeiling: objects, Revision: revision, CurrentScopes: []string{"read", "write"}, PolicyVersion: 1, AuthorizationDeadline: now.Add(time.Hour)}}
 	f := &fixture{policy: &policy{version: 1}, store: &store{state: state}, signer: &signer{}, material: &material{}, now: now, cmd: tokens.Command{Caller: tokens.Caller{Scope: scope, ClientID: credential.ClientID, BindingThumbprint: credential.BindingThumbprint}, Kind: kind, CredentialHash: credential.Hash, Resource: credential.Resource, Verifier: verifier, Scopes: []string{"read"}}}
 	f.service, err = app.NewIssuance(f.policy, fixedClock{now}, f.signer, f.material, f.store, 5*time.Minute)
 	if err != nil {
@@ -507,6 +518,7 @@ func TestCodeReplayDoesNotRevokeUnrelatedCode(t *testing.T) {
 	another.Hash = "independent-code"
 	another.Consumed = false
 	f.store.state.credentials[another.Hash] = another
+	f.store.state.credentialObjects[another.Hash] = f.store.state.grant.Revision.Snapshot().ObjectCeiling
 	f.cmd.CredentialHash = another.Hash
 	if _, err := f.service.Redeem(context.Background(), f.cmd); err != nil {
 		t.Fatal("unrelated code was revoked", err)
@@ -543,3 +555,26 @@ func TestSlowOrBrokenSignerClockCannotCommitExpiredCredentials(t *testing.T) {
 }
 
 func (*material) DigestAccessToken(raw string) string { return "digest:" + raw }
+
+func (s *store) ConsumeBudget(_ context.Context, _ grants.Scope, b authentication.Budget) (bool, error) {
+	return b.Dimension != s.budgetDeniedDimension, nil
+}
+func (t *transaction) ConsumeBudget(ctx context.Context, scope grants.Scope, b authentication.Budget) (bool, error) {
+	return t.store.ConsumeBudget(ctx, scope, b)
+}
+
+func TestDirectRedemptionCannotBypassClientOrUserAdmission(t *testing.T) {
+	for _, dimension := range []string{"client", "user"} {
+		t.Run(dimension, func(t *testing.T) {
+			f := newFixture(t, tokens.AuthorizationCode)
+			f.store.budgetDeniedDimension = dimension
+			result, err := f.service.Redeem(context.Background(), f.cmd)
+			if !errors.Is(err, authentication.ErrLimited) || result.AccessToken != "" || f.material.n != 0 || f.signer.calls != 0 || f.store.state.credentials[f.cmd.CredentialHash].Consumed {
+				t.Fatal("limited direct call issued authority", err)
+			}
+			if dimension == "client" && (f.store.runs != 0 || f.store.grantReads != 0) {
+				t.Fatal("client admission loaded protected authority")
+			}
+		})
+	}
+}

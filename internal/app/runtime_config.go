@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/startificial/mayi/internal/domain/resources"
+	"github.com/startificial/mayi/internal/services/authentication"
 	"io"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"regexp"
@@ -19,15 +21,41 @@ import (
 var ErrConfiguration = errors.New("invalid Mayi configuration")
 
 type Config struct {
-	PublicOrigin           string         `json:"public_origin"`
-	ListenAddress          string         `json:"listen_address"`
-	RuntimeRole            string         `json:"runtime_role"`
-	DatabaseMaxConnections int32          `json:"database_max_connections"`
-	AllowInsecureLoopback  bool           `json:"allow_insecure_loopback"`
-	TransitAddress         string         `json:"transit_address"`
-	Tenants                []TenantConfig `json:"tenants"`
+	RateLimits             []BudgetRuleConfig `json:"rate_limits,omitempty"`
+	TrustedProxies         []string           `json:"trusted_proxies,omitempty"`
+	PublicOrigin           string             `json:"public_origin"`
+	ListenAddress          string             `json:"listen_address"`
+	RuntimeRole            string             `json:"runtime_role"`
+	DatabaseMaxConnections int32              `json:"database_max_connections"`
+	AllowInsecureLoopback  bool               `json:"allow_insecure_loopback"`
+	TransitAddress         string             `json:"transit_address"`
+	Tenants                []TenantConfig     `json:"tenants"`
 }
+type BudgetRuleConfig struct {
+	Operation     string `json:"operation"`
+	Dimension     string `json:"dimension"`
+	Limit         int    `json:"limit"`
+	WindowSeconds int    `json:"window_seconds"`
+}
+
+func (c Config) BudgetRules() []authentication.BudgetRule {
+	if len(c.RateLimits) == 0 {
+		return authentication.DefaultBudgetRules()
+	}
+	result := []authentication.BudgetRule{}
+	for _, r := range c.RateLimits {
+		result = append(result, authentication.BudgetRule{Operation: r.Operation, Dimension: r.Dimension, Limit: r.Limit, WindowSeconds: r.WindowSeconds})
+	}
+	return result
+}
+
+type ResourceBindingConfig struct {
+	ID       string `json:"id"`
+	Resource string `json:"resource"`
+}
+
 type TenantConfig struct {
+	ResourceBindings    []ResourceBindingConfig `json:"resource_bindings,omitempty"`
 	ID                  string                  `json:"id"`
 	CredentialKeys      []CredentialKeyConfig   `json:"credential_keys,omitempty"`
 	ResourceAuthorities []string                `json:"resource_authorities,omitempty"`
@@ -79,6 +107,16 @@ func LoadConfig(path string) (Config, error) {
 	return c, nil
 }
 func (c Config) Validate() error {
+	if !authentication.ValidBudgetRules(c.BudgetRules()) || len(c.TrustedProxies) > 16 {
+		return ErrConfiguration
+	}
+	for _, raw := range c.TrustedProxies {
+		prefix, err := netip.ParsePrefix(raw)
+		if err != nil || prefix != prefix.Masked() {
+			return ErrConfiguration
+		}
+	}
+
 	// P1 binds only to loopback. A locally trusted TLS proxy owns the public
 	// origin; no Host/Forwarded header can change tenant or issuer identity.
 	host, port, err := net.SplitHostPort(c.ListenAddress)
@@ -96,7 +134,7 @@ func (c Config) Validate() error {
 	seenTenants := map[string]bool{}
 	seenKeys := map[string]bool{}
 	seenTokens := map[string]bool{}
-	allowed := []string{"policy:read", "policy:write", "resources:read", "resources:write", "clients:read", "clients:write", "keys:write", "grants:write"}
+	allowed := []string{"policy:read", "policy:write", "resources:read", "resources:write", "clients:read", "clients:write", "keys:write", "grants:write", "grants:read"}
 	for _, t := range c.Tenants {
 		if _, err := NewIssuerScope(c.PublicOrigin, t.ID); err != nil {
 			return ErrConfiguration
@@ -120,6 +158,16 @@ func (c Config) Validate() error {
 		}
 		if len(t.CredentialKeys) > 0 && active != 1 {
 			return ErrConfiguration
+		}
+		if len(t.ResourceBindings) > 32 {
+			return ErrConfiguration
+		}
+		seenBindings := map[string]bool{}
+		for _, binding := range t.ResourceBindings {
+			if !resources.ValidID(binding.ID) || !resources.ValidURI(binding.Resource) || seenBindings[binding.ID] {
+				return ErrConfiguration
+			}
+			seenBindings[binding.ID] = true
 		}
 		if len(t.ResourceAuthorities) > 32 {
 			return ErrConfiguration

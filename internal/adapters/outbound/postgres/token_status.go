@@ -99,13 +99,18 @@ func (s *Store) AccessStatus(ctx context.Context, caller tokens.StatusCaller, ha
 		}
 		catalog := make([]string, 0, len(registration.Resource.Scopes))
 		for _, p := range registration.Resource.Scopes {
-			catalog = append(catalog, p.Name)
+			if c.PrincipalType == "machine" || !p.RequiresAdmin {
+				catalog = append(catalog, p.Name)
+			}
 		}
 		if _, err := revision.Narrow(catalog, c.Scopes, currentScopes); err != nil {
 			return nil
 		}
 		if (registration.Policy.RequireBinding || registration.Resource.RequireBinding) && c.BindingThumbprint == "" {
 			return nil
+		}
+		if _, err := t.tx.Exec(ctx, `INSERT INTO mayi.grant_usage(tenant_id,grant_id,last_checked_at,token_checks) VALUES($1,$2,clock_timestamp(),1) ON CONFLICT(tenant_id,grant_id) DO UPDATE SET last_checked_at=excluded.last_checked_at,token_checks=mayi.grant_usage.token_checks+1`, caller.Scope.TenantID, c.GrantID); err != nil {
+			return err
 		}
 		result = tokens.Result{Claims: c, ObjectProfiles: registration.ObjectProfiles}
 		return nil

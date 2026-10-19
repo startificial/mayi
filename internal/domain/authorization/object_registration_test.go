@@ -18,7 +18,7 @@ func TestObjectRegistrationChecksExactClientTypeAudienceAndVocabulary(t *testing
 	}
 	current.ObjectProfiles = []resources.ObjectProfile{profile}
 	request.ObjectCeiling, err = profile.ValidateRequest(request.TenantIssuer, request.ResourceURI, []grants.ObjectDetail{{Type: typ, Identifier: "workflow:123", Actions: []string{"read"}}})
-	if err != nil || !request.MatchesObjectRegistration(current) || request.AllowedBy(current) {
+	if err != nil || !request.MatchesObjectRegistration(current) {
 		t.Fatal("registration either rejected vocabulary or enabled consent", err)
 	}
 	for _, mode := range []string{"missing authority", "missing profiles", "duplicate profiles", "unregistered type", "unregistered action", "foreign tenant", "foreign issuer", "foreign audience", "client type absent", "client resource absent", "disabled client"} {

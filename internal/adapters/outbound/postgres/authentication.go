@@ -127,3 +127,15 @@ func (s *Store) EndSession(ctx context.Context, scope grants.Scope, hash, browse
 		return err
 	})
 }
+
+func (s *Store) LoginClient(ctx context.Context, scope grants.Scope, hash, browser string, now time.Time) (string, error) {
+	var client string
+	err := s.authentication(ctx, scope, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx, `SELECT w.client_id FROM mayi.authorization_transactions w JOIN mayi.clients c USING(tenant_id,client_id) JOIN mayi.tenants t USING(tenant_id) WHERE w.tenant_id=$1 AND w.handle_hash=$2 AND w.browser_binding_hash=$3 AND w.status='pending' AND w.pushed_request_hash IS NOT NULL AND c.enabled AND w.policy_version=t.policy_version AND w.created_at<=$4 AND w.expires_at>$4 AND w.expires_at>clock_timestamp()`, scope.TenantID, hash, browser, now).Scan(&client)
+		if err != nil {
+			return authentication.ErrDenied
+		}
+		return nil
+	})
+	return client, err
+}

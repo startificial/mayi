@@ -9,13 +9,18 @@ import (
 	"time"
 
 	"github.com/startificial/mayi/internal/adapters/inbound/http/oauth"
+	"github.com/startificial/mayi/internal/app"
 	"github.com/startificial/mayi/internal/domain/clients"
 	"github.com/startificial/mayi/internal/domain/resources"
 	"github.com/startificial/mayi/internal/services/authorization"
 )
 
 func TestP2PushedWireBindsMixedTypesWithoutEnablingConsent(t *testing.T) {
-	e, svc, base, browser := setupAuthorization(t)
+	e, _, base, browser := setupAuthorization(t)
+	svc, setupErr := app.NewAuthorization(e.store, clock{})
+	if setupErr != nil {
+		t.Fatal(setupErr)
+	}
 	ctx := context.Background()
 	management, actor, spec := profileManagement(t, e, base.TenantIssuer)
 	actor.Permissions = []string{"resources:write", "clients:write"}

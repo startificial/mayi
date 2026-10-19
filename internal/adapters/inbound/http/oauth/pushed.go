@@ -55,11 +55,11 @@ func DecodePushedInput(raw string, scope grants.Scope) (domain.Request, error) {
 	}
 	details, err := decodeObjectDetails(v.Get("authorization_details"), v.Get("resource"))
 	if err != nil || len(details) == 0 {
-		return domain.Request{}, ErrInvalidPushedRequest
+		return domain.Request{}, errors.Join(ErrInvalidPushedRequest, ErrInvalidAuthorizationDetails)
 	}
 	ceiling, err := grants.NewObjectCeiling(grants.ObjectCeilingSpec{Scope: scope, Resource: v.Get("resource"), Details: details})
 	if err != nil {
-		return domain.Request{}, ErrInvalidPushedRequest
+		return domain.Request{}, errors.Join(ErrInvalidPushedRequest, ErrInvalidAuthorizationDetails)
 	}
 	r := domain.Request{TenantIssuer: scope, ClientID: v.Get("client_id"), RedirectURI: v.Get("redirect_uri"), ResourceURI: v.Get("resource"), State: v.Get("state"), PKCEChallenge: v.Get("code_challenge"), BindingThumbprint: v.Get("dpop_jkt"), ObjectCeiling: ceiling, Nonce: v.Get("nonce")}
 	for _, name := range strings.Split(v.Get("scope"), " ") {

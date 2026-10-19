@@ -13,8 +13,11 @@ import (
 func example() (Spec, Registration) {
 	now := time.Unix(1700000000, 0)
 	request := Request{TenantIssuer: grants.Scope{TenantID: "a", Issuer: "https://auth.example/t/a"}, ClientID: "web", RedirectURI: "https://app.example/cb?provider=mayi", ResourceURI: "https://api.example", PKCEChallenge: strings.Repeat("A", 43), PermissionScopes: []string{"read"}, State: "client-state"}
-	spec := Spec{ID: "transaction-1", HandleHash: strings.Repeat("a", 64), BrowserBindingHash: strings.Repeat("b", 64), CSRFHash: strings.Repeat("c", 64), Request: request, PolicyVersion: 1, CreatedAt: now, ExpiresAt: now.Add(5 * time.Minute), Status: Pending, ConsentSessionHash: strings.Repeat("e", 64)}
+	request.ObjectCeiling, _ = grants.NewObjectCeiling(grants.ObjectCeilingSpec{Scope: request.TenantIssuer, Resource: request.ResourceURI, Details: []grants.ObjectDetail{{Type: "https://api.example/types/fixture/v1", Identifier: "123", Actions: []string{"read"}}}})
+	spec := Spec{PushedRequestHash: strings.Repeat("f", 64), ID: "transaction-1", HandleHash: strings.Repeat("a", 64), BrowserBindingHash: strings.Repeat("b", 64), CSRFHash: strings.Repeat("c", 64), Request: request, PolicyVersion: 1, CreatedAt: now, ExpiresAt: now.Add(5 * time.Minute), Status: Pending, ConsentSessionHash: strings.Repeat("e", 64)}
 	current := Registration{Client: clients.Client{ID: "web", Name: "Web", RedirectURIs: []string{request.RedirectURI}, Resources: []string{"api"}, AuthorizationDetailsTypes: []string{"https://api.example/types/fixture/v1"}, AccessTokenSeconds: 300, Enabled: true}, Resource: resources.Resource{ID: "api", URI: request.ResourceURI, Name: "API", Scopes: []resources.Scope{{Name: "read", Description: "Read items"}, {Name: "write", Description: "Write items"}}, AccessTokenSeconds: 300}, Policy: policy.Tenant{Version: 1, MaxAccessTokenSeconds: 600, MaxGrantSeconds: 3600}}
+	profile, _ := resources.NewObjectProfile(resources.ObjectProfileSpec{Scope: request.TenantIssuer, Resource: request.ResourceURI, Type: current.Client.AuthorizationDetailsTypes[0], Semantics: resources.ObjectActionsV1, Actions: []resources.ObjectAction{{Name: "read", Description: "Read items"}}})
+	current.ObjectProfiles = []resources.ObjectProfile{profile}
 	return spec, current
 }
 func TestConsentPreservesExactRequestAndImmutableCeiling(t *testing.T) {
@@ -51,7 +54,7 @@ func TestConsentPreservesExactRequestAndImmutableCeiling(t *testing.T) {
 }
 func TestAuthorizationRejectsExpiryMalformedProofAndExpansion(t *testing.T) {
 	spec, current := example()
-	if !spec.Request.AllowedBy(current) {
+	if !spec.Request.MatchesObjectRegistration(current) {
 		t.Fatal("valid registration refused")
 	}
 	for _, mode := range []string{"unregistered redirect", "wrong resource", "unknown permission", "disabled client", "binding required", "unapproved resource", "malformed PKCE", "empty permissions"} {
@@ -75,7 +78,7 @@ func TestAuthorizationRejectsExpiryMalformedProofAndExpansion(t *testing.T) {
 			case "empty permissions":
 				s.Request.PermissionScopes = nil
 			}
-			if s.Request.AllowedBy(c) {
+			if s.Request.MatchesObjectRegistration(c) {
 				t.Fatal("invalid authority accepted")
 			}
 		})
@@ -116,7 +119,7 @@ func TestAuthorizationSnapshotCarriesExactObjectsWithoutEnablingConsent(t *testi
 	ceiling := grants.ObjectCeilingSpec{Scope: spec.Request.TenantIssuer, Resource: spec.Request.ResourceURI, Details: []grants.ObjectDetail{{Type: "https://api.example/types/workflow/v1", Identifier: "workflow:123", Actions: []string{"execute"}}}}
 	var err error
 	spec.Request.ObjectCeiling, err = grants.NewObjectCeiling(ceiling)
-	if err != nil || !spec.Request.Valid() || spec.Request.AllowedBy(registration) {
+	if err != nil || !spec.Request.Valid() || spec.Request.MatchesObjectRegistration(registration) {
 		t.Fatal("scope-only registration approved object requests", err)
 	}
 	w, err := New(spec)

@@ -171,3 +171,17 @@ func EncodeAuthorizationDetails(ceiling grants.ObjectCeiling, profiles ...resour
 	}
 	return data, nil
 }
+
+// DecodeObjectRequest validates the wire grammar and tenant/audience binding.
+// The consuming service must check the registered profiles after authorization.
+func DecodeObjectRequest(raw string, scope grants.Scope, resource string) (grants.ObjectCeiling, error) {
+	details, err := decodeObjectDetails(raw, resource)
+	if err != nil || len(details) == 0 {
+		return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
+	}
+	ceiling, err := grants.NewObjectCeiling(grants.ObjectCeilingSpec{Scope: scope, Resource: resource, Details: details})
+	if err != nil {
+		return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
+	}
+	return ceiling, nil
+}

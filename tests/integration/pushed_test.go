@@ -15,9 +15,12 @@ import (
 
 func setupPushed(t *testing.T) (*foundation, *authorization.Service, domain.Request, authorization.PushedProof, authorization.PushedResult) {
 	t.Helper()
-	e, svc, request, base := setupAuthorization(t)
+	e, _, request, base := setupAuthorization(t)
+	svc, err := app.NewAuthorization(e.store, clock{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	request.State = "pushed-client-state-at-least-16"
-	var err error
 	request.ObjectCeiling, err = grants.NewObjectCeiling(grants.ObjectCeilingSpec{Scope: request.TenantIssuer, Resource: request.ResourceURI, Details: []grants.ObjectDetail{{Type: "https://api.example/types/fixture/v1", Identifier: "workflow:123", Actions: []string{"read"}}}})
 	if err != nil {
 		t.Fatal(err)

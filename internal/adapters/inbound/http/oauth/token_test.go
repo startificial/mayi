@@ -41,8 +41,14 @@ func TestTokenDetailsBoundaryPreservesOmissionAndRejectsAmbiguity(t *testing.T) 
 				if err != nil || (cmd.Objects == nil) != tc.omitted {
 					t.Fatal("boundary lost omission or valid details", err)
 				}
-			} else if !errors.Is(err, fosite.ErrInvalidRequest) || cmd.CredentialHash != "" {
-				t.Fatal("malformed details reached service command", err)
+			} else {
+				want := error(tokens.ErrInvalidDetails)
+				if tc.name == "oversized" {
+					want = fosite.ErrInvalidRequest
+				}
+				if !errors.Is(err, want) || cmd.CredentialHash != "" {
+					t.Fatal("malformed details reached service command", err)
+				}
 			}
 		})
 	}

@@ -69,3 +69,12 @@ func (s *Service) AdminRevoke(ctx context.Context, a Operator, kind, id string) 
 	}
 	return s.store.RevokeAdministrator(ctx, s.scope, kind, id, a.ID)
 }
+
+// AdminList authorizes the configured operator before loading any tenant grants.
+// A stable grant-ID cursor bounds each page; callers can continue after the last ID.
+func (s *Service) AdminList(ctx context.Context, a Operator, after string) ([]Summary, error) {
+	if a.Scope != s.scope || !resources.ValidID(a.ID) || !slices.Contains(a.Permissions, "grants:read") || after != "" && !resources.ValidID(after) {
+		return nil, ErrDenied
+	}
+	return s.store.ListAdministrator(ctx, s.scope, after, 100)
+}

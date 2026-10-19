@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"github.com/startificial/mayi/pkg/resource"
+	"io"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -27,13 +29,19 @@ func TestSDKPreservesCancellationAndFailsClosed(t *testing.T) {
 }
 
 func TestResourceCredentialsComeOnlyFromOneAuthorizationHeader(t *testing.T) {
-	for _, mode := range []string{"missing", "query", "duplicate", "body only", "wrong scheme", "bound without proof", "duplicate proof", "bearer with proof"} {
+	for _, mode := range []string{"missing", "query", "duplicate", "body only", "header and body", "wrong scheme", "bound without proof", "duplicate proof", "bearer with proof"} {
 		t.Run(mode, func(t *testing.T) {
 			r := httptest.NewRequest("GET", "https://api.example/documents/123", nil)
 			r.Header.Set("Authorization", "Bearer access")
 			switch mode {
-			case "missing", "body only":
+			case "missing":
 				r.Header.Del("Authorization")
+			case "body only", "header and body":
+				r.Body = io.NopCloser(strings.NewReader("access_token=access"))
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				if mode == "body only" {
+					r.Header.Del("Authorization")
+				}
 			case "query":
 				r.URL.RawQuery = "access_token=access"
 			case "duplicate":
@@ -58,5 +66,18 @@ func TestResourceCredentialsComeOnlyFromOneAuthorizationHeader(t *testing.T) {
 	r.Header.Set("Authorization", "Bearer access")
 	if token, err := resource.HeaderToken(r); err != nil || token != "access" {
 		t.Fatal("valid header denied")
+	}
+}
+
+func TestHeaderAuthenticationPreservesValidatedBusinessForm(t *testing.T) {
+	r := httptest.NewRequest("POST", "https://api.example/objects", strings.NewReader("name=value"))
+	r.Header.Set("Authorization", "Bearer access")
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if token, err := resource.HeaderToken(r); err != nil || token != "access" {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil || string(body) != "name=value" {
+		t.Fatal("credential validation consumed business input", err)
 	}
 }

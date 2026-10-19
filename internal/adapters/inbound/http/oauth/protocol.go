@@ -6,6 +6,8 @@ import (
 	"errors"
 	"github.com/ory/fosite"
 	"github.com/startificial/mayi/internal/domain/grants"
+	"github.com/startificial/mayi/internal/domain/resources"
+	"github.com/startificial/mayi/internal/services/authentication"
 	"github.com/startificial/mayi/internal/services/authorization"
 	"github.com/startificial/mayi/internal/services/clients"
 	"github.com/startificial/mayi/internal/services/tokens"
@@ -13,6 +15,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -45,12 +48,13 @@ func protocolClient(p clients.Principal) fosite.Client {
 }
 
 type Protocol struct {
-	scope    grants.Scope
-	auth     *clients.Service
-	consent  *authorization.Service
-	status   *tokens.StatusService
-	provider *fosite.Fosite
-	proof    *tokens.ProofService
+	boundResource string
+	scope         grants.Scope
+	auth          *clients.Service
+	consent       *authorization.Service
+	status        *tokens.StatusService
+	provider      *fosite.Fosite
+	proof         *tokens.ProofService
 }
 
 func NewPushed(scope grants.Scope, auth *clients.Service, consent *authorization.Service) (*Protocol, error) {
@@ -58,6 +62,19 @@ func NewPushed(scope grants.Scope, auth *clients.Service, consent *authorization
 		return nil, tokens.ErrUnavailable
 	}
 	return &Protocol{scope: scope, auth: auth, consent: consent}, nil
+}
+
+// NewResourcePushed binds the compatibility route to trusted startup configuration.
+func NewResourcePushed(scope grants.Scope, auth *clients.Service, consent *authorization.Service, resource string) (*Protocol, error) {
+	if !resources.ValidURI(resource) {
+		return nil, tokens.ErrUnavailable
+	}
+	h, err := NewPushed(scope, auth, consent)
+	if err != nil {
+		return nil, err
+	}
+	h.boundResource = resource
+	return h, nil
 }
 func NewProtocol(scope grants.Scope, auth *clients.Service, consent *authorization.Service, issuance *tokens.Service, machine *tokens.MachineService, status *tokens.StatusService, hash tokens.SecretHasher, proof *tokens.ProofService) (*Protocol, error) {
 	if !scope.Valid() || auth == nil || consent == nil || issuance == nil || machine == nil || status == nil || hash == nil || proof == nil {
@@ -111,8 +128,8 @@ func protocolForm(w http.ResponseWriter, r *http.Request) (url.Values, bool) {
 	}
 	return v, true
 }
-func (h *Protocol) authenticate(ctx context.Context, r *http.Request, v url.Values) (clients.Principal, error) {
-	p := clients.Proof{ClientID: v.Get("client_id"), Method: "none", Audience: h.scope.Issuer + "/token"}
+func (h *Protocol) authenticate(ctx context.Context, r *http.Request, v url.Values, operation string) (clients.Principal, error) {
+	p := clients.Proof{Operation: operation, ClientID: v.Get("client_id"), Method: "none", Audience: h.scope.Issuer + "/token"}
 	if len(r.Header.Values("Authorization")) > 1 {
 		return clients.Principal{}, clients.ErrDenied
 	}
@@ -149,6 +166,9 @@ func (h *Protocol) authenticate(ctx context.Context, r *http.Request, v url.Valu
 	return principal, nil
 }
 func authFailure(w http.ResponseWriter, err error) {
+	if rateFailure(w, err) {
+		return
+	}
 	if errors.Is(err, clients.ErrUnavailable) {
 		protocolError(w, "temporarily_unavailable", 503)
 	} else {
@@ -160,7 +180,7 @@ func (h *Protocol) Push(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	principal, err := h.authenticate(r.Context(), r, v)
+	principal, err := h.authenticate(r.Context(), r, v, "token")
 	if err != nil {
 		authFailure(w, err)
 		return
@@ -169,16 +189,32 @@ func (h *Protocol) Push(w http.ResponseWriter, r *http.Request) {
 		protocolError(w, "unauthorized_client", 400)
 		return
 	}
+	if h.boundResource != "" {
+		if !v.Has("resource") {
+			v.Set("resource", h.boundResource)
+		} else if v.Get("resource") != h.boundResource {
+			protocolError(w, "invalid_target", 400)
+			return
+		}
+	}
 	v.Del("client_assertion")
 	v.Del("client_assertion_type")
 	request, err := DecodePushedInput(v.Encode(), h.scope)
 	if err != nil {
+		if errors.Is(err, ErrInvalidAuthorizationDetails) {
+			protocolError(w, "invalid_authorization_details", 400)
+			return
+		}
 		protocolError(w, "invalid_request", 400)
 		return
 	}
 	result, err := h.consent.PushAuthenticated(r.Context(), request, principal.Version)
 	if err != nil {
-		if errors.Is(err, authorization.ErrUnavailable) {
+		if errors.Is(err, authorization.ErrInvalidDetails) {
+			protocolError(w, "invalid_authorization_details", 400)
+		} else if errors.Is(err, authorization.ErrInvalidScope) {
+			protocolError(w, "invalid_scope", 400)
+		} else if errors.Is(err, authorization.ErrUnavailable) {
 			protocolError(w, "temporarily_unavailable", 503)
 		} else {
 			protocolError(w, "invalid_request", 400)
@@ -201,13 +237,22 @@ func (h *Protocol) Token(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	principal, err := h.authenticate(r.Context(), r, v)
+	principal, err := h.authenticate(r.Context(), r, v, "token")
 	if err != nil {
 		authFailure(w, err)
 		return
 	}
 	if !allowedFields(v, "client_id", "client_assertion", "client_assertion_type", "grant_type", "code", "refresh_token", "code_verifier", "redirect_uri", "resource", "scope", "authorization_details") {
 		protocolError(w, "invalid_request", 400)
+		return
+	}
+	switch v.Get("grant_type") {
+	case "authorization_code", "refresh_token", "client_credentials":
+	case "":
+		protocolError(w, "invalid_request", 400)
+		return
+	default:
+		protocolError(w, "unsupported_grant_type", 400)
 		return
 	}
 	caller := tokens.Caller{Scope: h.scope, ClientID: principal.Client.ID, AuthenticationVersion: principal.Version}
@@ -234,11 +279,20 @@ func (h *Protocol) Token(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if rateFailure(w, err) {
+		return
+	}
 	code := "invalid_request"
 	status := 400
 	switch {
+	case errors.Is(err, tokens.ErrInvalidDetails):
+		code = "invalid_authorization_details"
 	case errors.Is(err, fosite.ErrInvalidGrant):
 		code = "invalid_grant"
+	case errors.Is(err, fosite.ErrUnsupportedGrantType):
+		code = "unsupported_grant_type"
+	case errors.Is(err, fosite.ErrUnauthorizedClient):
+		code = "unauthorized_client"
 	case errors.Is(err, fosite.ErrInvalidScope):
 		code = "invalid_scope"
 	case errors.Is(err, fosite.ErrInvalidClient):
@@ -272,7 +326,7 @@ func (h *Protocol) Introspect(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p, err := h.authenticate(r.Context(), r, v)
+	p, err := h.authenticate(r.Context(), r, v, "introspection")
 	if err != nil {
 		authFailure(w, err)
 		return
@@ -281,33 +335,17 @@ func (h *Protocol) Introspect(w http.ResponseWriter, r *http.Request) {
 		protocolError(w, "invalid_request", 400)
 		return
 	}
-	resource := v.Get("resource")
-	if resource == "" && len(p.Resources) == 1 {
-		resource = p.Resources[0]
-	}
-	result, err := h.status.Introspect(r.Context(), statusPrincipal(h.scope, p), v.Get("token"), resource)
+	result, verified, err := h.status.Inspect(r.Context(), statusPrincipal(h.scope, p), tokens.Introspection{Token: v.Get("token"), Resource: v.Get("resource"), Proof: v.Get("dpop"), Method: v.Get("method"), URL: v.Get("url")})
 	if err != nil {
+		if rateFailure(w, err) {
+			return
+		}
 		if errors.Is(err, tokens.ErrInvalidCredential) {
 			protocolError(w, "invalid_client", 401)
 		} else {
 			protocolError(w, "temporarily_unavailable", 503)
 		}
 		return
-	}
-	verified := false
-	if result.Claims.ID != "" && v.Has("dpop") {
-		target, parseErr := url.Parse(v.Get("url"))
-		aud, audErr := url.Parse(resource)
-		if parseErr != nil || audErr != nil || target.Scheme != aud.Scheme || target.Host != aud.Host || target.User != nil || target.Fragment != "" || target.RawQuery != "" || (target.Path != aud.Path && !strings.HasPrefix(target.Path, strings.TrimSuffix(aud.Path, "/")+"/")) {
-			writeIntrospection(w, tokens.Result{}, false)
-			return
-		}
-		thumb, err := h.proof.Verify(r.Context(), h.scope, tokens.ProofRequest{JWT: v.Get("dpop"), Method: v.Get("method"), URL: v.Get("url"), AccessToken: v.Get("token")})
-		if err != nil || thumb != result.Claims.BindingThumbprint {
-			writeIntrospection(w, tokens.Result{}, false)
-			return
-		}
-		verified = true
 	}
 	writeIntrospection(w, result, verified)
 }
@@ -316,7 +354,7 @@ func (h *Protocol) Revoke(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p, err := h.authenticate(r.Context(), r, v)
+	p, err := h.authenticate(r.Context(), r, v, "token")
 	if err != nil {
 		authFailure(w, err)
 		return
@@ -351,4 +389,14 @@ func writeIntrospection(w http.ResponseWriter, r tokens.Result, verified bool) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+func rateFailure(w http.ResponseWriter, err error) bool {
+	var limited *authentication.LimitError
+	if !errors.As(err, &limited) {
+		return false
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(limited.RetryAfterSeconds))
+	protocolError(w, "temporarily_unavailable", 429)
+	return true
 }

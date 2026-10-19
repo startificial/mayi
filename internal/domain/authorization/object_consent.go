@@ -72,10 +72,16 @@ func (p ObjectConsentProjection) Equal(other ObjectConsentProjection) bool {
 // ApproveObjects requires immutable presentation evidence and a matching fresh
 // guarded decision. Resource guard lifetime is the consuming service's duty.
 func (t Transaction) ApproveObjects(presented, current ObjectConsentProjection, subject, grantID, codeHash string, now time.Time, lifetime time.Duration) (Transaction, grants.Revision, error) {
+	return t.ApproveIncrementalObjects(presented, current, subject, grantID, codeHash, now, lifetime, nil)
+}
+
+// ApproveIncrementalObjects carries the current root snapshot only while making
+// new consent. Old credentials continue to reference their immutable revision.
+func (t Transaction) ApproveIncrementalObjects(presented, current ObjectConsentProjection, subject, grantID, codeHash string, now time.Time, lifetime time.Duration, previous *grants.Revision) (Transaction, grants.Revision, error) {
 	if !presented.Matches(t, subject) || !current.Matches(t, subject) || !presented.Equal(current) {
 		return Transaction{}, grants.Revision{}, ErrInvalid
 	}
-	return t.Decide(true, subject, grantID, codeHash, now, lifetime)
+	return t.decide(true, subject, grantID, codeHash, now, lifetime, previous)
 }
 
 func (p ObjectConsentProjection) Snapshot() ObjectConsentSpec {

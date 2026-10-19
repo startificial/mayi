@@ -73,8 +73,12 @@ func (h *TokenHandler) command(ctx context.Context, r fosite.AccessRequester) (t
 		}
 	}
 	resources := form["resource"]
-	if len(resources) != 1 || resources[0] == "" || len(resources[0]) > 2048 {
-		return tokens.Command{}, fosite.ErrInvalidRequest.WithHint("Exactly one resource is required.")
+	if len(resources) > 1 || len(resources) == 1 && (resources[0] == "" || len(resources[0]) > 2048) {
+		return tokens.Command{}, fosite.ErrInvalidRequest.WithHint("A supplied resource must identify one audience.")
+	}
+	resource := ""
+	if len(resources) == 1 {
+		resource = resources[0]
 	}
 	kind := r.GetGrantTypes()[0]
 	parameter := "code"
@@ -88,13 +92,16 @@ func (h *TokenHandler) command(ctx context.Context, r fosite.AccessRequester) (t
 	var objects []grants.ObjectDetail
 	if values, present := form["authorization_details"]; present {
 		var err error
-		objects, err = decodeObjectDetails(values[0], resources[0])
-		if err != nil || len(objects) == 0 {
+		if resource == "" {
 			return tokens.Command{}, fosite.ErrInvalidRequest
 		}
-		requested, err := grants.NewObjectCeiling(grants.ObjectCeilingSpec{Scope: caller.Scope, Resource: resources[0], Details: objects})
+		objects, err = decodeObjectDetails(values[0], resource)
+		if err != nil || len(objects) == 0 {
+			return tokens.Command{}, (&fosite.RFC6749Error{ErrorField: "invalid_authorization_details", CodeField: 400}).WithWrap(tokens.ErrInvalidDetails)
+		}
+		requested, err := grants.NewObjectCeiling(grants.ObjectCeilingSpec{Scope: caller.Scope, Resource: resource, Details: objects})
 		if err != nil {
-			return tokens.Command{}, fosite.ErrInvalidRequest
+			return tokens.Command{}, (&fosite.RFC6749Error{ErrorField: "invalid_authorization_details", CodeField: 400}).WithWrap(tokens.ErrInvalidDetails)
 		}
 		objects = requested.Snapshot().Details
 	}
@@ -107,7 +114,7 @@ func (h *TokenHandler) command(ctx context.Context, r fosite.AccessRequester) (t
 			return tokens.Command{}, fosite.ErrInvalidGrant
 		}
 	}
-	cmd := tokens.Command{Caller: caller, Kind: kind, CredentialHash: hash, Resource: resources[0], Verifier: form.Get("code_verifier"), RedirectURI: form.Get("redirect_uri"), Objects: objects, WireScopesSpecified: form.Has("scope")}
+	cmd := tokens.Command{Caller: caller, Kind: kind, CredentialHash: hash, Resource: resource, Verifier: form.Get("code_verifier"), RedirectURI: form.Get("redirect_uri"), Objects: objects, WireScopesSpecified: form.Has("scope")}
 	for _, name := range r.GetRequestedScopes() {
 		switch name {
 		case "openid":
@@ -133,11 +140,17 @@ func (h *TokenHandler) PopulateTokenEndpointResponse(ctx context.Context, r fosi
 		return err
 	}
 	result, err := h.service.Redeem(ctx, command)
+	if errors.Is(err, tokens.ErrInvalidDetails) {
+		return (&fosite.RFC6749Error{ErrorField: "invalid_authorization_details", CodeField: 400}).WithWrap(err)
+	}
+	if errors.Is(err, tokens.ErrInvalidScope) {
+		return fosite.ErrInvalidScope
+	}
 	if errors.Is(err, tokens.ErrInvalidCredential) {
 		return fosite.ErrInvalidGrant
 	}
 	if err != nil {
-		return fosite.ErrTemporarilyUnavailable
+		return fosite.ErrTemporarilyUnavailable.WithWrap(err)
 	}
 	return writeTokenResponse(response, result)
 }

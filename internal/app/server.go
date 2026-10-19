@@ -11,9 +11,12 @@ import (
 	"github.com/startificial/mayi/internal/adapters/outbound/signing"
 	"github.com/startificial/mayi/internal/domain/grants"
 	"github.com/startificial/mayi/internal/services/administration"
+	"github.com/startificial/mayi/internal/services/authentication"
+	"github.com/startificial/mayi/internal/services/delivery"
 	"github.com/startificial/mayi/internal/services/discovery"
 	grantservice "github.com/startificial/mayi/internal/services/grants"
 	"github.com/startificial/mayi/internal/services/health"
+	"github.com/startificial/mayi/internal/services/tokens"
 	"log/slog"
 	"net/http"
 	"time"
@@ -105,9 +108,17 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 			if err != nil {
 				return nil, err
 			}
-			router.HandleFunc("POST /t/"+t.ID+"/token", protocol.Token)
-			router.HandleFunc("POST /t/"+t.ID+"/introspect", protocol.Introspect)
-			router.HandleFunc("POST /t/"+t.ID+"/revoke", protocol.Revoke)
+			admission, err := authentication.NewAdmission(store, c.BudgetRules())
+			if err != nil {
+				return nil, err
+			}
+			ipAdmission, err := middleware.NewAdmission(admission, c.TrustedProxies)
+			if err != nil {
+				return nil, err
+			}
+			router.Handle("POST /t/"+t.ID+"/token", ipAdmission.Protect(scope, "token", http.HandlerFunc(protocol.Token)))
+			router.Handle("POST /t/"+t.ID+"/introspect", ipAdmission.Protect(scope, "introspection", http.HandlerFunc(protocol.Introspect)))
+			router.Handle("POST /t/"+t.ID+"/revoke", ipAdmission.Protect(scope, "token", http.HandlerFunc(protocol.Revoke)))
 			hash, err := credentialHasher(t, lookup)
 			if err != nil {
 				return nil, err
@@ -116,6 +127,16 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 			if err != nil {
 				return nil, err
 			}
+			machinePolicies, err := tokens.NewMachinePolicies(store, scope)
+			if err != nil {
+				return nil, err
+			}
+			machineControls, err := admin.NewMachinePolicies(machinePolicies, scope)
+			if err != nil {
+				return nil, err
+			}
+			router.Handle("PUT /admin/t/"+t.ID+"/clients/{id}/machine-authorization", auth.Protect(scope, http.HandlerFunc(machineControls.Configure)))
+			router.Handle("DELETE /admin/t/"+t.ID+"/clients/{id}/machine-authorization", auth.Protect(scope, http.HandlerFunc(machineControls.Configure)))
 			clientControls, err := admin.NewCredentials(clientService)
 			if err != nil {
 				return nil, err
@@ -148,6 +169,7 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 			return nil, err
 		}
 		base := "/admin/t/" + t.ID
+		router.Handle("GET "+base+"/grants", auth.Protect(scope, http.HandlerFunc(grantControls.List)))
 		router.Handle("POST "+base+"/grants/revoke", auth.Protect(scope, http.HandlerFunc(grantControls.Revoke)))
 		for pattern, handler := range map[string]http.HandlerFunc{
 			"GET " + base + "/policy": h.Policy, "PUT " + base + "/policy": h.Policy,
@@ -201,7 +223,20 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 	// Liveness is independent of public admission and dependency readiness.
 	// Match the exact operation before choosing the wrapper; every other route
 	// retains the public concurrency bound and request timeout.
-	publicHandler := telemetry.Wrap(http.TimeoutHandler(router, 10*time.Second, `{"error":"temporarily_unavailable"}`))
+	security, err := delivery.NewSecurity(store)
+	if err != nil {
+		return nil, err
+	}
+	scopes := []grants.Scope{}
+	for _, tenant := range c.Tenants {
+		scope, _ := NewIssuerScope(c.PublicOrigin, tenant.ID)
+		scopes = append(scopes, scope)
+	}
+	audit, err := middleware.NewAudit(security, scopes, c.TrustedProxies, logger)
+	if err != nil {
+		return nil, err
+	}
+	publicHandler := telemetry.Wrap(http.TimeoutHandler(audit.Wrap(router), 10*time.Second, `{"error":"temporarily_unavailable"}`))
 	liveness := telemetry.Observe(router)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == "/healthz" {

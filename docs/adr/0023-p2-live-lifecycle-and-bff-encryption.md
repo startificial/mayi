@@ -117,3 +117,7 @@ endpoint recovery/conformance coverage, incremental-grant presentation and the
 remaining resource-binding/operator examples. No completion or production claim
 follows from this ADR. UserInfo/complete OIDC identity features retain their
 documented phase and are not advertised as implemented.
+
+## Subsequent completion
+
+[ADR 0024](0024-p2-required-authority-and-completion.md) completes the mandatory authority cutover, shared budgets, resource binding, incremental revisions, management and audit gates listed above. The current P2 runbook/evidence manifest supersede the historical outstanding-work list; production and external certification claims remain excluded.

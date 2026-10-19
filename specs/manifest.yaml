@@ -201,7 +201,9 @@
         "3"
       ],
       "implemented_sections": [],
-      "deviations": []
+      "deviations": [
+        "P2 private_key_jwt accepts exact iss/sub/aud/jti/iat/exp/nbf claim names and a strict public signature JWK field subset; unknown, duplicate and case-variant members are rejected."
+      ]
     },
     {
       "id": "rfc7009",
@@ -214,7 +216,9 @@
       "target_sections": [
         "2"
       ],
-      "implemented_sections": [],
+      "implemented_sections": [
+        "2"
+      ],
       "deviations": []
     },
     {
@@ -228,7 +232,9 @@
       "target_sections": [
         "2"
       ],
-      "implemented_sections": [],
+      "implemented_sections": [
+        "2"
+      ],
       "deviations": []
     },
     {
@@ -361,7 +367,16 @@
       "target_sections": [
         "all"
       ],
-      "implemented_sections": [],
+      "implemented_sections": [
+        "2",
+        "3",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10"
+      ],
       "deviations": [
         "Mayi requires typed RAR authority for every resource grant; the initial object/action profile requires one exact registered location and nonempty identifier/actions. Every interactive authorization uses PAR; unregistered type semantics fail closed."
       ]
@@ -377,7 +392,11 @@
       "target_sections": [
         "all"
       ],
-      "implemented_sections": [],
+      "implemented_sections": [
+        "2",
+        "3",
+        "4"
+      ],
       "deviations": [
         "Mayi requires PAR for every interactive authorization request; no per-client or scope-only bypass is supported."
       ]

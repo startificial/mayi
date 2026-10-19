@@ -34,13 +34,15 @@ func NewLive(service *discovery.Service, scope grants.Scope, interactive bool) (
 // Metadata is a deliberately marked foundation preview, not a conformant AS or
 // OP configuration. Never invent endpoints to satisfy a required metadata field.
 func (h *Handler) Metadata(w http.ResponseWriter, r *http.Request) {
-	if _, err := h.service.Document(r.Context(), h.scope); err != nil {
+	document, err := h.service.Document(r.Context(), h.scope)
+	if err != nil {
 		httptransport.Error(w, 503, "temporarily_unavailable")
 		return
 	}
 	if h.live {
 		issuer := h.scope.Issuer
 		value := map[string]any{"issuer": issuer, "jwks_uri": issuer + "/jwks", "token_endpoint": issuer + "/token", "introspection_endpoint": issuer + "/introspect", "revocation_endpoint": issuer + "/revoke", "grant_types_supported": []string{"client_credentials"}, "response_types_supported": []string{}, "token_endpoint_auth_methods_supported": []string{"none", "client_secret_basic", "private_key_jwt"}, "token_endpoint_auth_signing_alg_values_supported": []string{"ES256", "PS256", "RS256"}, "mayi_stage": "P2-preview"}
+		value["authorization_details_types_supported"] = document.AuthorizationDetailTypes
 		if h.interactive {
 			value["authorization_endpoint"] = issuer + "/authorize"
 			value["pushed_authorization_request_endpoint"] = issuer + "/par"

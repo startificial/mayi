@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	httptransport "github.com/startificial/mayi/internal/adapters/inbound/http"
+	"github.com/startificial/mayi/internal/services/delivery"
 	"log/slog"
 	"net/http"
 	"sync/atomic"
@@ -67,6 +68,7 @@ func (t *Telemetry) Observe(next http.Handler) http.Handler {
 			return
 		}
 		requestID := hex.EncodeToString(id[:])
+		r = r.WithContext(delivery.WithRequestMetadata(r.Context(), delivery.RequestMetadata{RequestID: requestID}))
 		w.Header().Set("X-Request-ID", requestID)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
@@ -78,7 +80,7 @@ func (t *Telemetry) Observe(next http.Handler) http.Handler {
 		}
 		level := slog.LevelInfo
 		message := "http_request"
-		if out.status == 401 || out.status == 403 {
+		if out.status >= 400 && out.status < 500 {
 			level = slog.LevelWarn
 			message = "security_denial"
 		}

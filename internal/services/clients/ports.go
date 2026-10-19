@@ -43,3 +43,10 @@ type Assertion struct {
 type KeyTransport interface {
 	FetchKeys(context.Context, string) ([]byte, error)
 }
+
+// AuthenticationAdmission counts attempted authentication, including failures,
+// before key retrieval or credential verification. A distinct counter key keeps
+// it independent from the token service's direct-call admission budget.
+type AuthenticationAdmission interface {
+	Check(context.Context, grants.Scope, string, string, string) error
+}

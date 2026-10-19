@@ -118,8 +118,8 @@ func TestObjectConsentDeniesBeforeResourceDisplay(t *testing.T) {
 				w.PushedRequestHash = ""
 				var err error
 				s.workflow, err = domain.New(w)
-				if err != nil {
-					t.Fatal(err)
+				if err == nil {
+					t.Fatal("workflow without PAR rehydrated")
 				}
 			case "resource deny":
 				a.deny = true

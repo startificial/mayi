@@ -68,7 +68,7 @@ func TestP2ApprovedObjectCodeCarriesExactDetailsThroughFositeSigningAndPersisten
 	}
 	// A wire attempt to add an unapproved object must not consume the code.
 	form.Set("authorization_details", strings.Replace(details, "workflow:123", "workflow:124", 1))
-	if _, err := redeem(); !errors.Is(err, fosite.ErrInvalidGrant) {
+	if _, err := redeem(); !errors.Is(err, tokens.ErrInvalidDetails) {
 		t.Fatal("expanded details accepted", err)
 	}
 	form.Set("authorization_details", details)

@@ -7,7 +7,9 @@ import (
 )
 
 func revisionSpec() RevisionSpec {
-	return RevisionSpec{Scope: Scope{TenantID: "tenant-a", Issuer: "https://auth.example/t/a"}, GrantID: "grant-1", Number: 1, ClientID: "client:web", Subject: "user:alice", PrincipalType: "user", Resource: "https://api.example/a", Scopes: []string{"read", "write"}, ExpiresAt: time.Date(2026, 10, 17, 13, 0, 0, 0, time.UTC)}
+	spec := RevisionSpec{Scope: Scope{TenantID: "tenant-a", Issuer: "https://auth.example/t/a"}, GrantID: "grant-1", Number: 1, ClientID: "client:web", Subject: "user:alice", PrincipalType: "user", Resource: "https://api.example/a", Scopes: []string{"read", "write"}, ExpiresAt: time.Date(2026, 10, 17, 13, 0, 0, 0, time.UTC)}
+	spec.ObjectCeiling, _ = NewObjectCeiling(ObjectCeilingSpec{Scope: spec.Scope, Resource: spec.Resource, Details: []ObjectDetail{{Type: "https://api.example/types/fixture/v1", Identifier: "123", Actions: []string{"read"}}}})
+	return spec
 }
 
 func TestRevisionIsImmutable(t *testing.T) {
@@ -104,5 +106,32 @@ func TestInvalidRevisions(t *testing.T) {
 	spec.Subject = spec.ClientID
 	if _, err := NewRevision(spec); err != nil {
 		t.Fatalf("valid machine rejected: %v", err)
+	}
+}
+
+func TestIncrementalApprovalUnionsCompleteTuplesWithoutMutatingHistory(t *testing.T) {
+	spec := revisionSpec()
+	old, err := NewRevision(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requested := spec
+	requested.Scopes = []string{"admin"}
+	requested.ObjectCeiling, _ = NewObjectCeiling(ObjectCeilingSpec{Scope: spec.Scope, Resource: spec.Resource, Details: []ObjectDetail{{Type: "https://api.example/types/fixture/v1", Identifier: "124", Actions: []string{"write"}}}})
+	newer, err := old.Extend(requested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newer.Snapshot().Number != 2 || newer.Snapshot().GrantID != spec.GrantID || !newer.Snapshot().ObjectCeiling.Permits(spec.Scope, spec.Resource, "https://api.example/types/fixture/v1", "124", "write") || old.Snapshot().ObjectCeiling.Permits(spec.Scope, spec.Resource, "https://api.example/types/fixture/v1", "124", "write") {
+		t.Fatal("incremental revision changed historical authority")
+	}
+	requested.Subject = "user:bob"
+	if _, err := old.Extend(requested); err == nil {
+		t.Fatal("approval switched principal")
+	}
+	requested = spec
+	requested.Resource = "https://other.example"
+	if _, err := old.Extend(requested); err == nil {
+		t.Fatal("approval switched resource")
 	}
 }

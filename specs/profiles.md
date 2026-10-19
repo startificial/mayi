@@ -1,8 +1,8 @@
-# Mayi P0 capability contracts
+# Mayi capability contracts
 
-Status: Baseline decisions accepted; no externally enabled protocol capabilities.
+Status: P0 baseline accepted; the bounded P2 preview is implemented with local automated evidence.
 
-The server has no HTTP listener, metadata document or token endpoint yet. The P0 service prototype can only be called in-process with trusted caller context and supplied policy, storage, entropy, clock and signer ports. Test doubles are not deployable adapters. P2 is the first planned useful preview; P6 remains the complete MUST gate.
+The [P2 runbook](../docs/p2-core-authorization.md) describes the live listener, configured discovery, required PAR/RAR, token endpoints and resource/BFF integration. [Local profile evidence](../tests/conformance/p2-evidence.json) is checked against exact test symbols and pinned specification revisions. P6 remains the production MUST gate; test doubles and a dependency certification do not certify Mayi.
 
 ## Interpretation decisions
 
@@ -40,4 +40,4 @@ These resolve the implementation plan's clarification table while preserving the
 | Enterprise assertion authorization | Distinct assertion purpose, per-tenant issuer/client trust, replay checks and current enterprise policy | P5 assertion and lifecycle tests |
 | FAPI / recommended profiles | Entire selected security profile, including required PAR and sender constraints | P7 profile-specific conformance and operational evidence |
 
-All are **disabled** until their evidence exists. Discovery must be derived from enforced configured capabilities, not from a library's available handlers. Implicit/password flows are never enabled. Do not compose an upstream all-enabled example.
+Only the documented P2 base/online resource preview is enabled by matching configuration and local evidence. Other profiles stay disabled until their evidence exists. Discovery must be derived from enforced configured capabilities, not from a library's available handlers. Implicit/password flows are never enabled. Do not compose an upstream all-enabled example.

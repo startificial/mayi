@@ -46,7 +46,7 @@ func (s *store) ConsumePushed(_ context.Context, p domain.PushedRequest, w domai
 
 func pushedSetup(t *testing.T) (*authorization.Service, *store, *clock, *material, domain.Request, authorization.PushedProof) {
 	t.Helper()
-	svc, s, c, m, request, original := setup(t)
+	svc, s, c, m, request, original := baseSetup(t)
 	request.State = "client-state-at-least-16"
 	spec := resources.ObjectProfileSpec{Scope: request.TenantIssuer, Resource: request.ResourceURI, Type: s.registration.Client.AuthorizationDetailsTypes[0], Semantics: resources.ObjectActionsV1, Actions: []resources.ObjectAction{{Name: "read", Description: "Read object"}}}
 	profile, err := resources.NewObjectProfile(spec)

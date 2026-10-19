@@ -75,7 +75,7 @@ func fixture(t *testing.T) (*authentication.Service, *store, *provider, *clock, 
 	c := &clock{time.Date(2026, 10, 18, 0, 0, 0, 0, time.UTC)}
 	s := &store{events: &events}
 	p := &provider{events: &events, now: c.now}
-	svc, err := authentication.New(s, c, &secrets{}, p, grants.Scope{TenantID: "a", Issuer: "https://auth.example/t/a"})
+	svc, err := authentication.New(s, c, &secrets{}, p, grants.Scope{TenantID: "a", Issuer: "https://auth.example/t/a"}, admissionFake{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,4 +151,12 @@ func TestFreshTokenCannotReuseAuthenticationBeforeLoginAttempt(t *testing.T) {
 	if _, err := svc.Complete(context.Background(), cb); !errors.Is(err, authentication.ErrDenied) || strings.Join(*s.events, ",") != "claim,exchange,claim" {
 		t.Fatal("denied login was reusable", err, *s.events)
 	}
+}
+
+type admissionFake struct{}
+
+func (admissionFake) Check(context.Context, grants.Scope, string, string, string) error { return nil }
+
+func (s *store) LoginClient(context.Context, grants.Scope, string, string, time.Time) (string, error) {
+	return "web", nil
 }

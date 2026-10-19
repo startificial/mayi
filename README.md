@@ -6,21 +6,13 @@ Oct 17, 2026 · @JJ
 
 ## What we're building
 
-Mayi lets SaaS teams expose their APIs to third-party applications and AI agents with precise, revocable permissions—while keeping their existing identity and data infrastructure.
-
-**We’re building Mayi: a self-hostable Go authorization server that gives applications, services and AI agents precise, revocable access to APIs.**
-
-It works alongside an existing identity provider and uses your PostgreSQL. Mayi manages what a caller is authorized to do, how that authority can be delegated, and when it must stop.
+We’re building **Mayi**, a self-hostable Go authorization server for SaaS teams exposing APIs to third-party applications, services and AI agents. It uses your PostgreSQL and works alongside your existing identity provider to manage precise, revocable permissions and controlled delegation.
 
 For example:
 
 > “This agent may read document 123 for the next hour. It cannot read other documents, write anything, or delegate broader access. I can revoke that permission.”
 
-Mayi issues credentials representing that permission. The API enforces it alongside its own current access rules. Human consent, machine identities, delegation and audit records form part of the same authority model.
-
-In one sentence:
-
-> **Fine-grained authorization for applications, services and AI agents—with your identity provider and your PostgreSQL.**
+Mayi issues credentials for the approved permissions; your API enforces those limits alongside its current access rules. Human consent, machine identities and audit records share the same authority model.
 
 ## Project status and documentation
 
@@ -32,11 +24,11 @@ Engineering follows [AGENTS.md](AGENTS.md), the [canonical repository structure]
 
 The [ports-and-adapters CI rules](docs/architecture-enforcement.md) define the enforced boundaries and their limits. Run `go run ./tools/checks -only architecture` to check architecture independently.
 
-The [error handling and troubleshooting guide](docs/error-handling.md) defines stable codes, safe diagnostics, request correlation and retry/recovery rules. CI checks the current local JSON catalog and response contracts; full protocol and SDK error coverage remains a P2 acceptance gate.
+The [error handling and troubleshooting guide](docs/error-handling.md) defines stable codes, safe diagnostics, request correlation and retry/recovery rules. CI checks the local JSON catalog, protocol/SDK boundary tests and the linked P2 evidence manifest.
 
-P0 is complete: [the protocol-spike report](docs/p0/protocol-spike.md) records Fosite selection, real PostgreSQL transactions and OpenBao Transit signing. The [P1 foundation and runbook](docs/p1-foundation.md) add a standalone process, external PostgreSQL configuration, explicit migrations/provisioning, isolated tenant management, key publication/rotation and audit/outbox delivery. Start a disposable two-tenant stack with `go run ./tools/p0 -development`. Login, consent and usable OAuth/OIDC endpoints remain P2; this foundation is not a production authorization server or full README conformance claim.
+P0 is complete: [the protocol-spike report](docs/p0/protocol-spike.md) records Fosite selection, real PostgreSQL transactions and OpenBao Transit signing. The [P1 foundation and runbook](docs/p1-foundation.md) add a standalone process, external PostgreSQL configuration, explicit migrations/provisioning, isolated tenant management, key publication/rotation and audit/outbox delivery. Start a disposable two-tenant stack with `go run ./tools/p0 -development`. The P2 preview adds live OAuth/OIDC, required PAR/RAR and resource enforcement. It is not a production support or full README conformance claim.
 
-P2 implementation is in progress: [core authorization milestones](docs/p2-core-authorization.md). Durable consent, configured upstream OIDC login and browser sessions/consent are implemented as a limited preview. Live token endpoints, resource enforcement and usable end-to-end OAuth integration remain under development.
+P2 implements the [core authorization preview](docs/p2-core-authorization.md): required PAR/RAR, upstream OIDC, guarded consent, immutable incremental grant revisions, JWT/opaque access tokens, refresh rotation, online introspection/revocation, the Go resource SDK and encrypted reference BFF. PostgreSQL also coordinates cross-replica abuse limits. [Executable evidence](tests/conformance/p2-evidence.json) covers the preview; production operations, broader interoperability and certification remain later gates.
 
 ## The problems
 

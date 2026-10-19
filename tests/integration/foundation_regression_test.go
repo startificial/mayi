@@ -24,18 +24,27 @@ import (
 func TestP2RuntimeCanOnlyConsumeAndRevokeStoredAuthority(t *testing.T) {
 	e := setupFoundationDatabase(t)
 	ctx := context.Background()
-	if _, err := e.admin.Exec(ctx, `INSERT INTO mayi.tenants VALUES('a','https://auth.example/t/a',1);
+	txSeed, err := e.admin.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer txSeed.Rollback(ctx)
+	if _, err := txSeed.Exec(ctx, `INSERT INTO mayi.tenants VALUES('a','https://auth.example/t/a',1);
  INSERT INTO mayi.clients(tenant_id,client_id) VALUES('a','client');
- INSERT INTO mayi.grants(tenant_id,grant_id,client_id,subject,principal_type,resource,current_scopes,expires_at)
- VALUES('a','grant','client','user:alice','user','https://api.example',ARRAY['read'],clock_timestamp()+interval '1 hour');
- INSERT INTO mayi.grant_revisions(tenant_id,grant_id,revision,scopes,expires_at)
- VALUES('a','grant',1,ARRAY['read'],clock_timestamp()+interval '1 hour');
- INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,origin_code)
- VALUES('a','code','authorization_code','grant',1,'https://api.example','client',ARRAY['read'],clock_timestamp(),clock_timestamp()+interval '50 seconds','code');
- INSERT INTO mayi.refresh_families(tenant_id,family_id,grant_id,revision,origin_code,absolute_deadline,idle_seconds)
- VALUES('a','family','grant',1,'code',clock_timestamp()+interval '1 hour',120);
- INSERT INTO mayi.issuances(tenant_id,issuance_id,grant_id,revision,origin_code,source_credential,resource,scopes,expires_at)
- VALUES('a','issuance','grant',1,'code','code','https://api.example',ARRAY['read'],clock_timestamp()+interval '5 minutes')`); err != nil {
+ INSERT INTO mayi.grants(tenant_id,grant_id,client_id,subject,principal_type,resource,current_scopes,expires_at,current_object_ceiling)
+ VALUES('a','grant','client','user:alice','user','https://api.example',ARRAY['read'],clock_timestamp()+interval '1 hour','`+fixtureObjectJSON+`');
+ INSERT INTO mayi.grant_revisions(tenant_id,grant_id,revision,scopes,expires_at,object_ceiling)
+ VALUES('a','grant',1,ARRAY['read'],clock_timestamp()+interval '1 hour','`+fixtureObjectJSON+`');
+ INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,origin_code,object_ceiling,authorization_hash)
+ VALUES('a','code','authorization_code','grant',1,'https://api.example','client',ARRAY['read'],clock_timestamp(),clock_timestamp()+interval '50 seconds','code','`+fixtureObjectJSON+`','`+secretHash("acodeworkflow")+`');
+ INSERT INTO mayi.refresh_families(tenant_id,family_id,grant_id,revision,origin_code,absolute_deadline,idle_seconds,object_ceiling)
+ VALUES('a','family','grant',1,'code',clock_timestamp()+interval '1 hour',120,'`+fixtureObjectJSON+`');
+ INSERT INTO mayi.issuances(tenant_id,issuance_id,grant_id,revision,origin_code,source_credential,resource,scopes,expires_at,object_ceiling,token_hash)
+ VALUES('a','issuance','grant',1,'code','code','https://api.example',ARRAY['read'],clock_timestamp()+interval '5 minutes','`+fixtureObjectJSON+`','`+secretHash("fixture-issuance")+`')`); err != nil {
+		t.Fatal(err)
+	}
+	seedCodeApproval(t, txSeed, "a", "code")
+	if err := txSeed.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
 	// Check effective column privileges, so a future broad grant cannot leave

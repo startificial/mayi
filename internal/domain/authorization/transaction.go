@@ -49,7 +49,7 @@ func (r Request) Valid() bool {
 			return false
 		}
 	}
-	if !r.ObjectCeiling.IsZero() && (!r.ObjectCeiling.BoundTo(r.TenantIssuer, r.ResourceURI) || len(r.ObjectCeiling.Snapshot().Details) == 0) {
+	if !r.ObjectCeiling.BoundTo(r.TenantIssuer, r.ResourceURI) || len(r.ObjectCeiling.Snapshot().Details) == 0 {
 		return false
 	}
 	return true
@@ -70,15 +70,6 @@ type Registration struct {
 	Resource       resources.Resource
 	Policy         policy.Tenant
 	ObjectProfiles []resources.ObjectProfile
-}
-
-func (r Request) AllowedBy(current Registration) bool {
-	// Registered vocabulary alone cannot authorize object consent. Required PAR
-	// and resource-owned decision metadata must be connected before enabling it.
-	if !r.ObjectCeiling.IsZero() {
-		return false
-	}
-	return r.matchesRegistration(current)
 }
 
 // MatchesObjectRegistration checks the request against current registered
@@ -104,22 +95,11 @@ func (r Request) matchesRegistration(current Registration) bool {
 	if (current.Policy.RequireBinding || current.Resource.RequireBinding) && r.BindingThumbprint == "" {
 		return false
 	}
-	for _, name := range r.PermissionScopes {
-		found := false
-		for _, scope := range current.Resource.Scopes {
-			if scope.Name == name {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
+	return current.Resource.AllowsUserScopes(r.PermissionScopes)
 }
 
 type Spec struct {
+	Revision                                                         uint64
 	ID, HandleHash, BrowserBindingHash, CSRFHash, ConsentSessionHash string
 	PushedRequestHash                                                string
 	Request                                                          Request
@@ -132,7 +112,13 @@ type Spec struct {
 type Transaction struct{ spec Spec }
 
 func New(spec Spec) (Transaction, error) {
-	if spec.PushedRequestHash != "" && (!ValidHandleHash(spec.PushedRequestHash) || spec.Request.ObjectCeiling.IsZero() || spec.PushedRequestHash == spec.HandleHash || spec.PushedRequestHash == spec.CSRFHash) {
+	if spec.Revision == 0 {
+		spec.Revision = 1
+	}
+	if spec.Revision > 1<<63-1 {
+		return Transaction{}, ErrInvalid
+	}
+	if !ValidHandleHash(spec.PushedRequestHash) || spec.PushedRequestHash == spec.HandleHash || spec.PushedRequestHash == spec.CSRFHash {
 		return Transaction{}, ErrInvalid
 	}
 	if !resources.ValidID(spec.ID) || !ValidHandleHash(spec.HandleHash) || !ValidHandleHash(spec.BrowserBindingHash) || !ValidHandleHash(spec.CSRFHash) || !spec.Request.Valid() || spec.ConsentSessionHash != "" && !ValidHandleHash(spec.ConsentSessionHash) || spec.PolicyVersion == 0 || spec.CreatedAt.IsZero() || !spec.ExpiresAt.After(spec.CreatedAt) || spec.ExpiresAt.After(spec.CreatedAt.Add(5*time.Minute)) {
@@ -150,7 +136,7 @@ func New(spec Spec) (Transaction, error) {
 		if !ValidHandleHash(spec.CodeHash) || spec.ConsentSessionHash == "" {
 			return Transaction{}, ErrInvalid
 		}
-		reference := grants.RevisionSpec{Scope: spec.Request.TenantIssuer, GrantID: spec.GrantID, Number: 1, ClientID: spec.Request.ClientID, Subject: spec.Subject, PrincipalType: "user", Resource: spec.Request.ResourceURI}
+		reference := grants.RevisionSpec{Scope: spec.Request.TenantIssuer, GrantID: spec.GrantID, Number: spec.Revision, ClientID: spec.Request.ClientID, Subject: spec.Subject, PrincipalType: "user", Resource: spec.Request.ResourceURI}
 		if !reference.ValidReferences() {
 			return Transaction{}, ErrInvalid
 		}
@@ -166,6 +152,9 @@ func (t Transaction) Snapshot() Spec {
 	return s
 }
 func (t Transaction) Decide(approve bool, subject, grantID, codeHash string, now time.Time, grantLifetime time.Duration) (Transaction, grants.Revision, error) {
+	return t.decide(approve, subject, grantID, codeHash, now, grantLifetime, nil)
+}
+func (t Transaction) decide(approve bool, subject, grantID, codeHash string, now time.Time, grantLifetime time.Duration, previous *grants.Revision) (Transaction, grants.Revision, error) {
 	s := t.Snapshot()
 	if _, err := New(s); err != nil || s.Status != Pending || s.ConsentSessionHash == "" || now.Before(s.CreatedAt) || !now.Before(s.ExpiresAt) {
 		return Transaction{}, grants.Revision{}, ErrInvalid
@@ -182,6 +171,17 @@ func (t Transaction) Decide(approve bool, subject, grantID, codeHash string, now
 	if err != nil {
 		return Transaction{}, grants.Revision{}, ErrInvalid
 	}
+	if previous != nil {
+		if !now.Before(previous.Snapshot().ExpiresAt) {
+			return Transaction{}, grants.Revision{}, ErrInvalid
+		}
+		revision, err = previous.Extend(revision.Snapshot())
+		if err != nil {
+			return Transaction{}, grants.Revision{}, ErrInvalid
+		}
+	}
+	s.Revision = revision.Snapshot().Number
+	grantID = revision.Snapshot().GrantID
 	s.Status = Approved
 	s.Subject = subject
 	s.GrantID = grantID

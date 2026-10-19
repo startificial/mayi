@@ -1,81 +1,75 @@
-# P2: Core authorization preview
+# P2 core authorization preview
 
-P2 is in progress. Milestones 1/2 implement durable consent, configured upstream OIDC login and browser sessions/consent. The live preview now includes configured token endpoints, online resource enforcement and a connected reference BFF fixture. P2 is not complete: fresh-schema mandatory RAR/PAR cutover, distributed abuse limits, full recovery/conformance coverage and the remaining operator/incremental-grant gates are outstanding. Configured live tenants expose preview discovery; foundation-only tenants retain P1 metadata.
+P2 implements the core authorization preview. It remains experimental and is
+not a production-supported or externally certified authorization server. The
+[requirement matrix](requirement-matrix.md) distinguishes this phase's evidence
+from later production, MCP, delegation and full OIDC requirements.
 
-## Milestones and acceptance
+## Enabled behavior
 
-| Milestone | Status | Required evidence |
-| --- | --- | --- |
-| 1. Authorization transaction and consent core | Implemented | Exact redirect/resource/permission snapshot; five-minute workflow and 60-second code; session/browser/CSRF authorization before protected loads; immutable session binding; one concurrent decision; atomic grant/revision/code/audit/outbox; no plaintext secrets persisted. Domain/service tests and real PostgreSQL regressions exercise these conditions. |
-| 2. Upstream OIDC login and browser consent | Implemented, limited preview | Constrained egress; state/nonce/issuer/audience/PKCE; explicit active-member mapping; atomic session issuance/rotation/termination; secure cookies; escaped consent and CSRF/CSP/origin checks. Real PostgreSQL and local OIDC HTTP fixtures cover the flow; browser/provider interoperability remains unverified. [ADR 0009](adr/0009-upstream-login-and-browser-consent.md). |
-| 2a. Standard RAR object-grant prerequisite | In progress: public required PAR/RAR flow tested; universal schema cutover remains | Migrations 5–9 and real PostgreSQL tests preserve typed authority, one-use pushed references and immutable display/version evidence. Explicit resource-guard composition supports exact object consent-to-code approval. A same-database PostgreSQL resource adapter and internal code/refresh token propagation are implemented. Public PAR composition and resource enforcement now have connected integration evidence; universal RAR/PAR schema cutover remains outstanding. Documents are the worked exit example; the model also covers workflows, projects and files through resource-owned types/actions. |
-| 3. Live protocol and token lifecycle | Implemented preview, incomplete acceptance | Explicit Fosite composition; code/PKCE and refresh HTTP endpoints; consent-authorized initial refresh issuance and idle/absolute deadlines; reviewed keyed credential-hash/version policy; JWT/opaque access tokens and OIDC ID tokens; client authentication and machine credentials; current policy/resource/client lifetime enforcement; transaction-owned key selection without nested issuance-pool acquisition. |
-| 4. Enforcement and complete preview | Connected BFF/SDK fixture implemented; remaining gates open | Authenticated introspection/revocation with approved RAR details, immediate authoritative resource checks, typed object/action SDK enforcement, connected-app grant details, Go BFF/document-123 example, denial before protected payload loads, current-permission loss, refresh replay/concurrency and immediate-cutoff tests. Only enforced RAR types and capabilities enter discovery. |
+| Capability | Implementation and evidence |
+| --- | --- |
+| Required RAR/PAR | Every resource grant has a registered typed object/action ceiling. Every interactive request uses one-use PAR. Domain, service, SQL and immutable option guards enforce the same model; there is no scope-only compatibility mode. |
+| Login/consent | Explicit upstream OIDC discovery/key trust, state/nonce/S256, fresh upstream authentication, operator-owned issuer/subject mapping, browser-bound sessions, escaped resource-owned labels and guarded consent commit. |
+| Live protocol | Public/confidential authorization code and refresh; Basic/private_key_jwt; machine credentials; one audience; ES256 access/ID tokens or opaque access tokens; authenticated online introspection and owner-scoped revocation. |
+| Durable authority | Exact approved transaction and revision, one-use code/refresh, replay cutoff, idle/absolute deadlines, atomic issue/consume/audit and no token response before commit. |
+| Incremental approval | New consent appends an immutable revision to the active root and extends connected authorization. Old codes/families keep their original ceilings. Revocation cuts off all revisions. |
+| Resource enforcement | The Go SDK intersects credential ceilings with a fresh authoritative status and resource-owned current permission guard before any payload callback. ID tokens never authorize API access. |
+| Browser integration | Runnable Go BFF with server-side AES-GCM-encrypted credentials and context-bound AAD, hardened opaque cookies, nonce/state/S256, serialized refresh and fixed API destinations. |
+| Controls | Connected-app page and JSON, usage/check timestamps, user/session revoke, tenant administrator listing/revoke, client secret/key administration, machine policy management and finite shared abuse budgets. |
 
-**P2 now has a mandatory RFC 9396 RAR prerequisite**, recorded in [ADR 0010](adr/0010-rar-object-grants-prerequisite.md). Complete milestone 2a before enabling the remaining live token/resource preview or declaring P2 complete. The exit demonstration must grant read access to document `123`, reject `124` and write operations even when the user has both permissions, and prove narrowing, refresh rotation, current-permission loss and immediate revocation. Existing milestones 1/2 are implemented scope-only groundwork; their status does not establish RAR support or satisfy this new gate.
+Current decisions and their consistency boundaries are in
+[ADR 0024](adr/0024-p2-required-authority-and-completion.md), building on
+[ADR 0021](adr/0021-postgresql-resource-authority.md) and
+[ADR 0023](adr/0023-p2-live-lifecycle-and-bff-encryption.md).
 
-**Fresh-deployment contract:** every resource grant must define typed RAR authority, and every interactive authorization request must use PAR. There is no optional scope-only resource profile or per-client PAR bypass. Existing proof/preview scaffolding is not a deployed-record compatibility commitment. Complete required snapshot/registration constraints and replace the old direct authorization path before enabling the P2 flow; no legacy backfill or upgrade project is required. Machine grants need explicit typed policy-derived authority; PAR applies to interactive authorization requests rather than adding a browser step to client credentials.
+## Deploy with PostgreSQL
 
-## RAR prerequisite implementation backlog
+Follow [the foundation runbook](p1-foundation.md) for the reviewed Go toolchain,
+external PostgreSQL owner/runtime roles, explicit migrations, tenant provisioning
+and OpenBao Transit. The process never borrows an owner connection or migrates
+on startup. No AWS service or credentials are required.
 
-The [developer error contract](error-handling.md) is also a P2 acceptance gate. Its local JSON envelope, catalog and CI tests are implemented foundations. Each enabled P2 protocol/SDK surface still needs endpoint-correct errors, safe recovery documentation, redaction and denial/non-enumeration evidence; no full CORE-13 or SDK claim follows from the local catalog. See [ADR 0016](adr/0016-developer-error-contracts.md).
+Install [the resource-owner contract](../deploy/resource-authority.sql) with a
+separate resource migration owner. Its permission/display projection must be in
+the **same physical PostgreSQL database** as Mayi, with separate ownership and
+only the documented narrow runtime grants. Maintain that projection synchronously
+with the application's actual ACL. A separately hosted authority or asynchronous
+ACL copy does not satisfy P2's atomic guard contract.
 
-1. **Domain foundation implemented; runtime integration pending.** `domain/grants` owns immutable `ObjectCeiling` values and exact tuple comparison. `domain/resources` owns immutable `ObjectProfile` registration values with fixed `object-actions-v1` semantics and registered actions. The pure OAuth codec maps the standard envelope and rejects ambiguous input; no handler invokes it yet. [ADR 0011](adr/0011-object-authority-foundation.md) records bounds, omission/denial semantics and integration gates.
-2. **Snapshot persistence and resource/client type registration implemented; live RAR issuance remains closed.** Migration 5 adds immutable, versioned request/revision/code ceilings and protected lineage fields for families/issuances; migrations 6/7 add immutable resource-owned type definitions and client/resource/type bindings. Domain approval and PostgreSQL mappings retain the exact typed ceiling; scope-only consent/redemption cannot discard it. [ADR 0012](adr/0012-durable-object-authority-snapshots.md) records the staged gate and actual transaction evidence. Universally required snapshot/PAR provenance constraints must land before accepting public requests. Intermediate nullable fields support unfinished proof scaffolding, not a supported deployment mode; remove that staging allowance at the required-flow cutover.
-3. **PAR application/storage binding implemented; public integration pending.** [ADR 0017](adr/0017-pushed-request-storage-and-binding.md) adds 90-second hashed references, current client/policy checks, proof-before-payload loading and one-use atomic browser workflow binding. [ADR 0018](adr/0018-strict-par-wire-profile.md) adds strict mixed-type PAR form, success-body and browser-reference codecs, with wire-to-storage evidence. No PAR route is enabled. [ADR 0019](adr/0019-guarded-object-consent-display.md) adds authorized object display through an explicitly injected resource-owner guard, with session/policy rechecks and binding commit under that guard. The default server has no production provider. [ADR 0020](adr/0020-durable-object-presentation-and-approval.md) adds immutable first-display evidence and guarded object consent-to-code approval through the existing atomic path. Production provider/endpoint composition and universally required public provenance remain pending before exposing the flow. Reject unknown types and bypasses at every caller boundary.
-4. **Token response/JWT and refresh narrowing implemented internally.** [ADR 0022](adr/0022-object-bound-token-propagation.md) connects approved PAR code provenance, current registration, assigned JWT/response/persistence details and refresh-successor ceilings. Live endpoints, initial refresh family issuance, introspection, SDK enforcement and grant-management views remain pending. Check resource-owned current permissions separately from the grant ceiling.
-5. Retain end-to-end and adversarial evidence for document 123 versus 124, read versus write, foreign scope, tuple recombination, missing details, PAR swapping, immutable older revisions, revoked grants, current ACL removal, concurrency and state/audit rollback. Re-estimate remaining P2 effort before committing dates.
-
-The domain/codec and durable snapshot foundations in items 1/2 are implemented. The current browser authorize route does not accept RAR. Internal object-aware redemption now carries restrictions in signed access tokens and token responses; there is no live token endpoint. No RAR type or PAR endpoint is advertised. The default server continues to reject object-bound consent. An explicitly injected resource guard can provide an authorized display; the explicit guarded composition can approve an object-bound code using durable first-display evidence. Default composition without a configured resource authority remains closed. Configured PostgreSQL authority and internal object token issuance are implemented; public routes remain gated on required-flow cutover and resource enforcement.
-
-Durable resource-owned profile registration and client type allowlists are implemented through the existing administration service and authenticated management routes. [ADR 0014](adr/0014-durable-resource-object-profiles.md) specifies immutable type/audience/action definitions; [ADR 0015](adr/0015-client-rar-type-allowlists.md) adds explicit client metadata and resource-specific vocabulary projections. [ADR 0017](adr/0017-pushed-request-storage-and-binding.md) adds application/storage PAR binding. These foundations do not enable consent or grant authority. Strict wire mapping is implemented under [ADR 0018](adr/0018-strict-par-wire-profile.md); resource-guarded display is implemented under [ADR 0019](adr/0019-guarded-object-consent-display.md) with an explicit integration boundary. Durable first-display evidence and guarded approval are implemented under [ADR 0020](adr/0020-durable-object-presentation-and-approval.md). [ADR 0021](adr/0021-postgresql-resource-authority.md) adds the first concrete resource provider, using a resource-owned schema and a single atomic PostgreSQL transaction for guard plus consent. Exact tenant `resource_authorities` configuration selects it; the owner must install/grant the contract first. Public PAR and mandatory cutover are next; live token lifecycle/enforcement gates remain outstanding.
-
-### PostgreSQL resource authority
-
-The first adapter requires the application-owned permission projection and Mayi's tables in the same PostgreSQL database, with different schemas and owners. Install [the owner contract](../deploy/resource-authority.sql) using the resource migration role and grant only the documented narrow runtime privileges. Maintain permissions synchronously with the source ACL; asynchronous replication is insufficient. Set the tenant's `"resource_authorities": ["https://api.example"]` to select exact audiences. Mayi performs no runtime ACL provisioning. See [ADR 0021](adr/0021-postgresql-resource-authority.md) for transaction enlistment, lock ordering, privilege checks and separate-database limitations. This configuration does not enable a public PAR route or change the browser request format yet.
-
-The real PostgreSQL tests cover one-connection operation, denied-before-label queries, atomic approval and forced connection loss. The internal Fosite/Transit integration verifies identical response/JWT/persisted object authority and replay cutoff. Refresh subset/omission evidence is currently at the service contract layer; real end-to-end initial refresh, SDK/current-ACL enforcement and the BFF demonstration remain outstanding.
-
-### RAR foundation evidence
-
-`grants/objects_test.go` exhausts all 4,096 historical/current/credential combinations for two documents and two actions, and all explicit requested subsets against historical/current authority. It covers document/action recombination, foreign tenant/issuer/audience, new type versions, permission loss, explicit empty denial, missing authority and deep snapshot isolation. `resources/object_profile_test.go` covers profile/type/action registration and semantic validation. The OAuth codec tests standard-envelope round trips, duplicate and escaped/case-variant members, unsupported fields, malformed values, exact locations, bounds and fuzz seeds. `TestScopeOnlyPreviewRejectsRARAndPushedRequestsBeforeServices` proves the existing browser route rejects RAR/request-reference fields before invoking services, rather than dropping restrictions. These are pure model/adapter tests, not proof of live refresh, immediate revocation, resource ACL evaluation or protocol conformance. Complete end-to-end RAR evidence remains required.
-
-`tests/integration/object_ceilings_test.go` adds real PostgreSQL snapshot/lineage, isolation, substitution, concurrency, audit rollback and replay-cutoff evidence. These are trusted adapter fixtures, not a public RAR authorization flow. The contract tests prove that object state in a credential, revision or current grant cannot fall back to scope-only issuance or reach entropy/signing, while valid consumed credentials retain replay revocation. Full end-to-end RAR/ACL/token evidence remains required.
-
-## Implemented application contract
-
-The composition entrypoint `app.NewAuthorization` wires the service, the PostgreSQL adapter and the existing cryptographic material source. It has no memory fallback. Its operations are:
-
-1. `Begin`: resolve the current registered client/resource/tenant policy; validate the exact request and permission ceiling; persist a short-lived workflow and audit/outbox; return independent raw handle/CSRF material only after commit.
-2. `PrepareConsent`: authenticate the session/membership and browser reference, repeat authorization before payload load, validate policy and bind the workflow to the session. Explicit object-aware composition additionally guards current resource permission/display state, repeats Mayi checks and persists the immutable first display/version with audit before returning it.
-3. `Decide`: validate CSRF and current decision state, then commit root/revision/code/audit/outbox or terminal denial. Explicit object approval requires exact durable presentation and a fresh matching resource projection, with that resource guard spanning approval commit. Denial needs no resource availability. Failure returns no credential or redirect result.
-
-The browser adapter must establish its own unpredictable browser-binding credential and hash raw correlation/session/CSRF handles before invoking this boundary. These application APIs are not public wire contracts. No HTTP route accepts caller-provided identity, membership or a precomputed hash as authority.
-
-Run additive migrations with the explicit `migrate` owner command, then restart onto the matching application version; mixed-version rollout remains unverified. Migration 4 permits session creation/revocation through the authentication use case; migration 5 preserves typed authority without enabling public object requests or converting historical grants. Membership and identity mapping writes remain operator-only. Fixture sessions include browser authentication evidence; this is not an enrollment mechanism for deployment.
-
-[ADR 0008](adr/0008-authorization-transactions-and-consent.md) defines ownership, lock ordering, identity coordination, session binding and remaining limits. No dependency or tool version is added.
-
-## Configure the login preview
-
-After migration, add `identity_provider` to a tenant's existing configuration. Register `https://auth.example/t/a/upstream/callback` as Mayi's redirect at that provider. Use its exact discovery values and supply the secret only through the named environment variable:
+For each interactive tenant, add these fields to its foundation configuration:
 
 ```json
 {
-  "id": "enterprise-v1",
-  "issuer": "https://login.example.com",
-  "client_id": "mayi",
-  "client_secret_env": "MAYI_A_IDP_SECRET",
-  "authorization_endpoint": "https://login.example.com/authorize",
-  "token_endpoint": "https://login.example.com/token",
-  "jwks_uri": "https://login.example.com/jwks",
-  "signing_algorithm": "RS256"
+  "credential_keys": [
+    {"version": 1, "secret_env": "MAYI_A_CREDENTIAL_KEY", "active": true}
+  ],
+  "resource_authorities": ["https://api.example"],
+  "resource_bindings": [{"id": "api", "resource": "https://api.example"}],
+  "identity_provider": {
+    "id": "enterprise-v1",
+    "issuer": "https://login.example.com",
+    "client_id": "mayi",
+    "client_secret_env": "MAYI_A_IDP_SECRET",
+    "authorization_endpoint": "https://login.example.com/authorize",
+    "token_endpoint": "https://login.example.com/token",
+    "jwks_uri": "https://login.example.com/jwks",
+    "signing_algorithm": "RS256"
+  }
 }
 ```
 
-The upstream profile requires advertised S256, `client_secret_basic`, a single client audience and fresh `auth_time` after `max_age=0`. Metadata mismatch, unavailable discovery or missing secrets prevent startup. Public HTTPS/443 endpoints are supported; the explicit development flag permits literal loopback HTTP fixtures. Private-network production IdPs require a later reviewed egress profile.
+`MAYI_A_CREDENTIAL_KEY` contains a cryptographically generated 32-byte key encoded
+as unpadded base64url. The server fails startup on invalid/missing key material.
+Keep one active key and retained versions needed by outstanding credentials;
+removing a version invalidates its keyed handles. Do not print secret values.
+The IdP secret comes only from its named environment variable. Register
+`https://auth.example/t/a/upstream/callback` at the provider. The upstream must
+support configured algorithms, Basic, S256 and fresh auth_time after max_age=0.
 
-Provision local membership and the exact upstream mapping through the owner connection. These example statements show the operator-owned records; use bound parameters in integrations and take the tenant lock first. Never derive membership from email:
+With the owner connection, provision active membership and the exact upstream
+identity mapping under the tenant coordination lock. Never infer either from
+email, domain or a caller-provided user identifier:
 
 ```sql
 BEGIN;
@@ -88,47 +82,152 @@ VALUES ('a', 'enterprise-v1', 'https://login.example.com', 'upstream-subject', '
 COMMIT;
 ```
 
-Start at `I/authorize` with `response_type=code`, registered `client_id`/exact `redirect_uri`, one `resource`, space-separated resource `scope`, unpredictable `state` (at least 16 characters) and S256 `code_challenge`/`code_challenge_method`. The browser returns through the tenant callback to consent. Every new request authenticates upstream; broader local SSO/prompt behavior remains later work. Approval creates a durable 60-second code, but **there is no live redemption endpoint yet**. This is a login/consent preview. Cookies require HTTPS through the trusted proxy.
+Use authenticated management routes to create the resource and scopes, register
+its immutable object type/actions, then create a client with that resource and a
+nonempty authorization_details_types allowlist. Scopes can require administrator
+approval; ordinary user consent then rejects them. Resources select token_format
+`jwt` (default) or `opaque`. Tenant policy exposes refresh_idle_seconds and
+refresh_absolute_seconds, with finite defaults of 86,400 and 2,592,000 seconds.
+Grant/policy deadlines can shorten either lifetime.
 
-Sessions have a 15-minute idle and one-hour absolute lifetime, rotate at login and end through a same-origin POST to `I/session/end`. `I/sessions` lists active sessions; same-origin POSTs to `I/sessions/{reference}/revoke` and `I/session/touch` revoke or renew activity without extending the absolute deadline. Session end does not revoke durable grants. Connected-app details/revocation use `I/grants` and `I/grants/{id}/revoke`. Downstream logout remains pending. Login/consent stay unframeable; the Go BFF and embedded-session plan has separate acceptance gates.
+## Wire flow
 
-## Verification
+Let `I = https://auth.example/t/a`. Authenticate the client according to its
+registration and POST an application/x-www-form-urlencoded body to `I/par`:
 
-[ADR 0013](adr/0013-p2-review-corrections.md) records the three-reviewer P2 audit and corrections: attempt-relative upstream authentication freshness, browser-bound logout after membership loss, and narrower runtime lifecycle update privileges. Domain/service tests and the real PostgreSQL suite cover the new denial, replay, foreign-reference and reactivation cases. This internal review does not complete the independent production or interoperability gates.
+```text
+client_id=web
+response_type=code
+redirect_uri=https://app.example/callback
+resource=https://api.example
+scope=read openid offline_access
+state=<unpredictable client state, at least 16 characters>
+nonce=<unpredictable relying-party nonce, at least 16 characters>
+code_challenge=<S256 challenge>
+code_challenge_method=S256
+authorization_details=[{"type":"https://api.example/types/document/v1","locations":["https://api.example"],"identifier":"123","actions":["read"]}]
+```
+
+Percent-encode these fields using a form encoder. The type must have been
+registered with this exact resource and the client; type URIs are inert names,
+not schema fetch destinations. A successful 201 response contains a bounded
+`request_uri`. Navigate top-level to `I/authorize?client_id=web&request_uri=...`.
+No request substitution or extra authorization parameters are accepted there.
+The browser authenticates upstream, displays current resource-owned labels and
+approves the exact pushed request. Success returns a <=60-second code, state
+and issuer to the registered redirect; explicit denial returns access_denied,
+state and issuer. Untrusted/expired requests fail locally without redirecting.
+
+Redeem at `I/token` with grant_type=authorization_code, the code and original
+S256 verifier. A supplied redirect_uri must match exactly. A supplied resource
+must match the stored audience. Omission inherits only that credential's audience
+after possession checks. Requesting openid requires a bound nonce and produces
+an ES256 ID token for the client; it is never an API credential. Approved
+offline_access produces a one-use refresh family. Explicit scope attenuation
+can drop continued-access capability; omitted scope preserves the bounded
+credential authority. RAR narrowing at redemption requires an explicit resource.
+
+Rotate at `I/token` with grant_type=refresh_token. Serialize refresh in every
+client. Omission preserves only that family's authority; added objects/actions
+or scopes fail. Authenticated reuse revokes its family/root and dependent access
+tokens. An ambiguous network response is not safe to retry automatically.
+
+The optional provisioned `I/r/api/par` and `I/r/api/authorize` routes bind the
+resource from configuration when the parameter is omitted and reject conflicts.
+They still require PAR, RAR, registered-client policy and normal consent.
+
+## Resource and browser integrations
+
+Use [pkg/resource](../pkg/resource/README.md) for the application API and
+[examples/bff](../examples/bff/README.md) for a standalone or existing-Go-backend
+BFF. A fresh online status check and current resource permission guard precede
+the payload callback. Credentials belong only in one Authorization header; query
+and form-body access_token credentials are rejected. JSON/business bodies need
+the application's own strict boundary decoder. Neither JWT validation nor a
+stale positive cache satisfies immediate revocation.
+
+BFF encryption authenticates version, algorithm, key ID, tenant, issuer, client,
+audience, session ID, credential purpose and generation as AAD. It rejects record
+swaps and purpose/context changes. Whole-record rollback needs durable-store
+monotonic state; AAD alone cannot solve it. The reference memory store is bounded,
+single-process and restart-invalidating. Production BFF persistence and the
+cross-replica GCM key usage budget are explicit integration responsibilities.
+
+The [embedded-session/handoff contract](implementation-plan.md#embedded-authentication-and-sessions)
+is defined, with implementation/browser capability evidence scheduled for P5.
+P2 does not advertise iframe login, token handoff in URLs/messages or unsupported
+browser storage guarantees.
+
+## Management and abuse controls
+
+Same-origin session-cookie operations:
+
+| Endpoint | Behavior |
+| --- | --- |
+| GET `I/connected-apps` | Escaped Go-rendered applications, approved permissions, token issuance counts and last online token use/check, with revoke forms. A token check is not proof of protected-content delivery. |
+| GET `I/grants` | Corresponding JSON grant summaries and typed details. |
+| POST `I/grants/{id}/revoke` | Revoke the caller's own root and all its revisions. |
+| GET `I/sessions` | Active sessions and current-session marker. |
+| POST `I/sessions/{reference}/revoke` | End an owned session. |
+| POST `I/session/touch` | Renew activity without extending the one-hour absolute cap. |
+| POST `I/session/end` | End the browser-bound session; grant revocation is separate. |
+
+Cookie POSTs require the exact configured Origin. Sessions have 15-minute idle
+and one-hour absolute limits. Every new authorization authenticates upstream;
+full assurance/logout integrations remain later phases.
+
+Administrator routes require explicit scoped permissions. GET
+`/admin/t/a/grants?after=<last-id>` uses grants:read and bounded ID-cursor pages;
+POST `/admin/t/a/grants/revoke` uses grants:write and a grant/user/client selector.
+PUT/DELETE `/admin/t/a/clients/{id}/machine-authorization` uses clients:write,
+with a resource and, for PUT, scopes and authorization_details. Removal/narrowing
+immediately affects fresh machine-token decisions. Secret rotation returns the
+secret once; only versioned keyed hashes and finite expiries persist. Inline or
+registered remote public JWKS support private_key_jwt; token-controlled key URLs
+are never fetched. The strict assertion profile accepts only iss/sub/aud/jti/
+iat/exp/nbf and public sig JWK fields; duplicate/case-variant/unsupported members,
+private material, wrong algorithm/purpose/audience and assertion reuse fail.
+
+Shared budgets apply to login/token/introspection by IP/client/user. Default
+60-second capacities are login IP 120, client/user 30; token IP 600, client/user
+120; introspection 6,000 per dimension. Override using top-level rate_limits with
+all nine {operation, dimension, limit, window_seconds} entries; each limit is
+1–1,000,000 and each window 1–3,600 seconds. All replicas must use the same rules.
+These are fixed windows, with bounded expiry cleanup and no positive cache.
+HTTP 429 includes Retry-After; shared-state failures fail closed.
+
+By default peer IP is the socket address. Set top-level trusted_proxies to exact
+canonical CIDRs only for proxies that overwrite/append X-Forwarded-For correctly.
+The server walks from the trusted peer to the first untrusted address. Arbitrary
+Forwarded/X-Forwarded-For headers cannot establish identity or issuer.
+
+## Verification and evidence
+
+Run the full required gates:
 
 ```sh
 go run ./tools/checks
 go test -race -count=1 ./...
 go vet ./...
+test -z "$(gofmt -l .)"
 go run ./tools/p0
 ```
 
-The existing real-service CI harness includes authorization, authentication and browser tests automatically. Ordinary `go test` skips database cases without that environment. Login/consent tests can also use the reviewed PostgreSQL instance independently of Transit; the full-server routing test additionally requires Transit. The local OIDC fixture exchanges code/S256 and signs test ID tokens without contacting enterprise accounts or cloud services.
+The last command builds reviewed PostgreSQL/OpenBao sources and runs real
+integration tests. Plain go test skips those cases without the harness environment.
+CI executes all of these gates; a workflow does not establish branch protection.
 
-## Live lifecycle and BFF evidence
+The [P2 evidence manifest](../tests/conformance/p2-evidence.json) links bounded
+protocol/profile evidence. `live_protocol_test.go` covers the connected Go
+BFF/SDK demonstration (read 123, deny 124/write before payload), actual PAR/login,
+OIDC relying-party validation, signing, rotation, replay and current ACL/removal.
+`p2_completion_test.go` covers shared replica limits, required option commits,
+resource bindings, incremental revisions, old-family isolation, machine policy
+removal, usage/admin scope and audit correlation. Existing persistence failure,
+authorization order, foreign-tenant, parser/fuzz-seed and crypto tests remain gates.
 
-[ADR 0023](adr/0023-p2-live-lifecycle-and-bff-encryption.md) records registered
-Basic/private-key client authentication, purpose-separated keyed credential
-hashes, atomic initial refresh issuance, transaction-owned signing version,
-JWT/opaque online status, machine policy and user/administrator controls. The
-public SDK performs a fresh authenticated status decision and checks exact typed
-object/action authority before the resource owner's current-permission callback.
-
-`TestP2PublicProtocolAndSDKEnforceObjectAuthorityAndImmediateCutoff` runs PAR,
-code/ID-token issuance, initial refresh, rotation, replay and JWT/opaque resource
-checks with real PostgreSQL/OpenBao. It rejects object substitution, write access
-and ID-token misuse before protected payload access; current ACL loss and replay
-cut off access. `TestP2ClientAuthenticationRotationAssertionsAndMachinePolicy`
-adds rotation overlap, atomic assertion replay and machine policy removal.
-`TestP2UserAndAdministratorControlsAuthenticateBeforeLoading` covers connected
-apps, tenant/browser isolation, user/admin cutoff and idle session controls.
-
-`TestP2ReferenceBFFCompletesPARLoginAndProtectsResources` connects the runnable
-[Go BFF](../examples/bff/README.md) through public PAR, upstream login, consent,
-code exchange, independent ID-token validation and the resource SDK. The user
-can read objects 123 and 124, while the application receives only 123/read.
-Application routing in this fixture is in-process; introspection, persistence
-and non-exportable signing are real. The separate BFF race tests cover encrypted
-storage and refresh serialization. Both token and login-state ciphertext use
-AES-256-GCM with AAD and context-substitution tests. This is not real-browser,
-embedding, deployment, performance or complete P2 conformance evidence.
+This is executable local preview evidence, not OpenID certification, a real
+browser compatibility matrix, managed-PostgreSQL certification, production HA,
+restore/upgrade verification or an independent security audit. Those retain the
+plan's later delivery gates. ES256 is the published server signing profile;
+UserInfo, RP logout, native/MCP registration and delegation are not advertised.

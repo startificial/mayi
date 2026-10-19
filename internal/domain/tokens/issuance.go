@@ -26,16 +26,6 @@ type AccessClaims struct {
 	IssuedAt, ExpiresAt                        time.Time
 }
 
-func Derive(revision grants.Revision, current, requested []string, id, binding string, now time.Time, lifetime time.Duration, deadlines ...time.Time) (AccessClaims, error) {
-	spec := revision.Snapshot()
-	// Scope-only callers cannot discard object authority. Object-aware callers
-	// must use DeriveObjects with an explicitly attenuated complete ceiling.
-	if !spec.ObjectCeiling.IsZero() {
-		return AccessClaims{}, ErrInvalidIssuance
-	}
-	return derive(revision, current, requested, grants.ObjectCeiling{}, id, binding, now, lifetime, deadlines...)
-}
-
 // DeriveObjects accepts only the already attenuated complete object tuples.
 // The application must also enforce credential/current-grant ceilings and policy.
 func DeriveObjects(revision grants.Revision, current, requested []string, objects grants.ObjectCeiling, id, binding string, now time.Time, lifetime time.Duration, deadlines ...time.Time) (AccessClaims, error) {

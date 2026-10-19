@@ -3,6 +3,7 @@
 package resource
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"github.com/startificial/mayi/internal/adapters/outbound/egress/httpclient"
@@ -10,7 +11,10 @@ import (
 	"github.com/startificial/mayi/internal/domain/grants"
 	"github.com/startificial/mayi/internal/domain/resources"
 	service "github.com/startificial/mayi/internal/services/resource"
+	"io"
+	"mime"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -107,12 +111,40 @@ func (c *Client) WithAccess(ctx context.Context, token string, r Request, fn fun
 // HeaderToken is the sole supported credential location. Resource handlers must
 // reject query/body access-token parameters too, before invoking their service.
 func HeaderToken(r *http.Request) (string, error) {
-	if r == nil || r.URL.Query().Has("access_token") || len(r.Header.Values("Authorization")) != 1 || len(r.Header.Values("DPoP")) > 1 {
+	if r == nil || r.URL == nil || len(r.Header.Values("Content-Type")) > 1 || len(r.Header.Get("DPoP")) > 8192 || r.URL.Query().Has("access_token") || len(r.Header.Values("Authorization")) != 1 || len(r.Header.Values("DPoP")) > 1 {
 		return "", ErrDenied
+	}
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil || query.Has("access_token") {
+		return "", ErrDenied
+	}
+	if raw := r.Header.Get("Content-Type"); raw != "" {
+		media, _, err := mime.ParseMediaType(raw)
+		if err != nil {
+			return "", ErrDenied
+		}
+		if media == "application/x-www-form-urlencoded" && r.Body != nil {
+			original := r.Body
+			body, err := io.ReadAll(io.LimitReader(original, 65537))
+			_ = original.Close()
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			if err != nil || len(body) > 65536 {
+				return "", ErrDenied
+			}
+			form, err := url.ParseQuery(string(body))
+			if err != nil || form.Has("access_token") {
+				return "", ErrDenied
+			}
+		}
 	}
 	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
 	if !ok || token == "" || len(token) > 65536 || strings.ContainsAny(token, " \r\n\t") || scheme != "Bearer" && scheme != "DPoP" || scheme == "DPoP" && r.Header.Get("DPoP") == "" || scheme == "Bearer" && r.Header.Get("DPoP") != "" {
 		return "", ErrDenied
+	}
+	for _, c := range token {
+		if c < 0x21 || c > 0x7e {
+			return "", ErrDenied
+		}
 	}
 	return token, nil
 }

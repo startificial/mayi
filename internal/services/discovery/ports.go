@@ -8,4 +8,5 @@ import (
 
 type Directory interface {
 	PublishedKeys(context.Context, grants.Scope) ([]identity.PublicKey, error)
+	AuthorizationDetailTypes(context.Context, grants.Scope) ([]string, error)
 }

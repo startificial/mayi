@@ -76,4 +76,7 @@ type Transaction interface {
 	// CompleteAuthorization atomically consumes the pending workflow, inserts the
 	// exact revision and <=60s code if approved, and records audit/outbox evidence.
 	CompleteAuthorization(context.Context, domain.Transaction, grants.Revision, time.Time) error
+	// CurrentApproval serializes this authenticated user's client/resource tuple,
+	// returning only the current root ceiling for creation of a new revision.
+	CurrentApproval(context.Context, domain.Transaction, time.Time) (*grants.Revision, error)
 }

@@ -5,6 +5,7 @@ package tokens
 import (
 	"context"
 	"errors"
+	"github.com/startificial/mayi/internal/services/authentication"
 	"time"
 
 	"github.com/startificial/mayi/internal/domain/grants"
@@ -12,6 +13,8 @@ import (
 	domaintokens "github.com/startificial/mayi/internal/domain/tokens"
 )
 
+var ErrInvalidDetails = errors.New("invalid token authorization details")
+var ErrInvalidScope = errors.New("invalid token scopes")
 var ErrInvalidCredential = errors.New("invalid credential")
 var ErrUnavailable = errors.New("issuance unavailable")
 
@@ -84,25 +87,29 @@ type Result struct {
 	ObjectProfiles                     []resources.ObjectProfile
 }
 type Service struct {
-	policy   Authorizer
-	clock    Clock
-	pkce     PKCEVerifier
-	signer   Signer
-	material MaterialSource
-	store    UnitOfWork
-	lifetime time.Duration
+	policy    Authorizer
+	clock     Clock
+	pkce      PKCEVerifier
+	signer    Signer
+	material  MaterialSource
+	store     UnitOfWork
+	lifetime  time.Duration
+	admission UsageAdmission
 }
 
-func New(policy Authorizer, clock Clock, pkce PKCEVerifier, signer Signer, material MaterialSource, store UnitOfWork, lifetime time.Duration) (*Service, error) {
-	if policy == nil || clock == nil || pkce == nil || signer == nil || material == nil || store == nil || lifetime <= 0 || lifetime > 15*time.Minute {
+func New(policy Authorizer, clock Clock, pkce PKCEVerifier, signer Signer, material MaterialSource, store UnitOfWork, lifetime time.Duration, admission UsageAdmission) (*Service, error) {
+	if admission == nil || policy == nil || clock == nil || pkce == nil || signer == nil || material == nil || store == nil || lifetime <= 0 || lifetime > 15*time.Minute {
 		return nil, ErrUnavailable
 	}
-	return &Service{policy: policy, clock: clock, pkce: pkce, signer: signer, material: material, store: store, lifetime: lifetime}, nil
+	return &Service{policy: policy, clock: clock, pkce: pkce, signer: signer, material: material, store: store, lifetime: lifetime, admission: admission}, nil
 }
 
 func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
-	if !cmd.Caller.Scope.Valid() || cmd.Caller.ClientID == "" || cmd.CredentialHash == "" || len(cmd.CredentialHash) > 256 || cmd.Resource == "" || len(cmd.Resource) > 2048 || !grants.ValidScopes(cmd.Scopes) || (cmd.Kind != AuthorizationCode && cmd.Kind != RefreshToken) {
+	if !cmd.Caller.Scope.Valid() || cmd.Caller.ClientID == "" || cmd.CredentialHash == "" || len(cmd.CredentialHash) > 256 || cmd.Resource != "" && !resources.ValidURI(cmd.Resource) || !grants.ValidScopes(cmd.Scopes) || (cmd.Kind != AuthorizationCode && cmd.Kind != RefreshToken) {
 		return Result{}, ErrInvalidCredential
+	}
+	if err := s.admission.Check(ctx, cmd.Caller.Scope, "token", "client", cmd.Caller.ClientID); err != nil {
+		return Result{}, err
 	}
 	version, err := s.policy.AuthorizeRedemption(ctx, cmd.Caller, cmd.CredentialHash)
 	if err != nil || version == 0 {
@@ -116,7 +123,7 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 			return err
 		}
 		now := s.clock.Now()
-		if cmd.Caller.AuthenticationVersion != 0 && credential.ClientAuthenticationVersion != cmd.Caller.AuthenticationVersion || credential.Scope != cmd.Caller.Scope || credential.Hash != cmd.CredentialHash || credential.ClientID != cmd.Caller.ClientID || credential.Kind != cmd.Kind || credential.Resource != cmd.Resource || credential.BindingThumbprint != cmd.Caller.BindingThumbprint {
+		if cmd.Caller.AuthenticationVersion != 0 && credential.ClientAuthenticationVersion != cmd.Caller.AuthenticationVersion || credential.Scope != cmd.Caller.Scope || credential.Hash != cmd.CredentialHash || credential.ClientID != cmd.Caller.ClientID || credential.Kind != cmd.Kind || cmd.Resource != "" && credential.Resource != cmd.Resource || credential.BindingThumbprint != cmd.Caller.BindingThumbprint {
 			return ErrInvalidCredential
 		}
 		// Validate possession before allowing a replay to revoke anything.
@@ -127,6 +134,14 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 			if err := s.pkce.VerifyS256(credential.PKCEChallenge, cmd.Verifier); err != nil {
 				return ErrInvalidCredential
 			}
+		}
+		// An omitted resource inherits only this authenticated credential's bound
+		// audience; it never consults a user's latest grant or a deployment default.
+		if cmd.Resource == "" {
+			cmd.Resource = credential.Resource
+		}
+		if !resources.ValidURI(cmd.Resource) {
+			return ErrInvalidCredential
 		}
 		if credential.Consumed {
 			if err := tx.RevokeReplay(ctx, credential); err != nil {
@@ -141,16 +156,14 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 		if cmd.Kind == AuthorizationCode && (!credential.ExpiresAt.After(credential.IssuedAt) || credential.ExpiresAt.After(credential.IssuedAt.Add(60*time.Second))) {
 			return ErrInvalidCredential
 		}
-		var credentialObjects grants.ObjectCeiling
-		if credential.ObjectBound {
-			credentialObjects, err = tx.CredentialObjects(ctx, credential)
-			if err != nil {
-				return err
-			}
-			if !credentialObjects.BoundTo(cmd.Caller.Scope, cmd.Resource) || len(credentialObjects.Snapshot().Details) == 0 {
-				return ErrInvalidCredential
-			}
-		} else if cmd.Objects != nil {
+		if !credential.ObjectBound {
+			return ErrInvalidCredential
+		}
+		credentialObjects, err := tx.CredentialObjects(ctx, credential)
+		if err != nil {
+			return err
+		}
+		if !credentialObjects.BoundTo(cmd.Caller.Scope, cmd.Resource) || len(credentialObjects.Snapshot().Details) == 0 {
 			return ErrInvalidCredential
 		}
 		state, err := tx.GrantRevision(ctx, credential.GrantID, credential.Revision)
@@ -177,6 +190,9 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 			}
 			objects, err = spec.ObjectCeiling.Narrow(state.CurrentObjectCeiling, cmd.Objects, credentialObjects)
 			if err != nil || len(objects.Snapshot().Details) == 0 {
+				if cmd.Objects != nil {
+					return errors.Join(ErrInvalidCredential, ErrInvalidDetails)
+				}
 				return ErrInvalidCredential
 			}
 		}
@@ -185,7 +201,13 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 		}
 		effective, err := state.Revision.Narrow(state.CurrentScopes, cmd.Scopes, credential.CeilingScopes)
 		if err != nil || len(effective) == 0 {
+			if len(cmd.Scopes) > 0 {
+				return errors.Join(ErrInvalidCredential, ErrInvalidScope)
+			}
 			return ErrInvalidCredential
+		}
+		if err := s.admission.CheckUsing(ctx, tx, cmd.Caller.Scope, "token", "user", spec.Subject); err != nil {
+			return err
 		}
 		material, err := s.material.NewMaterial(ctx)
 		if err != nil {
@@ -199,18 +221,13 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 		if state.MaxAccessTokenSeconds > 0 && time.Duration(state.MaxAccessTokenSeconds)*time.Second < lifetime {
 			lifetime = time.Duration(state.MaxAccessTokenSeconds) * time.Second
 		}
-		var claims domaintokens.AccessClaims
-		if credential.ObjectBound {
-			claims, err = domaintokens.DeriveObjects(state.Revision, effective, effective, objects, material.ID, credential.BindingThumbprint, now, lifetime, deadlines...)
-		} else {
-			claims, err = domaintokens.Derive(state.Revision, effective, effective, material.ID, credential.BindingThumbprint, now, lifetime, deadlines...)
-		}
+		claims, err := domaintokens.DeriveObjects(state.Revision, effective, effective, objects, material.ID, credential.BindingThumbprint, now, lifetime, deadlines...)
 		if err != nil {
 			return ErrInvalidCredential
 		}
 		claims.SigningKeyVersion = state.SigningKeyVersion
 		claims.AuthenticatedAt = state.AuthenticatedAt
-		refresh := cmd.Kind == RefreshToken || cmd.Kind == AuthorizationCode && state.OfflineAccess
+		refresh := (cmd.Kind == RefreshToken || cmd.Kind == AuthorizationCode && state.OfflineAccess) && (!cmd.WireScopesSpecified || cmd.OfflineRequested)
 		if refresh && (material.RefreshSecret == "" || material.RefreshHash == "" || material.RefreshHash == credential.Hash || material.RefreshSecret == material.RefreshHash) {
 			return ErrUnavailable
 		}
@@ -218,7 +235,7 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 		if refresh {
 			issuance.RefreshHash = material.RefreshHash
 		}
-		if cmd.Kind == AuthorizationCode && state.OfflineAccess {
+		if cmd.Kind == AuthorizationCode && refresh {
 			if state.RefreshIdleSeconds < 60 || state.RefreshAbsoluteSeconds < state.RefreshIdleSeconds {
 				return ErrUnavailable
 			}
@@ -272,13 +289,19 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 		if err := tx.CommitIssuance(ctx, credential, issuance); err != nil {
 			return err
 		}
-		result = Result{AccessToken: token, IDToken: idToken, Claims: claims, ObjectProfiles: state.ObjectProfiles, OIDC: state.OIDC && (!cmd.WireScopesSpecified || cmd.OIDCRequested), OfflineAccess: state.OfflineAccess}
+		result = Result{AccessToken: token, IDToken: idToken, Claims: claims, ObjectProfiles: state.ObjectProfiles, OIDC: state.OIDC && (!cmd.WireScopesSpecified || cmd.OIDCRequested), OfflineAccess: refresh && state.OfflineAccess}
 		if refresh {
 			result.RefreshToken = material.RefreshSecret
 		}
 		return nil
 	})
 	if err != nil {
+		if errors.Is(err, ErrInvalidDetails) || errors.Is(err, ErrInvalidScope) {
+			return Result{}, err
+		}
+		if errors.Is(err, authentication.ErrLimited) {
+			return Result{}, err
+		}
 		if errors.Is(err, ErrInvalidCredential) {
 			return Result{}, ErrInvalidCredential
 		}

@@ -65,7 +65,7 @@ func NewRevision(spec RevisionSpec) (Revision, error) {
 	if !ValidScopes(spec.Scopes) {
 		return Revision{}, ErrInvalidRevision
 	}
-	if !spec.ObjectCeiling.IsZero() && (!spec.ObjectCeiling.BoundTo(spec.Scope, spec.Resource) || len(spec.ObjectCeiling.Snapshot().Details) == 0) {
+	if !spec.ObjectCeiling.BoundTo(spec.Scope, spec.Resource) || len(spec.ObjectCeiling.Snapshot().Details) == 0 {
 		return Revision{}, ErrInvalidRevision
 	}
 	spec.Scopes = slices.Clone(spec.Scopes)
@@ -136,4 +136,31 @@ func validID(s string) bool {
 		}
 	}
 	return true
+}
+
+// Extend records a new consent revision. Existing revisions and credential
+// ceilings remain unchanged; new credentials still carry their exact request.
+func (r Revision) Extend(request RevisionSpec) (Revision, error) {
+	old := r.Snapshot()
+	if _, err := NewRevision(old); err != nil {
+		return Revision{}, ErrInvalidRevision
+	}
+	if old.Scope != request.Scope || old.ClientID != request.ClientID || old.Subject != request.Subject || old.PrincipalType != "user" || request.PrincipalType != "user" || old.Resource != request.Resource || old.Number >= 1<<63-1 {
+		return Revision{}, ErrInvalidRevision
+	}
+	objects, err := old.ObjectCeiling.Union(request.ObjectCeiling)
+	if err != nil {
+		return Revision{}, ErrInvalidRevision
+	}
+	scopes := slices.Clone(old.Scopes)
+	for _, name := range request.Scopes {
+		if !slices.Contains(scopes, name) {
+			scopes = append(scopes, name)
+		}
+	}
+	request.GrantID = old.GrantID
+	request.Number = old.Number + 1
+	request.Scopes = scopes
+	request.ObjectCeiling = objects
+	return NewRevision(request)
 }

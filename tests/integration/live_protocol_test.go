@@ -63,6 +63,10 @@ func (t applicationTransport) RoundTrip(r *http.Request) (*http.Response, error)
 	default:
 		return nil, errors.New("destination denied")
 	}
+	if r.RemoteAddr == "" {
+		r = r.Clone(r.Context())
+		r.RemoteAddr = "192.0.2.1:42000"
+	}
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, r)
 	result := recorder.Result()
@@ -445,7 +449,11 @@ func newLiveProtocol(t *testing.T) *liveProtocol {
 	if err != nil {
 		t.Fatal(err)
 	}
-	clients, err := clientservice.New(e.store, clock{}, assertions, secrets, proof.TenantIssuer)
+	admission, err := authentication.NewAdmission(e.store, authentication.DefaultBudgetRules())
+	if err != nil {
+		t.Fatal(err)
+	}
+	clients, err := clientservice.New(e.store, clock{}, assertions, secrets, proof.TenantIssuer, admission)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -457,15 +465,17 @@ func newLiveProtocol(t *testing.T) *liveProtocol {
 	if err != nil {
 		t.Fatal(err)
 	}
-	machine, err := tokens.NewMachine(e.store, clock{}, material, signer)
+
+	machine, err := tokens.NewMachine(e.store, clock{}, material, signer, admission)
 	if err != nil {
 		t.Fatal(err)
 	}
-	status, err := tokens.NewStatus(e.store, hash, material)
-	if err != nil {
-		t.Fatal(err)
-	}
+
 	proofs, err := tokens.NewProofs(cryptoadapter.NewDPoP(), e.store, clock{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err := tokens.NewStatus(e.store, hash, material, proofs, admission)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -518,12 +528,16 @@ func protocolPost(handler http.HandlerFunc, form url.Values, id, secret string) 
 	return w
 }
 func (l *liveProtocol) code(t *testing.T, offline bool) string {
+	return l.objectCode(t, "workflow:123", offline)
+}
+func (l *liveProtocol) objectCode(t *testing.T, identifier string, offline bool) string {
 	t.Helper()
 	scope := "read openid"
 	if offline {
 		scope += " offline_access"
 	}
 	form := url.Values{"client_id": {"web"}, "response_type": {"code"}, "redirect_uri": {"https://app.example/cb?provider=mayi"}, "resource": {"https://api.example"}, "scope": {scope}, "nonce": {"nonce-for-relying-client"}, "state": {"downstream-state-123456"}, "code_challenge_method": {"S256"}, "code_challenge": {challenge}, "authorization_details": {`[{"type":"https://api.example/types/fixture/v1","locations":["https://api.example"],"identifier":"workflow:123","actions":["read"]}]`}}
+	form.Set("authorization_details", strings.ReplaceAll(form.Get("authorization_details"), "workflow:123", identifier))
 	w := protocolPost(l.protocol.Push, form, "", "")
 	var pushed struct {
 		URI string `json:"request_uri"`

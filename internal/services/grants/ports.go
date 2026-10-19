@@ -12,11 +12,15 @@ type BrowserProof struct {
 	SessionHash, BrowserHash string
 }
 type Summary struct {
-	ID, ClientID, Resource string
-	Revision               uint64
-	Scopes                 []string
-	Objects                domain.ObjectCeiling
-	ExpiresAt              time.Time
+	ID, ClientID, Resource, Subject string
+	Revision                        uint64
+	Scopes                          []string
+	Objects                         domain.ObjectCeiling
+	ExpiresAt                       time.Time
+	TokensIssued                    uint64
+	LastIssuedAt                    *time.Time
+	LastUsedAt                      *time.Time
+	TokenChecks                     uint64
 }
 type Operator struct {
 	Scope       domain.Scope
@@ -26,6 +30,7 @@ type Operator struct {
 type Store interface {
 	WithUserGrants(context.Context, BrowserProof, time.Time, func(UserGrants) error) error
 	RevokeAdministrator(context.Context, domain.Scope, string, string, string) error
+	ListAdministrator(context.Context, domain.Scope, string, int) ([]Summary, error)
 }
 type UserGrants interface {
 	List(context.Context) ([]Summary, error)

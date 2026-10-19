@@ -15,7 +15,7 @@ For future `v0` previews, the default will be best-effort fixes on `main` and th
 
 ## Preview limitations
 
-- P2 remains in progress. Local upstream OIDC login and consent foundations are implemented; the complete live token/resource-enforcement flow and P2 exit evidence remain outstanding. Required PAR/RAR foundations and their integration are tracked in [the P2 milestones](docs/p2-core-authorization.md). Do not infer a public capability from a domain model or test fixture.
+- The [P2 core preview](docs/p2-core-authorization.md) implements live PAR/RAR, login/consent, token lifecycle, resource enforcement, connected applications and the reference BFF. Its [local evidence manifest](tests/conformance/p2-evidence.json) is not external certification or a production-support commitment. The documented configuration and narrow signing/resource-authority profiles apply.
 - The Go resource SDK/BFF, complete machine-token path, delegation and embedded-session/browser compatibility must meet their respective implementation gates before use. Planned capabilities in the README and architecture are not a list of currently supported features.
 - Supplying a PostgreSQL primary is supported by the development configuration. Managed-provider/pooler compatibility, arbitrary existing database schemas, production upgrades and recovery are not certified. Use the dedicated roles and schema/migration requirements in [the foundation runbook](docs/p1-foundation.md).
 - Private signing-key handling and transaction tests have development evidence; production KMS/HSM deployment, HA, failover, restore, performance and operational monitoring gates remain open. Development fixtures are not production credentials or deployment templates.

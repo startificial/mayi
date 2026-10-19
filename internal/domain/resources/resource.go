@@ -9,8 +9,12 @@ import (
 	"github.com/startificial/mayi/internal/domain/grants"
 )
 
-type Scope struct{ Name, Description string }
+type Scope struct {
+	Name, Description string
+	RequiresAdmin     bool
+}
 type Resource struct {
+	TokenFormat        string
 	ID, URI, Name      string
 	Scopes             []Scope
 	AccessTokenSeconds int
@@ -89,7 +93,7 @@ func ValidLabel(s string) bool {
 	return true
 }
 func (r Resource) Valid() bool {
-	if !ValidID(r.ID) || !ValidURI(r.URI) || !ValidLabel(r.Name) || r.AccessTokenSeconds < 60 || r.AccessTokenSeconds > 900 || len(r.Scopes) == 0 {
+	if r.TokenFormat != "" && r.TokenFormat != "jwt" && r.TokenFormat != "opaque" || !ValidID(r.ID) || !ValidURI(r.URI) || !ValidLabel(r.Name) || r.AccessTokenSeconds < 60 || r.AccessTokenSeconds > 900 || len(r.Scopes) == 0 {
 		return false
 	}
 	names := make([]string, 0, len(r.Scopes))
@@ -100,4 +104,31 @@ func (r Resource) Valid() bool {
 		names = append(names, scope.Name)
 	}
 	return grants.ValidScopes(names)
+}
+
+func (r Resource) AccessTokenFormat() string {
+	if r.TokenFormat == "" {
+		return "jwt"
+	}
+	return r.TokenFormat
+}
+
+// AllowsUserScopes excludes scopes that require separate administrator approval.
+func (r Resource) AllowsUserScopes(names []string) bool {
+	if len(names) == 0 || !grants.ValidScopes(names) {
+		return false
+	}
+	for _, name := range names {
+		found := false
+		for _, permission := range r.Scopes {
+			if permission.Name == name && !permission.RequiresAdmin {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }

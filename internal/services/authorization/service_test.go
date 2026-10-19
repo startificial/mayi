@@ -99,7 +99,7 @@ func (s *store) CompleteAuthorization(_ context.Context, w domain.Transaction, _
 	s.workflow = w
 	return nil
 }
-func setup(t *testing.T) (*authorization.Service, *store, *clock, *material, domain.Request, authorization.AccessProof) {
+func baseSetup(t *testing.T) (*authorization.Service, *store, *clock, *material, domain.Request, authorization.AccessProof) {
 	t.Helper()
 	scope := grants.Scope{TenantID: "a", Issuer: "https://auth.example/t/a"}
 	request := domain.Request{TenantIssuer: scope, ClientID: "web", RedirectURI: "https://app.example/cb", ResourceURI: "https://api.example", PKCEChallenge: strings.Repeat("A", 43), PermissionScopes: []string{"read"}}
@@ -108,14 +108,20 @@ func setup(t *testing.T) (*authorization.Service, *store, *clock, *material, dom
 	m := &material{}
 	service, _ := authorization.New(s, c, m, nil)
 	browser := strings.Repeat("b", 64)
-	if _, err := service.Begin(context.Background(), request, browser); err != nil {
+	return service, s, c, m, request, authorization.AccessProof{TenantIssuer: scope, SessionHash: s.principal.SessionHash, BrowserBindingHash: browser}
+}
+func setup(t *testing.T) (*authorization.Service, *store, *clock, *material, domain.Request, authorization.AccessProof) {
+	svc, s, c, m, p, a := objectConsentSetup(t)
+	// General consent fixtures begin with a protected exact presentation.
+	if _, err := svc.PrepareConsent(context.Background(), p); err != nil {
 		t.Fatal(err)
 	}
-	spec := s.workflow.Snapshot()
-	proof := authorization.AccessProof{TenantIssuer: scope, SessionHash: s.principal.SessionHash, AuthorizationHash: spec.HandleHash, BrowserBindingHash: browser, CSRFHash: spec.CSRFHash}
 	s.runs = 0
-	return service, s, c, m, request, proof
+	s.loads = 0
+	a.calls = 0
+	return svc, s, c, m, s.workflow.Snapshot().Request, p
 }
+
 func TestConsentRequiresAuthorizationBeforePayloadLoad(t *testing.T) {
 	for _, mode := range []string{"anonymous", "foreign tenant", "session changed", "denied", "revoked before load", "invalid csrf"} {
 		t.Run(mode, func(t *testing.T) {
@@ -237,4 +243,8 @@ func TestObjectAuthorityStaysClosedUntilPARAndConsentIntegration(t *testing.T) {
 
 func (m *material) NewCodeMaterial(ctx context.Context, _ grants.Scope) (authorization.Material, error) {
 	return m.NewAuthorizationMaterial(ctx)
+}
+
+func (s *store) CurrentApproval(context.Context, domain.Transaction, time.Time) (*grants.Revision, error) {
+	return nil, nil
 }

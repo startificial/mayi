@@ -38,7 +38,26 @@ func (s *Store) WithUserGrants(ctx context.Context, p grants.BrowserProof, now t
 	})
 }
 func (g *userGrants) List(ctx context.Context) ([]grants.Summary, error) {
-	rows, err := g.tx.Query(ctx, `SELECT g.grant_id,g.client_id,g.resource,r.revision,r.scopes,r.object_ceiling,LEAST(g.expires_at,r.expires_at) FROM mayi.grants g JOIN mayi.grant_revisions r USING(tenant_id,grant_id) WHERE g.tenant_id=$1 AND g.subject=$2 AND NOT g.revoked AND g.expires_at>clock_timestamp() ORDER BY g.created_at DESC,g.grant_id,r.revision DESC LIMIT 101`, g.scope.TenantID, g.subject)
+	return listGrants(ctx, g.tx, g.scope, g.subject, "", 100)
+}
+func (s *Store) ListAdministrator(ctx context.Context, scope domain.Scope, after string, limit int) ([]grants.Summary, error) {
+	var result []grants.Summary
+	err := s.authentication(ctx, scope, func(tx pgx.Tx) error {
+		var err error
+		result, err = listGrants(ctx, tx, scope, "", after, limit)
+		return err
+	})
+	return result, err
+}
+func listGrants(ctx context.Context, tx pgx.Tx, scope domain.Scope, subject, after string, limit int) ([]grants.Summary, error) {
+	if limit < 1 || limit > 100 {
+		return nil, grants.ErrDenied
+	}
+	rows, err := tx.Query(ctx, `SELECT g.grant_id,g.client_id,g.resource,g.subject,r.revision,r.scopes,r.object_ceiling,LEAST(g.expires_at,r.expires_at),usage.count,usage.last_issued,u.last_checked_at,COALESCE(u.token_checks,0)
+ FROM mayi.grants g JOIN LATERAL(SELECT revision,scopes,object_ceiling,expires_at FROM mayi.grant_revisions WHERE tenant_id=g.tenant_id AND grant_id=g.grant_id ORDER BY revision DESC LIMIT 1) r ON true
+ LEFT JOIN LATERAL(SELECT count(*) AS count,max(issued_at) AS last_issued FROM mayi.issuances WHERE tenant_id=g.tenant_id AND grant_id=g.grant_id) usage ON true
+ LEFT JOIN mayi.grant_usage u ON u.tenant_id=g.tenant_id AND u.grant_id=g.grant_id
+ WHERE g.tenant_id=$1 AND ($2='' OR g.subject=$2) AND g.grant_id>$3 AND NOT g.revoked AND g.expires_at>clock_timestamp() ORDER BY g.grant_id LIMIT $4`, scope.TenantID, subject, after, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -47,17 +66,14 @@ func (g *userGrants) List(ctx context.Context) ([]grants.Summary, error) {
 	for rows.Next() {
 		var item grants.Summary
 		var objects []byte
-		if err := rows.Scan(&item.ID, &item.ClientID, &item.Resource, &item.Revision, &item.Scopes, &objects, &item.ExpiresAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.ClientID, &item.Resource, &item.Subject, &item.Revision, &item.Scopes, &objects, &item.ExpiresAt, &item.TokensIssued, &item.LastIssuedAt, &item.LastUsedAt, &item.TokenChecks); err != nil {
 			return nil, err
 		}
-		item.Objects, err = decodeObjectCeiling(objects, g.scope, item.Resource)
+		item.Objects, err = decodeObjectCeiling(objects, scope, item.Resource)
 		if err != nil {
 			return nil, err
 		}
 		result = append(result, item)
-	}
-	if len(result) > 100 {
-		return nil, grants.ErrUnavailable
 	}
 	return result, rows.Err()
 }
@@ -85,30 +101,20 @@ func (g *userGrants) Revoke(ctx context.Context, id string) error {
 }
 func (s *Store) RevokeAdministrator(ctx context.Context, scope domain.Scope, kind, id, actor string) error {
 	return s.authentication(ctx, scope, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT grant_id FROM mayi.grants WHERE tenant_id=$1 AND NOT revoked AND (($2='grant' AND grant_id=$3) OR ($2='user' AND subject=$3) OR ($2='client' AND client_id=$3)) ORDER BY grant_id FOR UPDATE`, scope.TenantID, kind, id)
-		if err != nil {
-			return err
-		}
-		var ids []string
-		for rows.Next() {
-			var ref string
-			if err = rows.Scan(&ref); err != nil {
-				rows.Close()
-				return err
-			}
-			ids = append(ids, ref)
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return err
-		}
-		for _, ref := range ids {
-			if err = revokeGrant(ctx, tx, scope, ref); err != nil {
+		// authentication holds the tenant write lock, excluding issuance/status and
+		// other lifecycle mutations. Set-based updates bound application memory and
+		// round trips while preserving one atomic incident cut-off.
+		for _, query := range []string{
+			`UPDATE mayi.grants SET revoked=true WHERE tenant_id=$1 AND (($2='grant' AND grant_id=$3) OR ($2='user' AND subject=$3) OR ($2='client' AND client_id=$3))`,
+			`UPDATE mayi.refresh_families f SET revoked=true WHERE f.tenant_id=$1 AND EXISTS(SELECT 1 FROM mayi.grants g WHERE g.tenant_id=f.tenant_id AND g.grant_id=f.grant_id AND (($2='grant' AND g.grant_id=$3) OR ($2='user' AND g.subject=$3) OR ($2='client' AND g.client_id=$3)))`,
+			`UPDATE mayi.issuances i SET revoked=true WHERE i.tenant_id=$1 AND EXISTS(SELECT 1 FROM mayi.grants g WHERE g.tenant_id=i.tenant_id AND g.grant_id=i.grant_id AND (($2='grant' AND g.grant_id=$3) OR ($2='user' AND g.subject=$3) OR ($2='client' AND g.client_id=$3)))`,
+		} {
+			if _, err := tx.Exec(ctx, query, scope.TenantID, kind, id); err != nil {
 				return err
 			}
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO mayi.audit_events(tenant_id,event_type,actor_id,object_ref) VALUES($1,'administrator_grants_revoked',$2,$3)`, scope.TenantID, actor, kind+":"+id)
+
+		_, err := tx.Exec(ctx, `INSERT INTO mayi.audit_events(tenant_id,event_type,actor_id,object_ref) VALUES($1,'administrator_grants_revoked',$2,$3)`, scope.TenantID, actor, kind+":"+id)
 		return err
 	})
 }

@@ -7,11 +7,13 @@ import (
 )
 
 type Event struct {
-	ID                  int64
-	Scope               grants.Scope
-	Type, Actor, Object string
-	GrantID, IssuanceID string
-	OccurredAt          time.Time
+	ID                                                   int64
+	Scope                                                grants.Scope
+	Type, Actor, Object                                  string
+	RequestID, IP, UserAgent, UserID, ClientID, Resource string
+	StatusCode                                           int
+	GrantID, IssuanceID                                  string
+	OccurredAt                                           time.Time
 }
 type Delivery struct {
 	Event   Event

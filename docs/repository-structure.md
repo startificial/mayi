@@ -1,6 +1,6 @@
 # Canonical repository structure
 
-Mayi uses a modular monolith with ports and adapters. This is the target layout; P0 contracts/protocol adapters and the P1 process, management, discovery, persistence, signer and outbox foundation now exist. Login/consent and usable OAuth endpoints remain P2; production deployment remains gated. Add feature directories when implementing their contents. Keep a single root Go module, `github.com/startificial/mayi`.
+Mayi uses a modular monolith with ports and adapters. This is the target layout; P0 contracts/protocol adapters and the P1 process, management, discovery, persistence, signer and outbox foundation now exist. The P2 login/consent, live OAuth endpoints, resource SDK and Go BFF now exist; production deployment remains gated. Add feature directories when implementing their contents. Keep a single root Go module, `github.com/startificial/mayi`.
 
 ```text
 .
@@ -191,3 +191,7 @@ egress adapter, authentication services or persistence through that helper.
 layout inside the root module. Its pure services and consumer-owned ports have no
 Mayi internal imports. [ADR 0023](adr/0023-p2-live-lifecycle-and-bff-encryption.md)
 records the live lifecycle/status boundary and application-owned encrypted state.
+
+## P2 capability ownership
+
+`services/authentication` owns upstream/local authentication and finite shared request admission. `services/authorization` owns PAR, guarded presentation and approval; `domain/grants` owns immutable tuple ceilings and new-consent union. `services/tokens` owns code/refresh/machine lifecycle, online status and administered machine authority. `services/grants` owns user/operator grant views and revocation. `services/delivery` owns credential-free audit correlation and delivery. These additions use the existing contexts and layout; no shared repository or parallel protocol engine is introduced. `tests/conformance` retains a checked local evidence manifest, distinct from external certification.

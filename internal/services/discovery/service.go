@@ -12,8 +12,9 @@ var ErrUnavailable = errors.New("discovery unavailable")
 
 type Service struct{ directory Directory }
 type Document struct {
-	Scope grants.Scope
-	Keys  []identity.PublicKey
+	Scope                    grants.Scope
+	Keys                     []identity.PublicKey
+	AuthorizationDetailTypes []string
 }
 
 func New(directory Directory) (*Service, error) {
@@ -30,5 +31,9 @@ func (s *Service) Document(ctx context.Context, scope grants.Scope) (Document, e
 	if err != nil || len(keys) == 0 {
 		return Document{}, ErrUnavailable
 	}
-	return Document{Scope: scope, Keys: keys}, nil
+	types, err := s.directory.AuthorizationDetailTypes(ctx, scope)
+	if err != nil {
+		return Document{}, ErrUnavailable
+	}
+	return Document{Scope: scope, Keys: keys, AuthorizationDetailTypes: types}, nil
 }

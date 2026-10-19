@@ -47,7 +47,11 @@ func loginAttempt(t *testing.T, e *foundation, consent *authorization.Service, p
 	if _, err := e.admin.Exec(ctx, `INSERT INTO mayi.external_identities VALUES('a','upstream','https://idp.example','upstream-alice','user:alice') ON CONFLICT DO NOTHING`); err != nil {
 		t.Fatal(err)
 	}
-	service, err := authentication.New(e.store, clock{}, cryptoadapter.NewLoginSecrets(), provider, p.TenantIssuer)
+	admission, err := authentication.NewAdmission(e.store, authentication.DefaultBudgetRules())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := authentication.New(e.store, clock{}, cryptoadapter.NewLoginSecrets(), provider, p.TenantIssuer, admission)
 	if err != nil {
 		t.Fatal(err)
 	}

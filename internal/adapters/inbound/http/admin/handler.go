@@ -28,16 +28,20 @@ func New(service *administration.Service, scope grants.Scope) (*Handler, error) 
 }
 
 type policyDTO struct {
-	Version               uint64 `json:"version"`
-	MaxAccessTokenSeconds int    `json:"max_access_token_seconds"`
-	MaxGrantSeconds       int    `json:"max_grant_seconds"`
-	RequireBinding        bool   `json:"require_binding"`
+	RefreshIdleSeconds     int    `json:"refresh_idle_seconds"`
+	RefreshAbsoluteSeconds int    `json:"refresh_absolute_seconds"`
+	Version                uint64 `json:"version"`
+	MaxAccessTokenSeconds  int    `json:"max_access_token_seconds"`
+	MaxGrantSeconds        int    `json:"max_grant_seconds"`
+	RequireBinding         bool   `json:"require_binding"`
 }
 type scopeDTO struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	RequiresAdmin bool   `json:"requires_admin"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
 }
 type resourceDTO struct {
+	TokenFormat        string     `json:"token_format"`
 	ID                 string     `json:"id"`
 	URI                string     `json:"uri"`
 	Name               string     `json:"name"`
@@ -81,7 +85,7 @@ func (h *Handler) Policy(w http.ResponseWriter, r *http.Request) {
 		if !httptransport.Decode(w, r, &input) {
 			return
 		}
-		result, err = h.service.SetPolicy(r.Context(), actor, h.scope, policy.Tenant{Version: input.Version, MaxAccessTokenSeconds: input.MaxAccessTokenSeconds, MaxGrantSeconds: input.MaxGrantSeconds, RequireBinding: input.RequireBinding})
+		result, err = h.service.SetPolicy(r.Context(), actor, h.scope, policy.Tenant{RefreshIdleSeconds: input.RefreshIdleSeconds, RefreshAbsoluteSeconds: input.RefreshAbsoluteSeconds, Version: input.Version, MaxAccessTokenSeconds: input.MaxAccessTokenSeconds, MaxGrantSeconds: input.MaxGrantSeconds, RequireBinding: input.RequireBinding})
 	} else {
 		result, err = h.service.Policy(r.Context(), actor, h.scope)
 	}
@@ -89,7 +93,7 @@ func (h *Handler) Policy(w http.ResponseWriter, r *http.Request) {
 		failure(w, err)
 		return
 	}
-	httptransport.JSON(w, 200, policyDTO{result.Version, result.MaxAccessTokenSeconds, result.MaxGrantSeconds, result.RequireBinding})
+	httptransport.JSON(w, 200, policyDTO{Version: result.Version, MaxAccessTokenSeconds: result.MaxAccessTokenSeconds, MaxGrantSeconds: result.MaxGrantSeconds, RequireBinding: result.RequireBinding, RefreshIdleSeconds: result.RefreshIdle(), RefreshAbsoluteSeconds: result.RefreshAbsolute()})
 }
 func validURL(raw string) bool {
 	u, err := url.Parse(raw)
@@ -104,9 +108,9 @@ func (h *Handler) CreateResource(w http.ResponseWriter, r *http.Request) {
 		failure(w, administration.ErrInvalid)
 		return
 	}
-	value := resources.Resource{ID: input.ID, URI: input.URI, Name: input.Name, AccessTokenSeconds: input.AccessTokenSeconds, RequireBinding: input.RequireBinding}
+	value := resources.Resource{TokenFormat: input.TokenFormat, ID: input.ID, URI: input.URI, Name: input.Name, AccessTokenSeconds: input.AccessTokenSeconds, RequireBinding: input.RequireBinding}
 	for _, scope := range input.Scopes {
-		value.Scopes = append(value.Scopes, resources.Scope{Name: scope.Name, Description: scope.Description})
+		value.Scopes = append(value.Scopes, resources.Scope{Name: scope.Name, Description: scope.Description, RequiresAdmin: scope.RequiresAdmin})
 	}
 	if err := h.service.CreateResource(r.Context(), middleware.Actor(r), h.scope, value); err != nil {
 		failure(w, err)
@@ -120,9 +124,9 @@ func (h *Handler) Resource(w http.ResponseWriter, r *http.Request) {
 		failure(w, err)
 		return
 	}
-	result := resourceDTO{ID: value.ID, URI: value.URI, Name: value.Name, AccessTokenSeconds: value.AccessTokenSeconds, RequireBinding: value.RequireBinding}
+	result := resourceDTO{TokenFormat: value.AccessTokenFormat(), ID: value.ID, URI: value.URI, Name: value.Name, AccessTokenSeconds: value.AccessTokenSeconds, RequireBinding: value.RequireBinding}
 	for _, scope := range value.Scopes {
-		result.Scopes = append(result.Scopes, scopeDTO{scope.Name, scope.Description})
+		result.Scopes = append(result.Scopes, scopeDTO{Name: scope.Name, Description: scope.Description, RequiresAdmin: scope.RequiresAdmin})
 	}
 	httptransport.JSON(w, 200, result)
 }

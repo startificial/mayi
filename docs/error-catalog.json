@@ -2,14 +2,75 @@
   "version": 1,
   "surface": "local-json",
   "errors": [
-    {"code":"invalid_content_type","status":415,"message":"Use application/json for this request.","recovery":"Set Content-Type to application/json and send a JSON object.","retry":"after-correction"},
-    {"code":"invalid_request","status":400,"message":"The request is malformed or contains unsupported values.","recovery":"Check the endpoint schema, required fields, allowed values, size limits and duplicate parameters. Local browser errors can also mean an expired or invalid workflow; begin a new login instead of resubmitting old state.","retry":"after-correction"},
-    {"code":"invalid_token","status":401,"message":"Authentication is required or the credential is invalid.","recovery":"Supply a valid credential for this endpoint and issuer. Inspect WWW-Authenticate where present; do not substitute an ID token or print the credential while debugging.","retry":"after-correction"},
-    {"code":"forbidden","status":403,"message":"This operation is not permitted.","recovery":"Ask an authorized administrator to review tenant, actor and operation permissions. Do not probe other object identifiers or retry the same operation unchanged.","retry":"after-correction"},
-    {"code":"conflict","status":409,"message":"The operation conflicts with the current state.","recovery":"Reconcile current state through an authorized read if available. Submit a newly evaluated operation; do not blindly replay a mutation.","retry":"after-correction"},
-    {"code":"not_found","status":404,"message":"The requested resource is unavailable.","recovery":"Check the configured endpoint and reference using an authorized account. This response is not proof that an object exists or does not exist for another actor.","retry":"after-correction"},
-    {"code":"not_ready","status":503,"message":"The service is not ready.","recovery":"For readiness probes, retry with bounded backoff. Operators should check validated configuration, migrations and required infrastructure using the foundation runbook.","retry":"conditional"},
-    {"code":"temporarily_unavailable","status":503,"message":"The service is temporarily unavailable.","recovery":"Read-only operations may use bounded backoff. Before retrying a mutation or credential operation, determine whether it committed; restart authentication when a one-use outcome cannot be reconciled safely.","retry":"conditional"},
-    {"code":"internal_error","status":500,"message":"The request could not be completed.","recovery":"Keep the request ID and operation time for the operator. Do not blindly retry mutations or one-use credentials; reconcile their outcome first.","retry":"conditional"}
+    {
+      "code": "invalid_content_type",
+      "status": 415,
+      "message": "Use application/json for this request.",
+      "recovery": "Set Content-Type to application/json and send a JSON object.",
+      "retry": "after-correction"
+    },
+    {
+      "code": "invalid_request",
+      "status": 400,
+      "message": "The request is malformed or contains unsupported values.",
+      "recovery": "Check the endpoint schema, required fields, allowed values, size limits and duplicate parameters. Local browser errors can also mean an expired or invalid workflow; begin a new login instead of resubmitting old state.",
+      "retry": "after-correction"
+    },
+    {
+      "code": "invalid_token",
+      "status": 401,
+      "message": "Authentication is required or the credential is invalid.",
+      "recovery": "Supply a valid credential for this endpoint and issuer. Inspect WWW-Authenticate where present; do not substitute an ID token or print the credential while debugging.",
+      "retry": "after-correction"
+    },
+    {
+      "code": "forbidden",
+      "status": 403,
+      "message": "This operation is not permitted.",
+      "recovery": "Ask an authorized administrator to review tenant, actor and operation permissions. Do not probe other object identifiers or retry the same operation unchanged.",
+      "retry": "after-correction"
+    },
+    {
+      "code": "conflict",
+      "status": 409,
+      "message": "The operation conflicts with the current state.",
+      "recovery": "Reconcile current state through an authorized read if available. Submit a newly evaluated operation; do not blindly replay a mutation.",
+      "retry": "after-correction"
+    },
+    {
+      "code": "not_found",
+      "status": 404,
+      "message": "The requested resource is unavailable.",
+      "recovery": "Check the configured endpoint and reference using an authorized account. This response is not proof that an object exists or does not exist for another actor.",
+      "retry": "after-correction"
+    },
+    {
+      "code": "not_ready",
+      "status": 503,
+      "message": "The service is not ready.",
+      "recovery": "For readiness probes, retry with bounded backoff. Operators should check validated configuration, migrations and required infrastructure using the foundation runbook.",
+      "retry": "conditional"
+    },
+    {
+      "code": "temporarily_unavailable",
+      "status": 503,
+      "message": "The service is temporarily unavailable.",
+      "recovery": "Read-only operations may use bounded backoff. Before retrying a mutation or credential operation, determine whether it committed; restart authentication when a one-use outcome cannot be reconciled safely.",
+      "retry": "conditional"
+    },
+    {
+      "code": "internal_error",
+      "status": 500,
+      "message": "The request could not be completed.",
+      "recovery": "Keep the request ID and operation time for the operator. Do not blindly retry mutations or one-use credentials; reconcile their outcome first.",
+      "retry": "conditional"
+    },
+    {
+      "code": "rate_limited",
+      "status": 429,
+      "message": "The request budget is exhausted. Try again after the indicated delay.",
+      "recovery": "Honor Retry-After. Start a fresh workflow if the original authorization expired. An earlier ambiguous credential request must still be reconciled before retry.",
+      "retry": "conditional"
+    }
   ]
 }

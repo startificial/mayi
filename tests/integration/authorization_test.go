@@ -45,18 +45,23 @@ func setupAuthorization(t *testing.T) (*foundation, *authorization.Service, doma
 	if _, err = e.admin.Exec(ctx, `INSERT INTO mayi.session_authentication VALUES('a',$1,$2,'test','https://idp.example',clock_timestamp()),('b',$3,$4,'test','https://idp.example',clock_timestamp())`, secretHash("session-a"), secretHash("browser-a"), secretHash("session-b"), secretHash("browser-b")); err != nil {
 		t.Fatal(err)
 	}
-	svc, err := app.NewAuthorization(e.store, clock{})
+	svc, err := app.NewObjectAuthorization(e.store, clock{}, consentAuthorityFixture{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	tenantIssuer := grants.Scope{TenantID: "a", Issuer: "https://auth.example/t/a"}
-	request := domain.Request{TenantIssuer: tenantIssuer, ClientID: "web", RedirectURI: "https://app.example/cb?provider=mayi", ResourceURI: "https://api.example", PKCEChallenge: challenge, PermissionScopes: []string{"read"}, State: "client-state"}
+	request := domain.Request{TenantIssuer: tenantIssuer, ClientID: "web", RedirectURI: "https://app.example/cb?provider=mayi", ResourceURI: "https://api.example", PKCEChallenge: challenge, PermissionScopes: []string{"read"}, State: "client-state-at-least-16"}
+	request.ObjectCeiling, _ = grants.NewObjectCeiling(grants.ObjectCeilingSpec{Scope: tenantIssuer, Resource: request.ResourceURI, Details: []grants.ObjectDetail{{Type: "https://api.example/types/fixture/v1", Identifier: "123", Actions: []string{"read"}}}})
 	proof := authorization.AccessProof{TenantIssuer: tenantIssuer, SessionHash: secretHash("session-a"), BrowserBindingHash: secretHash("browser-a")}
 	return e, svc, request, proof
 }
 func beginAuthorization(t *testing.T, svc *authorization.Service, request domain.Request, p authorization.AccessProof) (authorization.AccessProof, authorization.BeginResult) {
 	t.Helper()
-	started, err := svc.Begin(context.Background(), request, p.BrowserBindingHash)
+	pushed, err := svc.Push(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started, err := svc.BeginPushed(context.Background(), authorization.PushedProof{TenantIssuer: request.TenantIssuer, ClientID: request.ClientID, ReferenceHash: secretHash(pushed.Reference), BrowserBindingHash: p.BrowserBindingHash})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,6 +170,9 @@ func TestP2ConsentRejectsForeignBrowserCSRFSessionAndMembership(t *testing.T) {
 func TestP2ConcurrentConsentHasOneWinner(t *testing.T) {
 	e, svc, request, p := setupAuthorization(t)
 	p, _ = beginAuthorization(t, svc, request, p)
+	if _, err := svc.PrepareConsent(context.Background(), p); err != nil {
+		t.Fatal(err)
+	}
 	ctx := context.Background()
 	results := make(chan error, 2)
 	for range 2 {
@@ -339,4 +347,20 @@ func TestP2MembershipLossBetweenChecksNeverLoadsConsentPayload(t *testing.T) {
 	if probe.protectedLoads != 0 {
 		t.Fatal("denied request loaded protected transaction payload")
 	}
+}
+
+// A resource-owner test double for workflow tests; ACL persistence/locking is
+// separately exercised by the real PostgreSQL resource-authority integration.
+type consentAuthorityFixture struct{}
+
+func (consentAuthorityFixture) WithObjectConsent(ctx context.Context, q authorization.ObjectConsentQuery, fn func(context.Context, domain.ObjectConsentProjection) error) error {
+	spec := domain.ObjectConsentSpec{AuthorizationHash: q.AuthorizationHash, ClientID: q.ClientID, Subject: q.Subject, PermissionVersion: 1, Ceiling: q.Ceiling}
+	for _, d := range q.Ceiling.Snapshot().Details {
+		spec.Objects = append(spec.Objects, domain.ConsentObject{Type: d.Type, Identifier: d.Identifier, Name: "Fixture object"})
+	}
+	projection, err := domain.NewObjectConsentProjection(spec)
+	if err != nil {
+		return authorization.ErrDenied
+	}
+	return fn(ctx, projection)
 }

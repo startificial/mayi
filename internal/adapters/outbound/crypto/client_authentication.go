@@ -51,7 +51,7 @@ func NewClientAssertions(keys clients.KeyTransport) (*ClientAssertions, error) {
 	return &ClientAssertions{keys}, nil
 }
 func (v *ClientAssertions) VerifyClientAssertion(ctx context.Context, raw, client, audience, inline, uri string, now time.Time) (clients.Assertion, error) {
-	if len(raw) > 16384 || audience == "" || now.IsZero() || (inline == "") == (uri == "") {
+	if len(raw) > 16384 || !strictClientAssertion(raw) || audience == "" || now.IsZero() || (inline == "") == (uri == "") {
 		return clients.Assertion{}, clients.ErrDenied
 	}
 	data := []byte(inline)
@@ -66,7 +66,7 @@ func (v *ClientAssertions) VerifyClientAssertion(ctx context.Context, raw, clien
 		return clients.Assertion{}, clients.ErrDenied
 	}
 	var keys jose.JSONWebKeySet
-	if json.Unmarshal(data, &keys) != nil || !validClientKeySet(keys) {
+	if !strictClientKeys(data) || json.Unmarshal(data, &keys) != nil || !validClientKeySet(keys) {
 		return clients.Assertion{}, clients.ErrDenied
 	}
 	parsed, err := jwt.ParseSigned(raw, []jose.SignatureAlgorithm{jose.ES256, jose.PS256, jose.RS256})
@@ -139,7 +139,7 @@ func (v *ClientAssertions) ValidateKeys(ctx context.Context, inline, uri string)
 		return clients.ErrDenied
 	}
 	var keys jose.JSONWebKeySet
-	if json.Unmarshal(data, &keys) != nil || !validClientKeySet(keys) {
+	if !strictClientKeys(data) || json.Unmarshal(data, &keys) != nil || !validClientKeySet(keys) {
 		return clients.ErrDenied
 	}
 	return nil
