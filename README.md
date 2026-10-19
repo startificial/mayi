@@ -4,6 +4,26 @@ Oct 17, 2026 · @JJ
 
 **Experimental development preview — no published release or production-supported version.** Read [support and preview limitations](SUPPORT.md) before evaluation. Mayi's first-party source and documentation use [Apache License 2.0](LICENSE); third-party terms are retained separately in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
+## What we're building
+
+Mayi lets SaaS teams expose their APIs to third-party applications and AI agents with precise, revocable permissions—while keeping their existing identity and data infrastructure.
+
+**We’re building Mayi: a self-hostable Go authorization server that gives applications, services and AI agents precise, revocable access to APIs.**
+
+It works alongside an existing identity provider and uses your PostgreSQL. Mayi manages what a caller is authorized to do, how that authority can be delegated, and when it must stop.
+
+For example:
+
+> “This agent may read document 123 for the next hour. It cannot read other documents, write anything, or delegate broader access. I can revoke that permission.”
+
+Mayi issues credentials representing that permission. The API enforces it alongside its own current access rules. Human consent, machine identities, delegation and audit records form part of the same authority model.
+
+In one sentence:
+
+> **Fine-grained authorization for applications, services and AI agents—with your identity provider and your PostgreSQL.**
+
+## Project status and documentation
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) to participate and [SECURITY.md](SECURITY.md) to report a vulnerability privately. Ordinary questions and bugs belong in [GitHub Issues](https://github.com/startificial/mayi/issues).
 
 See the [Go implementation plan](docs/implementation-plan.md) for the proposed architecture, delivery phases and verification strategy, and the [requirement delivery matrix](docs/requirement-matrix.md) for coverage of every requirement below.
