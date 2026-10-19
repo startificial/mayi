@@ -29,7 +29,7 @@ type ObjectProfileSpec struct {
 type ObjectProfile struct{ spec ObjectProfileSpec }
 
 func NewObjectProfile(s ObjectProfileSpec) (ObjectProfile, error) {
-	if !s.Scope.Valid() || !ValidURI(s.Resource) || !ValidURI(s.Type) || strings.ContainsAny(s.Resource+s.Type, "*") || s.Semantics != ObjectActionsV1 {
+	if !s.Scope.Valid() || !ValidURI(s.Resource) || strings.Contains(s.Resource, "*") || !ValidObjectTypeURI(s.Type) || s.Semantics != ObjectActionsV1 {
 		return ObjectProfile{}, ErrInvalidObjectProfile
 	}
 	names := make([]string, 0, len(s.Actions))
@@ -44,6 +44,12 @@ func NewObjectProfile(s ObjectProfileSpec) (ObjectProfile, error) {
 	}
 	s.Actions = slices.Clone(s.Actions)
 	return ObjectProfile{spec: s}, nil
+}
+
+// ValidObjectTypeURI validates an inert, exact type identifier. A type's
+// interpretation is immutable; different semantics require a new identifier.
+func ValidObjectTypeURI(uri string) bool {
+	return ValidURI(uri) && !strings.Contains(uri, "*")
 }
 
 func (p ObjectProfile) Snapshot() ObjectProfileSpec {

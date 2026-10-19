@@ -18,6 +18,8 @@ type fake struct {
 	p               policy.Tenant
 	audits, creates int
 	commitErr       error
+	resource        resources.Resource
+	profile         resources.ObjectProfile
 }
 
 func (f *fake) RunManagement(_ context.Context, _ grants.Scope, fn func(Transaction) error) error {
@@ -38,7 +40,18 @@ func (f *fake) ProvisionTenant(context.Context, grants.Scope, identity.PublicKey
 func (f *fake) Policy(context.Context) (policy.Tenant, error)      { return f.p, nil }
 func (f *fake) SetPolicy(_ context.Context, p policy.Tenant) error { f.p = p; return nil }
 func (f *fake) Resource(context.Context, string) (resources.Resource, error) {
+	if f.resource.URI != "" {
+		return f.resource, nil
+	}
 	return resources.Resource{AccessTokenSeconds: 300}, nil
+}
+func (f *fake) RegisterObjectProfile(_ context.Context, _ string, p resources.ObjectProfile) error {
+	f.creates++
+	f.profile = p
+	return nil
+}
+func (f *fake) ObjectProfile(context.Context, string, string) (resources.ObjectProfile, error) {
+	return f.profile, nil
 }
 func (f *fake) CreateResource(context.Context, resources.Resource) error         { f.creates++; return nil }
 func (f *fake) Client(context.Context, string) (clients.Client, error)           { return clients.Client{}, nil }
@@ -79,7 +92,9 @@ func TestEveryManagementOperationAuthorizesBeforeProtectedAccess(t *testing.T) {
 			e7 := s.PublishKey(context.Background(), actor, scope, 1)
 			e8 := s.ActivateKey(context.Background(), actor, scope, 1)
 			e9 := s.ProvisionTenant(context.Background(), actor, scope, 1)
-			for _, err := range []error{e1, e2, e3, e4, e5, e6, e7, e8, e9} {
+			e10 := s.RegisterObjectProfile(context.Background(), actor, scope, "api", resources.ObjectProfileSpec{})
+			_, e11 := s.ObjectProfile(context.Background(), actor, scope, "api", "https://api.example/types/workflow/v1")
+			for _, err := range []error{e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11} {
 				if !errors.Is(err, ErrDenied) {
 					t.Fatal("unauthorized operation did not deny")
 				}

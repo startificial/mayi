@@ -165,3 +165,8 @@ script-free `web` consent rendering. `app.NewBrowser` composes the same tenant
 routes for the process and real PostgreSQL fixtures, independently of signing.
 Membership/mapping stay operator-owned; consent reuses the authorization service.
 See [ADR 0009](adr/0009-upstream-login-and-browser-consent.md).
+
+Durable resource-owned RAR profile registration stays in `domain/resources`,
+`services/administration` and the existing admin/PostgreSQL adapter families.
+It does not introduce a parallel registration service or permission engine.
+See [ADR 0014](adr/0014-durable-resource-object-profiles.md).

@@ -28,6 +28,8 @@ type Transaction interface {
 	SetPolicy(context.Context, policy.Tenant) error
 	Resource(context.Context, string) (resources.Resource, error)
 	CreateResource(context.Context, resources.Resource) error
+	RegisterObjectProfile(context.Context, string, resources.ObjectProfile) error
+	ObjectProfile(context.Context, string, string) (resources.ObjectProfile, error)
 	Client(context.Context, string) (clients.Client, error)
 	CreateClient(context.Context, clients.Client) error
 	PublishKey(context.Context, identity.PublicKey, time.Time) error

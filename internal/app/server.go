@@ -116,7 +116,9 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 		for pattern, handler := range map[string]http.HandlerFunc{
 			"GET " + base + "/policy": h.Policy, "PUT " + base + "/policy": h.Policy,
 			"POST " + base + "/resources": h.CreateResource, "GET " + base + "/resources/{id}": h.Resource,
-			"POST " + base + "/clients": h.CreateClient, "GET " + base + "/clients/{id}": h.Client,
+			"POST " + base + "/resources/{id}/object-profiles": h.RegisterObjectProfile,
+			"GET " + base + "/resources/{id}/object-profiles":  h.ObjectProfile,
+			"POST " + base + "/clients":                        h.CreateClient, "GET " + base + "/clients/{id}": h.Client,
 			"POST " + base + "/keys/{version}/publish": h.PublishKey, "POST " + base + "/keys/{version}/activate": h.ActivateKey,
 		} {
 			router.Handle(pattern, auth.Protect(scope, handler))

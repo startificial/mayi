@@ -34,6 +34,8 @@ Token endpoints, downstream OIDC, idle/session-list APIs, BFF/resource enforceme
 
 [ADR 0013](adr/0013-p2-review-corrections.md) records P2 review corrections and additional partial FED-1/WEB-8 evidence. `TestAssertionMustBeFreshForItsLoginAttempt`, `TestFreshTokenCannotReuseAuthenticationBeforeLoginAttempt` and the real PostgreSQL `TestP2LoginRejectsAuthenticationBeforeAttemptWithoutSessionEffects` reject authentication predating the attempt beyond explicit skew, without session effects or a reusable callback. `TestP2InactiveMemberCanEndOnlyTheirBrowserBoundSession` covers termination after membership loss, foreign references and denial after reactivation. Runtime privilege regressions additionally restrict lifecycle updates to their intended columns. Full requirement status is unchanged.
 
+[ADR 0014](adr/0014-durable-resource-object-profiles.md), the administration profile service tests and [real PostgreSQL/server profile tests](../tests/integration/object_profiles_test.go) add partial RES-10/ADM-2 evidence: immutable resource-owned type semantics, tenant/audience binding, authorized registration/read, corrupt-record denial, atomic audit/outbox and concurrent registration. This does not complete client-type registration, required PAR, public RAR or resource enforcement; full requirement status is unchanged.
+
 ## CORE
 
 | ID | Level | Phase | Owner | Acceptance condition |
