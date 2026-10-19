@@ -137,3 +137,18 @@ func TestLoginDenialsNeverExchangeOrIssue(t *testing.T) {
 		})
 	}
 }
+
+func TestFreshTokenCannotReuseAuthenticationBeforeLoginAttempt(t *testing.T) {
+	svc, s, p, c, cb := fixture(t)
+	// The provider can return a fresh nonce-bound token while reporting an old
+	// auth_time. Recent relative to callback time is insufficient for max_age=0.
+	p.now = cb.CreatedAt.Add(-time.Minute)
+	c.now = cb.CreatedAt.Add(time.Minute)
+	result, err := svc.Complete(context.Background(), cb)
+	if !errors.Is(err, authentication.ErrDenied) || result.Handle != "" || strings.Join(*s.events, ",") != "claim,exchange" {
+		t.Fatal("stale authentication issued a session", result, err, *s.events)
+	}
+	if _, err := svc.Complete(context.Background(), cb); !errors.Is(err, authentication.ErrDenied) || strings.Join(*s.events, ",") != "claim,exchange,claim" {
+		t.Fatal("denied login was reusable", err, *s.events)
+	}
+}

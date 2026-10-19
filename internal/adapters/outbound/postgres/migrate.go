@@ -20,6 +20,15 @@ var ErrDatabaseConfiguration = errors.New("database requires reviewed migrations
 const ledgerReadOnly = `NOT has_table_privilege($1,'mayi.schema_migrations','INSERT,UPDATE,DELETE,TRUNCATE')
  AND NOT has_any_column_privilege($1,'mayi.schema_migrations','INSERT,UPDATE')`
 
+// Table-level REVOKE cannot remove inherited or separately granted column
+// privileges. Fail closed unless the effective grants preserve this boundary.
+const authorityLifecycleOnly = `NOT EXISTS(
+ SELECT 1 FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+ WHERE n.nspname='mayi' AND c.relname IN ('grants','credentials','refresh_families','issuances')
+ AND a.attnum>0 AND NOT a.attisdropped
+ AND a.attname<>CASE WHEN c.relname='credentials' THEN 'consumed' ELSE 'revoked' END
+ AND has_column_privilege($1,c.oid,a.attnum,'UPDATE'))`
+
 // ApplyMigrations requires an operator-supplied owner connection. Never run it
 // automatically on server startup. A transaction lock serializes concurrent
 // migrators; unknown/tampered history fails rather than adopting an old schema.
@@ -107,6 +116,11 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, runtimeRole string
 		`GRANT UPDATE(claimed_at,completed_at) ON mayi.login_attempts TO ` + role,
 		`REVOKE UPDATE ON mayi.grant_revisions,mayi.authorization_transactions FROM ` + role,
 		`GRANT UPDATE(status,subject,grant_id,code_hash,decided_at,consent_session_hash) ON mayi.authorization_transactions TO ` + role,
+		// Current lifecycle operations only consume credentials and revoke
+		// authority. Identity, ancestry and ceilings need explicit future use cases.
+		`REVOKE UPDATE ON mayi.grants,mayi.credentials,mayi.refresh_families,mayi.issuances FROM ` + role,
+		`GRANT UPDATE(revoked) ON mayi.grants,mayi.refresh_families,mayi.issuances TO ` + role,
+		`GRANT UPDATE(consumed) ON mayi.credentials TO ` + role,
 		`GRANT UPDATE(policy_version) ON mayi.tenants TO ` + role,
 		`REVOKE UPDATE ON mayi.audit_events FROM ` + role,
 	} {
@@ -114,7 +128,7 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, runtimeRole string
 			return err
 		}
 	}
-	if err := tx.QueryRow(ctx, `SELECT `+ledgerReadOnly, runtimeRole).Scan(&safe); err != nil || !safe {
+	if err := tx.QueryRow(ctx, `SELECT `+ledgerReadOnly+` AND `+authorityLifecycleOnly, runtimeRole).Scan(&safe); err != nil || !safe {
 		return ErrDatabaseConfiguration
 	}
 	return tx.Commit(ctx)
@@ -132,7 +146,7 @@ func ValidateRuntime(ctx context.Context, conn *pgx.Conn, role string) error {
  AND NOT has_schema_privilege(current_user,'mayi','CREATE')
  AND NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='mayi' AND pg_has_role(r.oid,c.relowner,'MEMBER'))
  AND NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='mayi' AND c.relkind='r' AND c.relname<>'schema_migrations' AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity OR has_table_privilege(current_user,c.oid,'TRUNCATE')))
- AND `+ledgerReadOnly+`
+ AND `+ledgerReadOnly+` AND `+authorityLifecycleOnly+`
  FROM pg_roles r WHERE rolname=current_user`, role).Scan(&safe)
 	if err != nil || !safe {
 		return ErrDatabaseConfiguration

@@ -51,3 +51,10 @@ func (a Assertion) ValidAt(now time.Time) bool {
 	}
 	return !a.AuthenticatedAt.IsZero() && !a.AuthenticatedAt.After(now.Add(30*time.Second)) && !a.AuthenticatedAt.Before(now.Add(-5*time.Minute))
 }
+
+// ValidFor requires authentication for this max_age=0 attempt, rather than a
+// recent upstream session reused before it began. The bounded skew also covers
+// the upstream claim's whole-second precision.
+func (a Assertion) ValidFor(login Login, now time.Time) bool {
+	return login.ActiveAt(now) && a.ValidAt(now) && !a.AuthenticatedAt.Before(login.CreatedAt.Add(-30*time.Second))
+}

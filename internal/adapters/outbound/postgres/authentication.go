@@ -78,7 +78,7 @@ func (s *Store) ClaimLogin(ctx context.Context, l identity.Login, now time.Time)
 	})
 }
 func (s *Store) CompleteLogin(ctx context.Context, l identity.Login, evidence identity.Assertion, sessionHash, previousHash string, now time.Time) error {
-	if !l.ActiveAt(now) || !evidence.ValidAt(now) {
+	if !evidence.ValidFor(l, now) {
 		return authentication.ErrDenied
 	}
 	return s.authentication(ctx, l.TenantIssuer, func(tx pgx.Tx) error {
@@ -117,7 +117,9 @@ func (s *Store) CompleteLogin(ctx context.Context, l identity.Login, evidence id
 func (s *Store) EndSession(ctx context.Context, scope grants.Scope, hash, browserHash string, now time.Time) error {
 	return s.authentication(ctx, scope, func(tx pgx.Tx) error {
 		var subject string
-		err := tx.QueryRow(ctx, `UPDATE mayi.browser_sessions s SET revoked=true FROM mayi.session_authentication e,mayi.principal_memberships m WHERE s.tenant_id=$1 AND s.session_hash=$2 AND e.tenant_id=s.tenant_id AND e.session_hash=s.session_hash AND e.browser_hash=$3 AND m.tenant_id=s.tenant_id AND m.subject=s.subject AND m.active AND NOT s.revoked AND s.expires_at>$4 AND s.expires_at>clock_timestamp() RETURNING s.subject`, scope.TenantID, hash, browserHash, now).Scan(&subject)
+		// Ending one's browser-bound session reduces authority. Membership loss
+		// must not prevent that revocation or allow reactivation to revive it.
+		err := tx.QueryRow(ctx, `UPDATE mayi.browser_sessions s SET revoked=true FROM mayi.session_authentication e WHERE s.tenant_id=$1 AND s.session_hash=$2 AND e.tenant_id=s.tenant_id AND e.session_hash=s.session_hash AND e.browser_hash=$3 AND NOT s.revoked AND s.expires_at>$4 AND s.expires_at>clock_timestamp() RETURNING s.subject`, scope.TenantID, hash, browserHash, now).Scan(&subject)
 		if err != nil {
 			return authentication.ErrDenied
 		}

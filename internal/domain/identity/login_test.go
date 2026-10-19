@@ -35,3 +35,32 @@ func TestLoginAndAssertionBounds(t *testing.T) {
 		t.Fatal("stale authentication accepted")
 	}
 }
+
+func TestAssertionMustBeFreshForItsLoginAttempt(t *testing.T) {
+	start := time.Date(2026, 10, 18, 0, 0, 0, 500000000, time.UTC)
+	hash := strings.Repeat("a", 64)
+	login := identity.Login{TenantIssuer: grants.Scope{TenantID: "a", Issuer: "https://auth.example/t/a"}, ProviderID: "provider", ProviderHash: hash, StateHash: hash, BrowserHash: hash, AuthorizationHash: hash, NonceHash: hash, VerifierHash: hash, CreatedAt: start, ExpiresAt: start.Add(5 * time.Minute)}
+	now := start.Add(4 * time.Minute)
+	for _, tc := range []struct {
+		name string
+		at   time.Time
+		want bool
+	}{
+		{"before attempt", start.Add(-time.Minute), false},
+		{"outside skew", start.Add(-30*time.Second - time.Nanosecond), false},
+		{"skew boundary", start.Add(-30 * time.Second), true},
+		{"whole second", start.Truncate(time.Second), true},
+		{"during attempt", start.Add(time.Minute), true},
+		{"future outside skew", now.Add(31 * time.Second), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			evidence := identity.Assertion{Issuer: "https://idp.example", Subject: "alice", AuthenticatedAt: tc.at}
+			if evidence.ValidFor(login, now) != tc.want {
+				t.Fatal("unexpected attempt freshness decision")
+			}
+		})
+	}
+	if (identity.Assertion{Issuer: "https://idp.example", Subject: "alice", AuthenticatedAt: now}).ValidFor(login, login.ExpiresAt) {
+		t.Fatal("expired attempt accepted")
+	}
+}

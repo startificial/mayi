@@ -15,10 +15,91 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/startificial/mayi/internal/adapters/outbound/postgres"
 	"github.com/startificial/mayi/internal/app"
 	"github.com/startificial/mayi/internal/services/administration"
 )
+
+func TestP2RuntimeCanOnlyConsumeAndRevokeStoredAuthority(t *testing.T) {
+	e := setupFoundationDatabase(t)
+	ctx := context.Background()
+	if _, err := e.admin.Exec(ctx, `INSERT INTO mayi.tenants VALUES('a','https://auth.example/t/a',1);
+ INSERT INTO mayi.clients(tenant_id,client_id) VALUES('a','client');
+ INSERT INTO mayi.grants(tenant_id,grant_id,client_id,subject,principal_type,resource,current_scopes,expires_at)
+ VALUES('a','grant','client','user:alice','user','https://api.example',ARRAY['read'],clock_timestamp()+interval '1 hour');
+ INSERT INTO mayi.grant_revisions(tenant_id,grant_id,revision,scopes,expires_at)
+ VALUES('a','grant',1,ARRAY['read'],clock_timestamp()+interval '1 hour');
+ INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,origin_code)
+ VALUES('a','code','authorization_code','grant',1,'https://api.example','client',ARRAY['read'],clock_timestamp(),clock_timestamp()+interval '50 seconds','code');
+ INSERT INTO mayi.refresh_families(tenant_id,family_id,grant_id,revision,origin_code,absolute_deadline,idle_seconds)
+ VALUES('a','family','grant',1,'code',clock_timestamp()+interval '1 hour',120);
+ INSERT INTO mayi.issuances(tenant_id,issuance_id,grant_id,revision,origin_code,source_credential,resource,scopes,expires_at)
+ VALUES('a','issuance','grant',1,'code','code','https://api.example',ARRAY['read'],clock_timestamp()+interval '5 minutes')`); err != nil {
+		t.Fatal(err)
+	}
+	// Check effective column privileges, so a future broad grant cannot leave
+	// an untested identity/provenance field writable. The fixture migrates twice.
+	var unsafe bool
+	if err := e.db.QueryRow(ctx, `SELECT EXISTS(
+ SELECT 1 FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+ WHERE n.nspname='mayi' AND c.relname IN ('grants','credentials','refresh_families','issuances')
+ AND a.attnum>0 AND NOT a.attisdropped
+ AND a.attname<>CASE WHEN c.relname='credentials' THEN 'consumed' ELSE 'revoked' END
+ AND has_column_privilege(current_user,c.oid,a.attnum,'UPDATE'))`).Scan(&unsafe); err != nil || unsafe {
+		t.Fatal("runtime can update stored authority beyond lifecycle state", err)
+	}
+	for _, query := range []string{
+		`UPDATE mayi.grants SET subject='user:mallory' WHERE tenant_id='a'`,
+		`UPDATE mayi.grants SET client_id='client' WHERE tenant_id='a'`,
+		`UPDATE mayi.grants SET current_scopes=ARRAY['write'] WHERE tenant_id='a'`,
+		`UPDATE mayi.credentials SET pkce_challenge='replacement' WHERE tenant_id='a'`,
+		`UPDATE mayi.credentials SET origin_code='code' WHERE tenant_id='a'`,
+		`UPDATE mayi.credentials SET authorization_hash=NULL WHERE tenant_id='a'`,
+		`UPDATE mayi.refresh_families SET origin_code='code' WHERE tenant_id='a'`,
+		`UPDATE mayi.refresh_families SET absolute_deadline=absolute_deadline WHERE tenant_id='a'`,
+		`UPDATE mayi.issuances SET source_credential='code' WHERE tenant_id='a'`,
+		`UPDATE mayi.issuances SET origin_code='code' WHERE tenant_id='a'`,
+	} {
+		tx, err := e.db.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec(ctx, `SELECT set_config('mayi.tenant_id','a',true)`); err != nil {
+			_ = tx.Rollback(ctx)
+			t.Fatal(err)
+		}
+		_, err = tx.Exec(ctx, query)
+		_ = tx.Rollback(ctx)
+		var denied *pgconn.PgError
+		if !errors.As(err, &denied) || denied.Code != "42501" {
+			t.Fatal("runtime authority mutation did not fail on privileges", query, err)
+		}
+	}
+	// Actual issuance/replay concurrency is exercised elsewhere in the suite;
+	// these updates prove the restricted grants still permit their state changes.
+	tx, err := e.db.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `SELECT set_config('mayi.tenant_id','a',true)`); err != nil {
+		t.Fatal(err)
+	}
+	for _, query := range []string{
+		`UPDATE mayi.grants SET revoked=true WHERE tenant_id='a'`,
+		`UPDATE mayi.credentials SET consumed=true WHERE tenant_id='a'`,
+		`UPDATE mayi.refresh_families SET revoked=true WHERE tenant_id='a'`,
+		`UPDATE mayi.issuances SET revoked=true WHERE tenant_id='a'`,
+	} {
+		if tag, err := tx.Exec(ctx, query); err != nil || tag.RowsAffected() != 1 {
+			t.Fatal("runtime lifecycle transition failed", query, err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestP1RejectsOwnerSessionDisguisedAsRuntime(t *testing.T) {
 	e := setupFoundationDatabase(t)
@@ -81,6 +162,42 @@ func TestP1RejectsInheritedMigrationColumnWrites(t *testing.T) {
 	}
 	if err := postgres.ApplyMigrations(ctx, e.owner, "mayi_p1_runtime"); err != nil {
 		t.Fatal("repaired migration rejected", err)
+	}
+}
+
+func TestP2RejectsInheritedAuthorityUpdates(t *testing.T) {
+	e := setupFoundationDatabase(t)
+	ctx := context.Background()
+	conn, err := e.db.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Release()
+	if _, err := e.admin.Exec(ctx, `CREATE ROLE mayi_p2_authority_grants NOLOGIN; GRANT mayi_p2_authority_grants TO mayi_p1_runtime`); err != nil {
+		t.Fatal(err)
+	}
+	defer e.admin.Exec(ctx, `REVOKE UPDATE(subject) ON mayi.grants FROM mayi_p2_authority_grants;
+ REVOKE UPDATE ON mayi.credentials FROM mayi_p2_authority_grants;
+ REVOKE mayi_p2_authority_grants FROM mayi_p1_runtime; DROP ROLE mayi_p2_authority_grants`)
+	for _, permission := range []string{"UPDATE(subject) ON mayi.grants", "UPDATE ON mayi.credentials"} {
+		if _, err := e.admin.Exec(ctx, `GRANT `+permission+` TO mayi_p2_authority_grants`); err != nil {
+			t.Fatal(err)
+		}
+		if err := postgres.ValidateRuntime(ctx, conn.Conn(), "mayi_p1_runtime"); !errors.Is(err, postgres.ErrDatabaseConfiguration) {
+			t.Fatal("inherited authority update admitted at runtime", permission, err)
+		}
+		if err := postgres.ApplyMigrations(ctx, e.owner, "mayi_p1_runtime"); !errors.Is(err, postgres.ErrDatabaseConfiguration) {
+			t.Fatal("inherited authority update admitted by migration", permission, err)
+		}
+		if _, err := e.admin.Exec(ctx, `REVOKE `+permission+` FROM mayi_p2_authority_grants`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := postgres.ValidateRuntime(ctx, conn.Conn(), "mayi_p1_runtime"); err != nil {
+		t.Fatal("repaired authority privileges rejected", err)
+	}
+	if err := postgres.ApplyMigrations(ctx, e.owner, "mayi_p1_runtime"); err != nil {
+		t.Fatal("repaired authority privileges could not migrate", err)
 	}
 }
 

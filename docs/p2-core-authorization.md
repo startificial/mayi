@@ -84,6 +84,8 @@ Sessions have a one-hour absolute lifetime, rotate at login and end through a sa
 
 ## Verification
 
+[ADR 0013](adr/0013-p2-review-corrections.md) records the three-reviewer P2 audit and corrections: attempt-relative upstream authentication freshness, browser-bound logout after membership loss, and narrower runtime lifecycle update privileges. Domain/service tests and the real PostgreSQL suite cover the new denial, replay, foreign-reference and reactivation cases. This internal review does not complete the independent production or interoperability gates.
+
 ```sh
 go run ./tools/checks
 go test -race -count=1 ./...

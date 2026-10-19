@@ -32,6 +32,8 @@ This is partial groundwork for CORE-1/2/3/5, GRANT-3/4, ADM-1/5 and OPS-4. No pu
 
 Token endpoints, downstream OIDC, idle/session-list APIs, BFF/resource enforcement, external-provider and real-browser compatibility, and the complete P2 exit remain pending. Full requirement rows stay Planned; these fixtures complete no production or conformance gate.
 
+[ADR 0013](adr/0013-p2-review-corrections.md) records P2 review corrections and additional partial FED-1/WEB-8 evidence. `TestAssertionMustBeFreshForItsLoginAttempt`, `TestFreshTokenCannotReuseAuthenticationBeforeLoginAttempt` and the real PostgreSQL `TestP2LoginRejectsAuthenticationBeforeAttemptWithoutSessionEffects` reject authentication predating the attempt beyond explicit skew, without session effects or a reusable callback. `TestP2InactiveMemberCanEndOnlyTheirBrowserBoundSession` covers termination after membership loss, foreign references and denial after reactivation. Runtime privilege regressions additionally restrict lifecycle updates to their intended columns. Full requirement status is unchanged.
+
 ## CORE
 
 | ID | Level | Phase | Owner | Acceptance condition |

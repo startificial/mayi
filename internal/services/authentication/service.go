@@ -110,7 +110,7 @@ func (s *Service) Complete(ctx context.Context, input Callback) (Session, error)
 		return Session{}, classify(err)
 	}
 	now := s.clock.Now()
-	if !l.ActiveAt(now) || !evidence.ValidAt(now) {
+	if !evidence.ValidFor(l, now) {
 		return Session{}, ErrDenied
 	}
 	handle, err := s.secrets.NewSecret(ctx)

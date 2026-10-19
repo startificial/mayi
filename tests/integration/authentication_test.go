@@ -14,9 +14,10 @@ import (
 )
 
 type upstreamProbe struct {
-	calls         atomic.Int32
-	afterExchange func()
-	fingerprint   string
+	calls           atomic.Int32
+	afterExchange   func()
+	fingerprint     string
+	authenticatedAt time.Time
 }
 
 func (*upstreamProbe) ID() string { return "upstream" }
@@ -34,7 +35,11 @@ func (p *upstreamProbe) Authenticate(context.Context, string, string, string, ti
 	if p.afterExchange != nil {
 		p.afterExchange()
 	}
-	return identity.Assertion{Issuer: "https://idp.example", Subject: "upstream-alice", AuthenticatedAt: time.Now()}, nil
+	at := p.authenticatedAt
+	if at.IsZero() {
+		at = time.Now()
+	}
+	return identity.Assertion{Issuer: "https://idp.example", Subject: "upstream-alice", AuthenticatedAt: at}, nil
 }
 func loginAttempt(t *testing.T, e *foundation, consent *authorization.Service, p authorization.AccessProof, provider *upstreamProbe) (*authentication.Service, authentication.Callback) {
 	t.Helper()
@@ -209,5 +214,86 @@ func TestP2StolenSessionCannotAuthorizeAnotherBrowserWorkflow(t *testing.T) {
 	foreign, _ = beginAuthorization(t, consent, request, foreign)
 	if _, err := consent.PrepareConsent(context.Background(), foreign); !errors.Is(err, authorization.ErrDenied) {
 		t.Fatal("stolen session crossed browser binding", err)
+	}
+}
+
+func TestP2LoginRejectsAuthenticationBeforeAttemptWithoutSessionEffects(t *testing.T) {
+	e, consent, request, base := setupAuthorization(t)
+	p, _ := beginAuthorization(t, consent, request, base)
+	provider := &upstreamProbe{}
+	service, cb := loginAttempt(t, e, consent, p, provider)
+	provider.authenticatedAt = cb.CreatedAt.Add(-time.Minute)
+	ctx := context.Background()
+	var before int
+	if err := e.admin.QueryRow(ctx, `SELECT count(*) FROM mayi.browser_sessions`).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.Complete(ctx, cb)
+	if !errors.Is(err, authentication.ErrDenied) || result.Handle != "" || provider.calls.Load() != 1 {
+		t.Fatal("stale upstream authentication accepted", err, provider.calls.Load())
+	}
+	// The persistence boundary must enforce the same domain rule for a direct
+	// caller; it cannot mint a session from the already claimed stale attempt.
+	login := identity.Login{TenantIssuer: p.TenantIssuer, ProviderID: provider.ID(), ProviderHash: provider.Fingerprint(), StateHash: secretHash(cb.State), NonceHash: secretHash(cb.Nonce), VerifierHash: secretHash(cb.Verifier), BrowserHash: cb.BrowserHash, AuthorizationHash: cb.AuthorizationHash, CreatedAt: cb.CreatedAt, ExpiresAt: cb.ExpiresAt}
+	evidence := identity.Assertion{Issuer: "https://idp.example", Subject: "upstream-alice", AuthenticatedAt: provider.authenticatedAt}
+	if err := e.store.CompleteLogin(ctx, login, evidence, secretHash("denied-session"), "", time.Now()); !errors.Is(err, authentication.ErrDenied) {
+		t.Fatal("adapter accepted stale authentication", err)
+	}
+	var after, audits int
+	var claimed, completed bool
+	if err := e.admin.QueryRow(ctx, `SELECT claimed_at IS NOT NULL,completed_at IS NOT NULL,(SELECT count(*) FROM mayi.browser_sessions),(SELECT count(*) FROM mayi.audit_events WHERE event_type='session_authenticated') FROM mayi.login_attempts WHERE tenant_id='a' AND state_hash=$1`, secretHash(cb.State)).Scan(&claimed, &completed, &after, &audits); err != nil || !claimed || completed || after != before || audits != 0 {
+		t.Fatal("stale authentication changed session state", claimed, completed, before, after, audits, err)
+	}
+	if _, err := service.Complete(ctx, cb); !errors.Is(err, authentication.ErrDenied) || provider.calls.Load() != 1 {
+		t.Fatal("stale attempt replayed upstream exchange", err)
+	}
+}
+
+func TestP2InactiveMemberCanEndOnlyTheirBrowserBoundSession(t *testing.T) {
+	e, consent, request, base := setupAuthorization(t)
+	p, _ := beginAuthorization(t, consent, request, base)
+	provider := &upstreamProbe{}
+	service, cb := loginAttempt(t, e, consent, p, provider)
+	session, err := service.Complete(context.Background(), cb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := e.admin.Exec(ctx, `UPDATE mayi.principal_memberships SET active=false WHERE tenant_id='a' AND subject='user:alice'`); err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"foreign browser", "foreign tenant session"} {
+		t.Run(mode, func(t *testing.T) {
+			hash, browser := secretHash(session.Handle), base.BrowserBindingHash
+			if mode == "foreign browser" {
+				browser = secretHash("another-browser")
+			} else {
+				hash = secretHash("session-b")
+				browser = secretHash("browser-b")
+			}
+			if err := service.End(ctx, hash, browser); !errors.Is(err, authentication.ErrDenied) {
+				t.Fatal("foreign session termination accepted", err)
+			}
+		})
+	}
+	var foreignRevoked bool
+	var foreignAudits int
+	if err := e.admin.QueryRow(ctx, `SELECT revoked,(SELECT count(*) FROM mayi.audit_events WHERE tenant_id='b' AND event_type='session_ended') FROM mayi.browser_sessions WHERE tenant_id='b' AND session_hash=$1`, secretHash("session-b")).Scan(&foreignRevoked, &foreignAudits); err != nil || foreignRevoked || foreignAudits != 0 {
+		t.Fatal("denied termination changed foreign tenant", foreignRevoked, foreignAudits, err)
+	}
+	if err := service.End(ctx, secretHash(session.Handle), base.BrowserBindingHash); err != nil {
+		t.Fatal("inactive membership prevented session termination", err)
+	}
+	var revoked bool
+	var audits int
+	if err := e.admin.QueryRow(ctx, `SELECT revoked,(SELECT count(*) FROM mayi.audit_events WHERE tenant_id='a' AND event_type='session_ended') FROM mayi.browser_sessions WHERE tenant_id='a' AND session_hash=$1`, secretHash(session.Handle)).Scan(&revoked, &audits); err != nil || !revoked || audits != 1 {
+		t.Fatal("session termination did not commit", revoked, audits, err)
+	}
+	if _, err := e.admin.Exec(ctx, `UPDATE mayi.principal_memberships SET active=true WHERE tenant_id='a' AND subject='user:alice'`); err != nil {
+		t.Fatal(err)
+	}
+	p.SessionHash = secretHash(session.Handle)
+	if _, err := consent.PrepareConsent(ctx, p); !errors.Is(err, authorization.ErrDenied) {
+		t.Fatal("reactivation revived ended session", err)
 	}
 }
