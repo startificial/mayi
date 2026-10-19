@@ -1,11 +1,43 @@
 package selfservice
 
 import (
+	"github.com/startificial/mayi/internal/domain/grants"
 	"github.com/startificial/mayi/internal/services/authorization"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 )
+
+func TestScopeOnlyPreviewRejectsRARAndPushedRequestsBeforeServices(t *testing.T) {
+	// Unset services make silently discarding object restrictions a hard failure.
+	// The preview must reject these fields until the complete RAR/PAR path exists.
+	h := &Handler{scope: grants.Scope{TenantID: "a", Issuer: "https://auth.example/t/a"}}
+	base := url.Values{
+		"client_id": {"web"}, "response_type": {"code"}, "redirect_uri": {"https://app.example/cb"},
+		"resource": {"https://api.example/documents"}, "scope": {"read"}, "state": {"unpredictable-client-state"},
+		"code_challenge": {strings.Repeat("A", 43)}, "code_challenge_method": {"S256"},
+	}
+	for key, value := range map[string]string{
+		"authorization_details": `[{"type":"https://api.example/types/document/v1","locations":["https://api.example/documents"],"identifier":"123","actions":["read"]}]`,
+		"request_uri":           "urn:ietf:params:oauth:request_uri:pending-reference",
+		"request":               "unsupported-signed-request",
+	} {
+		for _, value := range []string{value, ""} {
+			t.Run(key+value, func(t *testing.T) {
+				query := base.Encode() + "&" + url.Values{key: {value}}.Encode()
+				r := httptest.NewRequest(http.MethodGet, "https://auth.example/t/a/authorize?"+query, nil)
+				r.AddCookie(&http.Cookie{Name: h.name("browser"), Value: strings.Repeat("A", 43)})
+				w := httptest.NewRecorder()
+				h.Authorize(w, r)
+				if w.Code != http.StatusBadRequest || w.Header().Get("Location") != "" || len(w.Result().Cookies()) != 0 || strings.TrimSpace(w.Body.String()) != `{"error":"invalid_request"}` {
+					t.Fatalf("unsupported authority escaped the boundary: %d %s", w.Code, w.Body.String())
+				}
+			})
+		}
+	}
+}
 
 func TestAuthorizationResponseRetainsRegisteredQueryBytes(t *testing.T) {
 	for _, base := range []string{"https://app.example/cb?next=%2fhome&x=one%20two&x=three&flag", "https://app.example/cb?provider=mayi&", "https://app.example/cb?", "https://app.example/cb"} {
