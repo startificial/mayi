@@ -8,16 +8,16 @@ import (
 	"github.com/startificial/mayi/internal/domain/grants"
 )
 
-func documentProfileSpec() DocumentProfileSpec {
-	return DocumentProfileSpec{Scope: grants.Scope{TenantID: "tenant-a", Issuer: "https://auth.example/t/a"}, Resource: "https://api.example/documents", Type: "https://api.example/types/document/v1", Semantics: DocumentV1, Actions: []DocumentAction{{Name: "read", Description: "Read this document"}, {Name: "write", Description: "Change this document"}}}
+func objectProfileSpec() ObjectProfileSpec {
+	return ObjectProfileSpec{Scope: grants.Scope{TenantID: "tenant-a", Issuer: "https://auth.example/t/a"}, Resource: "https://api.example/documents", Type: "https://api.example/types/document/v1", Semantics: ObjectActionsV1, Actions: []ObjectAction{{Name: "read", Description: "Read this document"}, {Name: "write", Description: "Change this document"}}}
 }
 func requestDetails() []grants.ObjectDetail {
-	return []grants.ObjectDetail{{Type: documentProfileSpec().Type, Identifier: "123", Actions: []string{"read"}}}
+	return []grants.ObjectDetail{{Type: objectProfileSpec().Type, Identifier: "123", Actions: []string{"read"}}}
 }
 
-func TestDocumentProfileValidatesRegisteredTypesActionsAndScope(t *testing.T) {
-	s := documentProfileSpec()
-	p, err := NewDocumentProfile(s)
+func TestObjectProfileValidatesRegisteredTypesActionsAndScope(t *testing.T) {
+	s := objectProfileSpec()
+	p, err := NewObjectProfile(s)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestDocumentProfileValidatesRegisteredTypesActionsAndScope(t *testing.T) {
 		"unknown action": {{Type: s.Type, Identifier: "123", Actions: []string{"admin"}}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := p.ValidateRequest(s.Scope, s.Resource, details); !errors.Is(err, ErrInvalidDocumentRequest) {
+			if _, err := p.ValidateRequest(s.Scope, s.Resource, details); !errors.Is(err, ErrInvalidObjectRequest) {
 				t.Fatalf("unregistered authority accepted: %v", err)
 			}
 		})
@@ -46,34 +46,34 @@ func TestDocumentProfileValidatesRegisteredTypesActionsAndScope(t *testing.T) {
 	if _, err := p.ValidateRequest(s.Scope, s.Resource+"/child", requestDetails()); err == nil {
 		t.Fatal("resource prefix matched")
 	}
-	if _, err := (DocumentProfile{}).ValidateRequest(s.Scope, s.Resource, requestDetails()); err == nil {
+	if _, err := (ObjectProfile{}).ValidateRequest(s.Scope, s.Resource, requestDetails()); err == nil {
 		t.Fatal("zero profile accepted")
 	}
 }
 
-func TestDocumentProfileRegistrationAndImmutability(t *testing.T) {
-	for name, change := range map[string]func(*DocumentProfileSpec){
-		"scope":       func(s *DocumentProfileSpec) { s.Scope.TenantID = "" },
-		"resource":    func(s *DocumentProfileSpec) { s.Resource = "https://api.example/*" },
-		"type":        func(s *DocumentProfileSpec) { s.Type = "document" },
-		"type query":  func(s *DocumentProfileSpec) { s.Type += "?schema=other" },
-		"type user":   func(s *DocumentProfileSpec) { s.Type = "https://user@api.example/v1" },
-		"semantics":   func(s *DocumentProfileSpec) { s.Semantics = "document-v2" },
-		"actions":     func(s *DocumentProfileSpec) { s.Actions = nil },
-		"duplicate":   func(s *DocumentProfileSpec) { s.Actions = append(s.Actions, s.Actions[0]) },
-		"description": func(s *DocumentProfileSpec) { s.Actions[0].Description = "" },
-		"control":     func(s *DocumentProfileSpec) { s.Actions[0].Description = "read\nsecret" },
+func TestObjectProfileRegistrationAndImmutability(t *testing.T) {
+	for name, change := range map[string]func(*ObjectProfileSpec){
+		"scope":       func(s *ObjectProfileSpec) { s.Scope.TenantID = "" },
+		"resource":    func(s *ObjectProfileSpec) { s.Resource = "https://api.example/*" },
+		"type":        func(s *ObjectProfileSpec) { s.Type = "document" },
+		"type query":  func(s *ObjectProfileSpec) { s.Type += "?schema=other" },
+		"type user":   func(s *ObjectProfileSpec) { s.Type = "https://user@api.example/v1" },
+		"semantics":   func(s *ObjectProfileSpec) { s.Semantics = "document-v2" },
+		"actions":     func(s *ObjectProfileSpec) { s.Actions = nil },
+		"duplicate":   func(s *ObjectProfileSpec) { s.Actions = append(s.Actions, s.Actions[0]) },
+		"description": func(s *ObjectProfileSpec) { s.Actions[0].Description = "" },
+		"control":     func(s *ObjectProfileSpec) { s.Actions[0].Description = "read\nsecret" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			s := documentProfileSpec()
+			s := objectProfileSpec()
 			change(&s)
-			if _, err := NewDocumentProfile(s); !errors.Is(err, ErrInvalidDocumentProfile) {
+			if _, err := NewObjectProfile(s); !errors.Is(err, ErrInvalidObjectProfile) {
 				t.Fatalf("invalid registration accepted: %v", err)
 			}
 		})
 	}
-	s := documentProfileSpec()
-	p, err := NewDocumentProfile(s)
+	s := objectProfileSpec()
+	p, err := NewObjectProfile(s)
 	if err != nil {
 		t.Fatal(err)
 	}

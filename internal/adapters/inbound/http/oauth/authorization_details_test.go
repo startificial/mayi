@@ -11,11 +11,11 @@ import (
 	"github.com/startificial/mayi/internal/domain/resources"
 )
 
-func rarProfile(t testing.TB) resources.DocumentProfile {
+func rarProfile(t testing.TB) resources.ObjectProfile {
 	t.Helper()
-	p, err := resources.NewDocumentProfile(resources.DocumentProfileSpec{
-		Scope: grants.Scope{TenantID: "tenant-a", Issuer: "https://auth.example/t/a"}, Resource: "https://api.example/documents", Type: "https://api.example/types/document/v1", Semantics: resources.DocumentV1,
-		Actions: []resources.DocumentAction{{Name: "read", Description: "Read document"}, {Name: "write", Description: "Change document"}},
+	p, err := resources.NewObjectProfile(resources.ObjectProfileSpec{
+		Scope: grants.Scope{TenantID: "tenant-a", Issuer: "https://auth.example/t/a"}, Resource: "https://api.example/documents", Type: "https://api.example/types/document/v1", Semantics: resources.ObjectActionsV1,
+		Actions: []resources.ObjectAction{{Name: "read", Description: "Read document"}, {Name: "write", Description: "Change document"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -27,6 +27,44 @@ func rarEntry(identifier, action string) string {
 	return fmt.Sprintf(`{"type":"https://api.example/types/document/v1","locations":["https://api.example/documents"],"identifier":"%s","actions":["%s"]}`, identifier, action)
 }
 func rarRequest() string { return "[" + rarEntry("123", "read") + "," + rarEntry("124", "write") + "]" }
+
+func TestAuthorizationDetailsSupportsResourceOwnedObjectTypes(t *testing.T) {
+	for _, tc := range []struct{ kind, identifier, action string }{
+		{"workflow", "workflow:billing-2026", "execute"},
+		{"project", "project:alpha", "manage-members"},
+		{"file", "file:report.pdf", "download"},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			s := rarProfile(t).Snapshot()
+			s.Resource = "https://api.example/" + tc.kind
+			s.Type = "https://api.example/authorization-types/" + tc.kind + "/v1"
+			s.Actions = []resources.ObjectAction{{Name: tc.action, Description: "Perform the registered object operation"}}
+			p, err := resources.NewObjectProfile(s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, err := json.Marshal([]objectDetailDTO{{Type: s.Type, Locations: []string{s.Resource}, Identifier: tc.identifier, Actions: []string{tc.action}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			c, err := DecodeAuthorizationDetails(string(raw), p)
+			if err != nil || !c.Permits(s.Scope, s.Resource, s.Type, tc.identifier, tc.action) || c.Permits(s.Scope, s.Resource, s.Type, tc.identifier+"-other", tc.action) || c.Permits(s.Scope, s.Resource, s.Type, tc.identifier, "read") {
+				t.Fatalf("resource-owned object semantics were lost: %v", err)
+			}
+			encoded, err := EncodeAuthorizationDetails(c, p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			back, err := DecodeAuthorizationDetails(string(encoded), p)
+			if err != nil || !back.IsSubsetOf(c) || !c.IsSubsetOf(back) {
+				t.Fatal("resource-owned object type failed round trip", err)
+			}
+			if _, err := DecodeAuthorizationDetails(rarRequest(), p); err == nil {
+				t.Fatal("document example acquired authority over another object type")
+			}
+		})
+	}
+}
 
 func TestAuthorizationDetailsStandardEnvelopeRoundTrip(t *testing.T) {
 	p := rarProfile(t)
@@ -158,7 +196,7 @@ func TestAuthorizationDetailsBoundsAndInvalidEncoding(t *testing.T) {
 			t.Fatalf("incorrect identifier bound at %d: %v", count, err)
 		}
 	}
-	if _, err := DecodeAuthorizationDetails(valid, resources.DocumentProfile{}); err == nil {
+	if _, err := DecodeAuthorizationDetails(valid, resources.ObjectProfile{}); err == nil {
 		t.Fatal("unregistered profile decoded")
 	}
 	if _, err := EncodeAuthorizationDetails(grants.ObjectCeiling{}, p); err == nil {

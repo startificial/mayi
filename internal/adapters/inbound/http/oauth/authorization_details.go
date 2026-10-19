@@ -15,11 +15,11 @@ const MaxAuthorizationDetailsBytes = 32 << 10
 
 var ErrInvalidAuthorizationDetails = errors.New("invalid authorization details")
 
-// DecodeAuthorizationDetails maps RFC 9396's envelope into the initial document
+// DecodeAuthorizationDetails maps RFC 9396's envelope into the exact object/action
 // profile. It is not a handler and does not establish client/user authority.
 // The profile must be selected from trusted tenant/resource configuration. No
 // endpoint accepts RAR until PAR, approval and credential enforcement are wired.
-func DecodeAuthorizationDetails(raw string, profile resources.DocumentProfile) (grants.ObjectCeiling, error) {
+func DecodeAuthorizationDetails(raw string, profile resources.ObjectProfile) (grants.ObjectCeiling, error) {
 	if len(raw) == 0 || len(raw) > MaxAuthorizationDetailsBytes || !utf8.ValidString(raw) {
 		return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
 	}
@@ -33,7 +33,7 @@ func DecodeAuthorizationDetails(raw string, profile resources.DocumentProfile) (
 		if len(details) >= grants.MaxObjectDetails {
 			return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
 		}
-		detail, err := documentDetail(d, spec.Resource)
+		detail, err := objectDetail(d, spec.Resource)
 		if err != nil {
 			return grants.ObjectCeiling{}, ErrInvalidAuthorizationDetails
 		}
@@ -61,7 +61,7 @@ func DecodeAuthorizationDetails(raw string, profile resources.DocumentProfile) (
 // recursive values and arbitrary extension members never enter the domain.
 // Token parsing avoids encoding/json's last-wins duplicate member behavior and
 // case-insensitive struct field matching, including escaped member names.
-func documentDetail(d *json.Decoder, resource string) (grants.ObjectDetail, error) {
+func objectDetail(d *json.Decoder, resource string) (grants.ObjectDetail, error) {
 	var detail grants.ObjectDetail
 	if !delimiter(d, '{') {
 		return detail, ErrInvalidAuthorizationDetails
@@ -132,7 +132,7 @@ func jsonStrings(d *json.Decoder, limit int) ([]string, error) {
 	return values, nil
 }
 
-type documentDetailDTO struct {
+type objectDetailDTO struct {
 	Type       string   `json:"type"`
 	Locations  []string `json:"locations"`
 	Identifier string   `json:"identifier"`
@@ -142,14 +142,14 @@ type documentDetailDTO struct {
 // EncodeAuthorizationDetails emits only validated standard fields. It requires
 // the same trusted profile snapshot used for the assigned ceiling, rather than
 // serializing arbitrary JSON supplied by a client or persistence record.
-func EncodeAuthorizationDetails(ceiling grants.ObjectCeiling, profile resources.DocumentProfile) ([]byte, error) {
+func EncodeAuthorizationDetails(ceiling grants.ObjectCeiling, profile resources.ObjectProfile) ([]byte, error) {
 	s := ceiling.Snapshot()
 	if _, err := profile.ValidateRequest(s.Scope, s.Resource, s.Details); err != nil {
 		return nil, ErrInvalidAuthorizationDetails
 	}
-	details := make([]documentDetailDTO, 0, len(s.Details))
+	details := make([]objectDetailDTO, 0, len(s.Details))
 	for _, detail := range s.Details {
-		details = append(details, documentDetailDTO{Type: detail.Type, Locations: []string{s.Resource}, Identifier: detail.Identifier, Actions: detail.Actions})
+		details = append(details, objectDetailDTO{Type: detail.Type, Locations: []string{s.Resource}, Identifier: detail.Identifier, Actions: detail.Actions})
 	}
 	data, err := json.Marshal(details)
 	if err != nil || len(data) > MaxAuthorizationDetailsBytes {
