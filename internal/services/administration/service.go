@@ -140,12 +140,27 @@ func (s *Service) CreateClient(ctx context.Context, actor Actor, scope grants.Sc
 		if input.AccessTokenSeconds > p.MaxAccessTokenSeconds {
 			return ErrInvalid
 		}
+		registeredResources := make(map[string]resources.Resource, len(input.Resources))
 		for _, id := range input.Resources {
 			r, err := tx.Resource(ctx, id)
 			if err != nil {
 				return err
 			}
 			if input.AccessTokenSeconds > r.AccessTokenSeconds {
+				return ErrInvalid
+			}
+			registeredResources[r.URI] = r
+		}
+		for _, typ := range input.AuthorizationDetailsTypes {
+			profile, err := tx.ClientObjectProfile(ctx, typ, input.Resources)
+			if errors.Is(err, ErrNotFound) {
+				return ErrInvalid
+			}
+			if err != nil {
+				return err
+			}
+			definition := profile.Snapshot()
+			if definition.Scope != scope || definition.Type != typ || !input.AllowsObjectProfile(registeredResources[definition.Resource], profile) {
 				return ErrInvalid
 			}
 		}

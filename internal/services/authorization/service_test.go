@@ -88,7 +88,7 @@ func setup(t *testing.T) (*authorization.Service, *store, *clock, *material, dom
 	t.Helper()
 	scope := grants.Scope{TenantID: "a", Issuer: "https://auth.example/t/a"}
 	request := domain.Request{TenantIssuer: scope, ClientID: "web", RedirectURI: "https://app.example/cb", ResourceURI: "https://api.example", PKCEChallenge: strings.Repeat("A", 43), PermissionScopes: []string{"read"}}
-	s := &store{principal: authorization.Principal{TenantIssuer: scope, SessionHash: strings.Repeat("a", 64), Subject: "user:alice"}, registration: domain.Registration{Client: clients.Client{ID: "web", Name: "Web", RedirectURIs: []string{request.RedirectURI}, Resources: []string{"api"}, AccessTokenSeconds: 300, Enabled: true}, Resource: resources.Resource{ID: "api", URI: request.ResourceURI, Name: "API", Scopes: []resources.Scope{{Name: "read", Description: "Read items"}}, AccessTokenSeconds: 300}, Policy: policy.Tenant{Version: 1, MaxAccessTokenSeconds: 600, MaxGrantSeconds: 3600}}}
+	s := &store{principal: authorization.Principal{TenantIssuer: scope, SessionHash: strings.Repeat("a", 64), Subject: "user:alice"}, registration: domain.Registration{Client: clients.Client{ID: "web", Name: "Web", RedirectURIs: []string{request.RedirectURI}, Resources: []string{"api"}, AuthorizationDetailsTypes: []string{"https://api.example/types/fixture/v1"}, AccessTokenSeconds: 300, Enabled: true}, Resource: resources.Resource{ID: "api", URI: request.ResourceURI, Name: "API", Scopes: []resources.Scope{{Name: "read", Description: "Read items"}}, AccessTokenSeconds: 300}, Policy: policy.Tenant{Version: 1, MaxAccessTokenSeconds: 600, MaxGrantSeconds: 3600}}}
 	c := &clock{now: time.Unix(1700000000, 0)}
 	m := &material{}
 	service, _ := authorization.New(s, c, m)

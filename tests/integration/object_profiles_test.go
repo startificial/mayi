@@ -106,7 +106,7 @@ func TestP2ProfileRegistrationRollsBackAndHasOneConcurrentWinner(t *testing.T) {
 		t.Fatal("uncommitted registration acknowledged", err)
 	}
 	var profiles, audits, events int
-	if err := e.admin.QueryRow(ctx, `SELECT (SELECT count(*) FROM mayi.resource_object_profiles),(SELECT count(*) FROM mayi.audit_events),(SELECT count(*) FROM mayi.outbox_events)`).Scan(&profiles, &audits, &events); err != nil || profiles != 0 || audits != 0 || events != 0 {
+	if err := e.admin.QueryRow(ctx, `SELECT (SELECT count(*) FROM mayi.resource_object_profiles WHERE type_uri=$1),(SELECT count(*) FROM mayi.audit_events),(SELECT count(*) FROM mayi.outbox_events)`, spec.Type).Scan(&profiles, &audits, &events); err != nil || profiles != 0 || audits != 0 || events != 0 {
 		t.Fatal("partial registration committed", profiles, audits, events, err)
 	}
 	if _, err := e.admin.Exec(ctx, `DROP TRIGGER fail_profile ON mayi.outbox_events`); err != nil {

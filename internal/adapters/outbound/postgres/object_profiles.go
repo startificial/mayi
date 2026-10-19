@@ -36,6 +36,28 @@ func (m *management) ObjectProfile(ctx context.Context, resourceID, typeURI stri
 	if err != nil {
 		return resources.ObjectProfile{}, classifyManagement(err)
 	}
+	return rehydrateObjectProfile(s, data)
+}
+
+func (m *management) ClientObjectProfile(ctx context.Context, typeURI string, resourceIDs []string) (resources.ObjectProfile, error) {
+	if !resources.ValidObjectTypeURI(typeURI) || len(resourceIDs) == 0 || len(resourceIDs) > 32 {
+		return resources.ObjectProfile{}, administration.ErrInvalid
+	}
+	for _, id := range resourceIDs {
+		if !resources.ValidID(id) {
+			return resources.ObjectProfile{}, administration.ErrInvalid
+		}
+	}
+	s := resources.ObjectProfileSpec{Scope: m.scope, Type: typeURI}
+	var data []byte
+	err := m.tx.QueryRow(ctx, `SELECT resource_uri,semantics,actions FROM mayi.resource_object_profiles WHERE tenant_id=$1 AND type_uri=$2 AND resource_id=ANY($3)`, m.scope.TenantID, typeURI, resourceIDs).Scan(&s.Resource, &s.Semantics, &data)
+	if err != nil {
+		return resources.ObjectProfile{}, classifyManagement(err)
+	}
+	return rehydrateObjectProfile(s, data)
+}
+
+func rehydrateObjectProfile(s resources.ObjectProfileSpec, data []byte) (resources.ObjectProfile, error) {
 	var actions map[string]string
 	if err := json.Unmarshal(data, &actions); err != nil {
 		return resources.ObjectProfile{}, administration.ErrUnavailable

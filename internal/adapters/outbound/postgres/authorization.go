@@ -87,6 +87,9 @@ func (a *authorizationTransaction) Registration(ctx context.Context, clientID, r
 	if err := a.tx.QueryRow(ctx, `SELECT resource_id FROM mayi.resources WHERE tenant_id=$1 AND uri=$2 FOR SHARE`, a.tenantIssuer.TenantID, resourceURI).Scan(&resourceID); err != nil {
 		return r, authorization.ErrInvalid
 	}
+	if !slices.Contains(r.Client.Resources, resourceID) {
+		return domain.Registration{}, authorization.ErrInvalid
+	}
 	r.Resource, err = m.Resource(ctx, resourceID)
 	if err != nil {
 		return r, authorization.ErrInvalid
@@ -94,6 +97,31 @@ func (a *authorizationTransaction) Registration(ctx context.Context, clientID, r
 	r.Policy, err = m.Policy(ctx)
 	if err != nil {
 		return r, authorization.ErrUnavailable
+	}
+	rows, err := a.tx.Query(ctx, `SELECT type_uri FROM mayi.client_object_types WHERE tenant_id=$1 AND client_id=$2 AND resource_id=$3 ORDER BY type_uri LIMIT $4`, a.tenantIssuer.TenantID, clientID, resourceID, len(r.Client.AuthorizationDetailsTypes)+1)
+	if err != nil {
+		return domain.Registration{}, authorization.ErrUnavailable
+	}
+	var types []string
+	for rows.Next() {
+		var typ string
+		if err := rows.Scan(&typ); err != nil {
+			rows.Close()
+			return domain.Registration{}, authorization.ErrUnavailable
+		}
+		types = append(types, typ)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil || len(types) > len(r.Client.AuthorizationDetailsTypes) {
+		return domain.Registration{}, authorization.ErrUnavailable
+	}
+	for _, typ := range types {
+		profile, err := m.ObjectProfile(ctx, resourceID, typ)
+		if err != nil {
+			return domain.Registration{}, authorization.ErrUnavailable
+		}
+		r.ObjectProfiles = append(r.ObjectProfiles, profile)
 	}
 	return r, nil
 }

@@ -53,6 +53,9 @@ func (f *fake) RegisterObjectProfile(_ context.Context, _ string, p resources.Ob
 func (f *fake) ObjectProfile(context.Context, string, string) (resources.ObjectProfile, error) {
 	return f.profile, nil
 }
+func (f *fake) ClientObjectProfile(context.Context, string, []string) (resources.ObjectProfile, error) {
+	return f.profile, nil
+}
 func (f *fake) CreateResource(context.Context, resources.Resource) error         { f.creates++; return nil }
 func (f *fake) Client(context.Context, string) (clients.Client, error)           { return clients.Client{}, nil }
 func (f *fake) CreateClient(context.Context, clients.Client) error               { f.creates++; return nil }

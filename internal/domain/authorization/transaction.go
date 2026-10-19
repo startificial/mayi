@@ -55,18 +55,52 @@ func ValidHandleHash(s string) bool {
 // Registration is a current, use-case-scoped projection of the three existing
 // owners' values. It does not own their lifecycle or mutate their internals.
 type Registration struct {
-	Client   clients.Client
-	Resource resources.Resource
-	Policy   policy.Tenant
+	Client         clients.Client
+	Resource       resources.Resource
+	Policy         policy.Tenant
+	ObjectProfiles []resources.ObjectProfile
 }
 
 func (r Request) AllowedBy(current Registration) bool {
-	// This registration projection is still scope-only. A future PAR operation
-	// must supply registered object semantics and resource decision metadata;
-	// merely persisting an object ceiling cannot authorize it for consent.
+	// Registered vocabulary alone cannot authorize object consent. Required PAR
+	// and resource-owned decision metadata must be connected before enabling it.
 	if !r.ObjectCeiling.IsZero() {
 		return false
 	}
+	return r.matchesRegistration(current)
+}
+
+// MatchesObjectRegistration checks the request against current registered
+// client/resource vocabulary only. It neither verifies PAR provenance nor
+// authorizes the principal/object, and must not be used alone for consent.
+func (r Request) MatchesObjectRegistration(current Registration) bool {
+	if !r.matchesRegistration(current) || r.ObjectCeiling.IsZero() || len(current.ObjectProfiles) == 0 || len(current.ObjectProfiles) > clients.MaxAuthorizationDetailsTypes {
+		return false
+	}
+	profiles := make(map[string]resources.ObjectProfile, len(current.ObjectProfiles))
+	for _, profile := range current.ObjectProfiles {
+		s := profile.Snapshot()
+		if s.Scope != r.TenantIssuer || s.Resource != r.ResourceURI || !current.Client.AllowsObjectProfile(current.Resource, profile) {
+			return false
+		}
+		if _, duplicate := profiles[s.Type]; duplicate {
+			return false
+		}
+		profiles[s.Type] = profile
+	}
+	for _, detail := range r.ObjectCeiling.Snapshot().Details {
+		profile, ok := profiles[detail.Type]
+		if !ok {
+			return false
+		}
+		if _, err := profile.ValidateRequest(r.TenantIssuer, r.ResourceURI, []grants.ObjectDetail{detail}); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func (r Request) matchesRegistration(current Registration) bool {
 	if !r.Valid() || !current.Client.Valid() || !current.Resource.Valid() || !current.Policy.Valid() || !current.Client.Enabled || current.Client.ID != r.ClientID || current.Resource.URI != r.ResourceURI || !slices.Contains(current.Client.RedirectURIs, r.RedirectURI) || !slices.Contains(current.Client.Resources, current.Resource.ID) {
 		return false
 	}

@@ -51,12 +51,14 @@ All management requests use `Authorization: Bearer <43-character operator token>
 | `PUT /admin/t/{tenant}/policy` | `policy:write` | Compare the supplied version, update, increment version and audit atomically |
 | `POST /admin/t/{tenant}/resources` | `resources:write` | Create a resource and described scope catalog within tenant lifetime/binding limits |
 | `GET /admin/t/{tenant}/resources/{id}` | `resources:read` | Read one tenant-owned resource |
-| `POST /admin/t/{tenant}/clients` | `clients:write` | Create a public HTTPS web client with exact redirects and registered resource references |
+| `POST /admin/t/{tenant}/clients` | `clients:write` | Create a public HTTPS web client with exact redirects, registered resource references and explicit registered `authorization_details_types` |
 | `GET /admin/t/{tenant}/clients/{id}` | `clients:read` | Read one tenant-owned client |
 | `POST /admin/t/{tenant}/keys/{version}/publish` | `keys:write` | Publish a preconfigured and startup-verified Transit version |
 | `POST /admin/t/{tenant}/keys/{version}/activate` | `keys:write` | Activate only after the publication lead time; retain prior public keys |
 
 Create-only resource/client endpoints return `409` on duplicates. No misleading general-purpose update/delete contract is exposed. Public-client registration is a P2 input model, not permission to use a nonexistent OAuth flow. Fixed query components in HTTPS web callbacks are accepted and stored byte-for-byte, for example `https://app.example.com/callback?flow=login`. Redirect validation is distinct from resource-audience validation: no normalization or resource-URI fallback is applied. Confidential credentials, native redirect exceptions and authenticated upstream users are not implemented by these records.
+
+P2 now requires 1–32 distinct `authorization_details_types` for every new managed client. Register resource-owned profiles first; each requested type must belong to one of the client's declared resources. See [ADR 0014](adr/0014-durable-resource-object-profiles.md) for profile routes and [ADR 0015](adr/0015-client-rar-type-allowlists.md) for a complete client body. Missing/unknown metadata fails; no default or legacy backfill is provided. This registration remains separate from the pending required PAR/object authorization flow.
 
 Resource body example:
 

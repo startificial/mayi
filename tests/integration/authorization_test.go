@@ -31,6 +31,8 @@ func setupAuthorization(t *testing.T) (*foundation, *authorization.Service, doma
  INSERT INTO mayi.resource_scopes VALUES('a','api','read','Read items'),('a','api','write','Write items'),('b','api','read','Read items');
  INSERT INTO mayi.clients(tenant_id,client_id,name,redirect_uris,access_token_seconds) VALUES('a','web','Example client',ARRAY['https://app.example/cb?provider=mayi'],300),('b','web','Other client',ARRAY['https://app.example/cb?provider=mayi'],300);
  INSERT INTO mayi.client_resources VALUES('a','web','api'),('b','web','api');
+ INSERT INTO mayi.resource_object_profiles VALUES('a','api','https://api.example','https://api.example/types/fixture/v1','object-actions-v1','{"read":"Read items","write":"Write items"}'),('b','api','https://api.example','https://api.example/types/fixture/v1','object-actions-v1','{"read":"Read items"}');
+ INSERT INTO mayi.client_object_types VALUES('a','web','api','https://api.example/types/fixture/v1'),('b','web','api','https://api.example/types/fixture/v1');
  INSERT INTO mayi.principal_memberships VALUES('a','user:alice',true),('b','user:alice',true);
 `)
 	if err != nil {

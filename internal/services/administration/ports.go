@@ -30,6 +30,9 @@ type Transaction interface {
 	CreateResource(context.Context, resources.Resource) error
 	RegisterObjectProfile(context.Context, string, resources.ObjectProfile) error
 	ObjectProfile(context.Context, string, string) (resources.ObjectProfile, error)
+	// ClientObjectProfile resolves a type only within the proposed client's
+	// allowed resources, under the same tenant guard as client creation.
+	ClientObjectProfile(context.Context, string, []string) (resources.ObjectProfile, error)
 	Client(context.Context, string) (clients.Client, error)
 	CreateClient(context.Context, clients.Client) error
 	PublishKey(context.Context, identity.PublicKey, time.Time) error

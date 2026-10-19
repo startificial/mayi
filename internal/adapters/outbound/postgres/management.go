@@ -108,6 +108,9 @@ func (m *management) Resource(ctx context.Context, id string) (resources.Resourc
 	return r, rows.Err()
 }
 func (m *management) CreateClient(ctx context.Context, c clients.Client) error {
+	if !c.Valid() {
+		return administration.ErrInvalid
+	}
 	_, err := m.tx.Exec(ctx, `INSERT INTO mayi.clients(tenant_id,client_id,enabled,name,redirect_uris,access_token_seconds) VALUES($1,$2,$3,$4,$5,$6)`, m.scope.TenantID, c.ID, c.Enabled, c.Name, c.RedirectURIs, c.AccessTokenSeconds)
 	if err != nil {
 		return err
@@ -115,6 +118,18 @@ func (m *management) CreateClient(ctx context.Context, c clients.Client) error {
 	for _, id := range c.Resources {
 		if _, err := m.tx.Exec(ctx, `INSERT INTO mayi.client_resources VALUES($1,$2,$3)`, m.scope.TenantID, c.ID, id); err != nil {
 			return err
+		}
+	}
+	for _, typ := range c.AuthorizationDetailsTypes {
+		tag, err := m.tx.Exec(ctx, `INSERT INTO mayi.client_object_types(tenant_id,client_id,resource_id,type_uri)
+ SELECT p.tenant_id,$2,p.resource_id,p.type_uri FROM mayi.resource_object_profiles p
+ JOIN mayi.client_resources c ON c.tenant_id=p.tenant_id AND c.resource_id=p.resource_id AND c.client_id=$2
+ WHERE p.tenant_id=$1 AND p.type_uri=$3`, m.scope.TenantID, c.ID, typ)
+		if err != nil {
+			return classifyManagement(err)
+		}
+		if tag.RowsAffected() != 1 {
+			return administration.ErrInvalid
 		}
 	}
 	return nil
@@ -137,7 +152,29 @@ func (m *management) Client(ctx context.Context, id string) (clients.Client, err
 		}
 		c.Resources = append(c.Resources, id)
 	}
-	return c, rows.Err()
+	if err := rows.Err(); err != nil {
+		return clients.Client{}, err
+	}
+	rows.Close()
+	rows, err = m.tx.Query(ctx, `SELECT type_uri FROM mayi.client_object_types WHERE tenant_id=$1 AND client_id=$2 ORDER BY type_uri LIMIT $3`, m.scope.TenantID, id, clients.MaxAuthorizationDetailsTypes+1)
+	if err != nil {
+		return clients.Client{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var typ string
+		if err := rows.Scan(&typ); err != nil {
+			return clients.Client{}, err
+		}
+		c.AuthorizationDetailsTypes = append(c.AuthorizationDetailsTypes, typ)
+	}
+	if err := rows.Err(); err != nil {
+		return clients.Client{}, err
+	}
+	if !c.Valid() {
+		return clients.Client{}, administration.ErrUnavailable
+	}
+	return c, nil
 }
 func (m *management) Audit(ctx context.Context, event, actor, object string) error {
 	_, err := m.tx.Exec(ctx, `INSERT INTO mayi.audit_events(tenant_id,event_type,actor_id,object_ref) VALUES($1,$2,$3,$4)`, m.scope.TenantID, event, actor, object)

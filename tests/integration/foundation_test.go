@@ -181,7 +181,10 @@ func TestP1MigrationsOwnershipAndTenantIsolation(t *testing.T) {
 			t.Fatal(w.Code, w.Body.String())
 		}
 	}
-	client := `{"id":"web","name":"Web client","redirect_uris":["https://app.example/callback?flow=login&tenant=a"],"resources":["api"],"access_token_seconds":300,"enabled":true}`
+	if w := api(t, h, "POST", "/admin/t/a/resources/api/object-profiles", e.tokens["a"], `{"resource":"https://api.example","type":"https://api.example/types/fixture/v1","semantics":"object-actions-v1","actions":[{"name":"read","description":"Read objects"}]}`); w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	client := `{"id":"web","name":"Web client","redirect_uris":["https://app.example/callback?flow=login&tenant=a"],"resources":["api"],"authorization_details_types":["https://api.example/types/fixture/v1"],"access_token_seconds":300,"enabled":true}`
 	if w := api(t, h, "POST", "/admin/t/a/clients", e.tokens["a"], client); w.Code != 201 {
 		t.Fatal(w.Code, w.Body.String())
 	}
