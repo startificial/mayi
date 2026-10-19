@@ -26,6 +26,7 @@ type Request struct {
 	TenantIssuer                                                                grants.Scope
 	ClientID, RedirectURI, ResourceURI, PKCEChallenge, BindingThumbprint, State string
 	PermissionScopes                                                            []string
+	ObjectCeiling                                                               grants.ObjectCeiling
 }
 
 func (r Request) Valid() bool {
@@ -36,6 +37,9 @@ func (r Request) Valid() bool {
 		if c < 0x20 || c >= 0x7f {
 			return false
 		}
+	}
+	if !r.ObjectCeiling.IsZero() && (!r.ObjectCeiling.BoundTo(r.TenantIssuer, r.ResourceURI) || len(r.ObjectCeiling.Snapshot().Details) == 0) {
+		return false
 	}
 	return true
 }
@@ -57,6 +61,12 @@ type Registration struct {
 }
 
 func (r Request) AllowedBy(current Registration) bool {
+	// This registration projection is still scope-only. A future PAR operation
+	// must supply registered object semantics and resource decision metadata;
+	// merely persisting an object ceiling cannot authorize it for consent.
+	if !r.ObjectCeiling.IsZero() {
+		return false
+	}
 	if !r.Valid() || !current.Client.Valid() || !current.Resource.Valid() || !current.Policy.Valid() || !current.Client.Enabled || current.Client.ID != r.ClientID || current.Resource.URI != r.ResourceURI || !slices.Contains(current.Client.RedirectURIs, r.RedirectURI) || !slices.Contains(current.Client.Resources, current.Resource.ID) {
 		return false
 	}
@@ -133,7 +143,7 @@ func (t Transaction) Decide(approve bool, subject, grantID, codeHash string, now
 	if grantLifetime <= 0 || grantLifetime > 366*24*time.Hour {
 		return Transaction{}, grants.Revision{}, ErrInvalid
 	}
-	revision, err := grants.NewRevision(grants.RevisionSpec{Scope: s.Request.TenantIssuer, GrantID: grantID, Number: 1, ClientID: s.Request.ClientID, Subject: subject, PrincipalType: "user", Resource: s.Request.ResourceURI, Scopes: s.Request.PermissionScopes, ExpiresAt: now.Add(grantLifetime)})
+	revision, err := grants.NewRevision(grants.RevisionSpec{Scope: s.Request.TenantIssuer, GrantID: grantID, Number: 1, ClientID: s.Request.ClientID, Subject: subject, PrincipalType: "user", Resource: s.Request.ResourceURI, Scopes: s.Request.PermissionScopes, ObjectCeiling: s.Request.ObjectCeiling, ExpiresAt: now.Add(grantLifetime)})
 	if err != nil {
 		return Transaction{}, grants.Revision{}, ErrInvalid
 	}

@@ -101,10 +101,14 @@ func setup(t *testing.T) *environment {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := admin.Exec(ctx, migrations.Initial); err != nil {
-		t.Fatal(err)
+	// The shared adapter always targets the current additive schema. Keep the
+	// original P0 behavioral fixtures, but run them against every migration.
+	for _, source := range []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings} {
+		if _, err := admin.Exec(ctx, source); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if _, err := admin.Exec(ctx, `GRANT USAGE ON SCHEMA mayi TO mayi_runtime; GRANT SELECT,INSERT,UPDATE ON ALL TABLES IN SCHEMA mayi TO mayi_runtime; GRANT USAGE ON ALL SEQUENCES IN SCHEMA mayi TO mayi_runtime; REVOKE INSERT,UPDATE ON mayi.grant_revisions FROM mayi_runtime`); err != nil {
+	if _, err := admin.Exec(ctx, `GRANT USAGE ON SCHEMA mayi TO mayi_runtime; GRANT SELECT,INSERT,UPDATE ON ALL TABLES IN SCHEMA mayi TO mayi_runtime; GRANT USAGE ON ALL SEQUENCES IN SCHEMA mayi TO mayi_runtime; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA mayi TO mayi_runtime; REVOKE INSERT,UPDATE ON mayi.grant_revisions FROM mayi_runtime`); err != nil {
 		t.Fatal(err)
 	}
 	config, err := pgxpool.ParseConfig(os.Getenv("MAYI_P0_POSTGRES"))

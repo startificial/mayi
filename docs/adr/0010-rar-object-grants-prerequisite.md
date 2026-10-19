@@ -2,6 +2,8 @@
 
 Status: Accepted requirement and design direction · 2026-10-18 · Implementation and verification pending
 
+Maintainer update: [ADR 0012](0012-durable-object-authority-snapshots.md) makes typed RAR authority mandatory for all resource grants and PAR mandatory for every interactive authorization request. Its fresh-deployment direction supersedes the optional-profile and legacy-record language below. Scope-only access is not a supported fallback; no deployed scope-only compatibility path is required.
+
 ## Decision and delivery gate
 
 The maintainer requires grants such as “this client may read document 123” in the core preview. Promote RES-10 from SHOULD/P7 to **MUST/P2**. Use [RFC 9396](https://www.rfc-editor.org/rfc/rfc9396.html) `authorization_details`; do not introduce a proprietary object-grant parameter or encode document identifiers into scope names. The RFC specifies the protocol envelope and permits API-specific authorization types. The document type below is Mayi's initial supported application profile, not a universal type defined by the RFC.

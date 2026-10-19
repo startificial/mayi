@@ -191,3 +191,28 @@ func (s *store) BindConsentSession(_ context.Context, w domain.Transaction) erro
 	s.workflow = w
 	return nil
 }
+
+func TestObjectAuthorityStaysClosedUntilPARAndConsentIntegration(t *testing.T) {
+	svc, s, _, m, request, p := setup(t)
+	objects, err := grants.NewObjectCeiling(grants.ObjectCeilingSpec{Scope: request.TenantIssuer, Resource: request.ResourceURI, Details: []grants.ObjectDetail{{Type: "https://api.example/types/file/v1", Identifier: "file:123", Actions: []string{"read"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.ObjectCeiling = objects
+	before := m.next
+	if result, err := svc.Begin(context.Background(), request, p.BrowserBindingHash); !errors.Is(err, authorization.ErrInvalid) || result.Handle != "" || s.runs != 0 || m.next != before {
+		t.Fatal("unsupported object begin reached storage or entropy", err)
+	}
+	spec := s.workflow.Snapshot()
+	spec.Request = request
+	s.workflow, err = domain.New(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := svc.PrepareConsent(context.Background(), p); !errors.Is(err, authorization.ErrDenied) || result.ClientID != "" {
+		t.Fatal("object metadata disclosed through scope-only consent", err)
+	}
+	if result, err := svc.Decide(context.Background(), authorization.Decision{Approve: true, Proof: p}); !errors.Is(err, authorization.ErrDenied) || result.Code != "" || s.completions != 0 || m.next != before {
+		t.Fatal("scope-only consent approved object authority", err)
+	}
+}

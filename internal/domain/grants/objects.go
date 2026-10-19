@@ -34,6 +34,24 @@ type ObjectCeilingSpec struct {
 // of current membership, grant status or the resource owner's current ACL.
 type ObjectCeiling struct{ spec ObjectCeilingSpec }
 
+// IsZero distinguishes missing object authority from a
+// bound empty ceiling, which explicitly permits nothing. Neither grants access.
+func (c ObjectCeiling) IsZero() bool {
+	return c.spec.Scope == (Scope{}) && c.spec.Resource == "" && len(c.spec.Details) == 0
+}
+
+func (c ObjectCeiling) BoundTo(scope Scope, resource string) bool {
+	return c.valid() && c.spec.Scope == scope && c.spec.Resource == resource
+}
+
+// Equal compares authority sets, preserving absence versus a bound denial.
+func (c ObjectCeiling) Equal(other ObjectCeiling) bool {
+	if c.IsZero() || other.IsZero() {
+		return c.IsZero() && other.IsZero()
+	}
+	return c.IsSubsetOf(other) && other.IsSubsetOf(c)
+}
+
 func NewObjectCeiling(spec ObjectCeilingSpec) (ObjectCeiling, error) {
 	if !spec.valid() {
 		return ObjectCeiling{}, ErrInvalidObjectCeiling

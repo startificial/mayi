@@ -34,3 +34,5 @@ Domain tests exercise immutable snapshots, explicit denial/omission, foreign bin
 No production route invokes this codec, no RAR/PAR capability is advertised, and specification `implemented_sections` remain empty. The next slice must add append-only registration/request/revision/credential storage, required RFC 9126 PAR with client binding, and authorized resource-owned decision/display projections through the existing consent unit of work. Token/introspection/SDK propagation and the complete document-123 negative-flow demonstration remain required before the P2 preview gate. Do not expose a temporary endpoint that could drop these restrictions.
 
 This change adds no dependency, tool, license exception or public SDK API.
+
+Subsequent work: [ADR 0012](0012-durable-object-authority-snapshots.md) implements additive request/revision/code snapshot storage and closed scope-only issuance paths. Public registration, PAR and end-to-end object enforcement remain pending.

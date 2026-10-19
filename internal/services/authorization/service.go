@@ -54,7 +54,7 @@ func validMaterial(m Material) bool {
 	return resources.ValidID(m.ID) && len(m.Secret) >= 43 && len(m.Secret) <= 128 && domain.ValidHandleHash(m.Hash) && m.Secret != m.Hash
 }
 func (s *Service) Begin(ctx context.Context, request domain.Request, browserBindingHash string) (BeginResult, error) {
-	if !request.Valid() || !domain.ValidHandleHash(browserBindingHash) {
+	if !request.Valid() || !request.ObjectCeiling.IsZero() || !domain.ValidHandleHash(browserBindingHash) {
 		return BeginResult{}, ErrInvalid
 	}
 	now := s.clock.Now()

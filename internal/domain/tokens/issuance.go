@@ -25,6 +25,11 @@ type AccessClaims struct {
 
 func Derive(revision grants.Revision, current, requested []string, id, binding string, now time.Time, lifetime time.Duration, deadlines ...time.Time) (AccessClaims, error) {
 	spec := revision.Snapshot()
+	// Object-bound issuance remains closed until claims, signing and resource
+	// enforcement carry the same ceiling. Never derive a scope-only token from it.
+	if !spec.ObjectCeiling.IsZero() {
+		return AccessClaims{}, ErrInvalidIssuance
+	}
 	// Revalidate zero values and data reconstituted by an adapter.
 	if _, err := grants.NewRevision(spec); err != nil || id == "" || len(id) > 256 || now.IsZero() || lifetime <= 0 || lifetime > 15*time.Minute {
 		return AccessClaims{}, ErrInvalidIssuance

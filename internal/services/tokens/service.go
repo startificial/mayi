@@ -36,6 +36,7 @@ type Credential struct {
 	PKCEChallenge, BindingThumbprint        string
 	RedirectURI                             string
 	CeilingScopes                           []string
+	ObjectCeiling                           grants.ObjectCeiling
 	IssuedAt                                time.Time
 	ExpiresAt                               time.Time
 	FamilyDeadline                          time.Time
@@ -45,6 +46,7 @@ type Credential struct {
 type GrantState struct {
 	Revision              grants.Revision
 	CurrentScopes         []string
+	CurrentObjectCeiling  grants.ObjectCeiling
 	Revoked               bool
 	PolicyVersion         uint64
 	AuthorizationDeadline time.Time
@@ -116,11 +118,17 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 		if cmd.Kind == AuthorizationCode && (!credential.ExpiresAt.After(credential.IssuedAt) || credential.ExpiresAt.After(credential.IssuedAt.Add(60*time.Second))) {
 			return ErrInvalidCredential
 		}
+		if !credential.ObjectCeiling.IsZero() {
+			return ErrInvalidCredential
+		}
 		state, err := tx.GrantRevision(ctx, credential.GrantID, credential.Revision)
 		if err != nil {
 			return err
 		}
 		spec := state.Revision.Snapshot()
+		if !spec.ObjectCeiling.IsZero() || !state.CurrentObjectCeiling.IsZero() {
+			return ErrInvalidCredential
+		}
 		if state.Revoked || state.PolicyVersion != version || spec.Scope != credential.Scope || spec.GrantID != credential.GrantID || spec.Number != credential.Revision || spec.ClientID != credential.ClientID || spec.Resource != credential.Resource {
 			return ErrInvalidCredential
 		}

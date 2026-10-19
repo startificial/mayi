@@ -37,3 +37,20 @@ func TestDeriveCapsEveryDeadlineAndKeepsExactRevision(t *testing.T) {
 		t.Fatal("zero revision accepted")
 	}
 }
+
+func TestScopeOnlyDerivationCannotDropObjectRestrictions(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	spec := grants.RevisionSpec{Scope: grants.Scope{TenantID: "a", Issuer: "https://auth.example/t/a"}, GrantID: "g", Number: 1, ClientID: "client", Subject: "user:alice", PrincipalType: "user", Resource: "https://api.example", Scopes: []string{"read"}, ExpiresAt: now.Add(time.Hour)}
+	var err error
+	spec.ObjectCeiling, err = grants.NewObjectCeiling(grants.ObjectCeilingSpec{Scope: spec.Scope, Resource: spec.Resource, Details: []grants.ObjectDetail{{Type: "https://api.example/types/project/v1", Identifier: "project:123", Actions: []string{"read"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision, err := grants.NewRevision(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := Derive(revision, []string{"read"}, nil, "id", "", now, time.Minute); err == nil || result.ID != "" {
+		t.Fatal("scope-only derivation lost object restrictions")
+	}
+}

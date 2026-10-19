@@ -24,6 +24,7 @@ type RevisionSpec struct {
 	Number                                     uint64
 	ClientID, Subject, PrincipalType, Resource string
 	Scopes                                     []string
+	ObjectCeiling                              ObjectCeiling
 	ExpiresAt                                  time.Time
 }
 
@@ -56,6 +57,9 @@ func NewRevision(spec RevisionSpec) (Revision, error) {
 		return Revision{}, ErrInvalidRevision
 	}
 	if !ValidScopes(spec.Scopes) {
+		return Revision{}, ErrInvalidRevision
+	}
+	if !spec.ObjectCeiling.IsZero() && (!spec.ObjectCeiling.BoundTo(spec.Scope, spec.Resource) || len(spec.ObjectCeiling.Snapshot().Details) == 0) {
 		return Revision{}, ErrInvalidRevision
 	}
 	spec.Scopes = slices.Clone(spec.Scopes)

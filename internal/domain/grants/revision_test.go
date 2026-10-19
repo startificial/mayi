@@ -25,6 +25,41 @@ func TestRevisionIsImmutable(t *testing.T) {
 	}
 }
 
+func TestObjectRevisionBindsHistoricalAuthority(t *testing.T) {
+	spec := revisionSpec()
+	objects := objectSpec()
+	objects.Scope, objects.Resource = spec.Scope, spec.Resource
+	spec.ObjectCeiling = objectCeiling(t, objects)
+	old, err := NewRevision(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := old.Snapshot()
+	view.ObjectCeiling.Snapshot().Details[0].Actions[0] = "admin"
+	objects.Details = append(objects.Details, ObjectDetail{Type: objects.Details[0].Type, Identifier: "125", Actions: []string{"read"}})
+	spec.Number++
+	spec.ObjectCeiling = objectCeiling(t, objects)
+	newer, err := NewRevision(spec)
+	if err != nil || old.Snapshot().ObjectCeiling.Equal(newer.Snapshot().ObjectCeiling) || old.Snapshot().ObjectCeiling.Permits(spec.Scope, spec.Resource, objects.Details[0].Type, "125", "read") {
+		t.Fatal("new approval enlarged historical object authority", err)
+	}
+	for _, mutate := range []func(*ObjectCeilingSpec){
+		func(s *ObjectCeilingSpec) { s.Scope.TenantID = "other" },
+		func(s *ObjectCeilingSpec) { s.Scope.Issuer += "/other" },
+		func(s *ObjectCeilingSpec) { s.Resource += "/other" },
+		func(s *ObjectCeilingSpec) { s.Details = nil },
+	} {
+		bad := old.Snapshot()
+		ceiling := bad.ObjectCeiling.Snapshot()
+		mutate(&ceiling)
+		bad.ObjectCeiling = objectCeiling(t, ceiling)
+		if _, err := NewRevision(bad); err == nil {
+			t.Fatal("foreign/empty object authority rehydrated")
+		}
+	}
+
+}
+
 func TestHistoricalCeilingSurvivesNewConsentAndCurrentPermissionLoss(t *testing.T) {
 	spec := revisionSpec()
 	spec.Scopes = []string{"read"}

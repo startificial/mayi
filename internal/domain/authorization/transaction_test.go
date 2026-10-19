@@ -110,3 +110,26 @@ func TestConsentSessionCannotChange(t *testing.T) {
 		t.Fatal("unbound consent decided")
 	}
 }
+
+func TestAuthorizationSnapshotCarriesExactObjectsWithoutEnablingConsent(t *testing.T) {
+	spec, registration := example()
+	ceiling := grants.ObjectCeilingSpec{Scope: spec.Request.TenantIssuer, Resource: spec.Request.ResourceURI, Details: []grants.ObjectDetail{{Type: "https://api.example/types/workflow/v1", Identifier: "workflow:123", Actions: []string{"execute"}}}}
+	var err error
+	spec.Request.ObjectCeiling, err = grants.NewObjectCeiling(ceiling)
+	if err != nil || !spec.Request.Valid() || spec.Request.AllowedBy(registration) {
+		t.Fatal("scope-only registration approved object requests", err)
+	}
+	w, err := New(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approved, revision, err := w.Decide(true, "user:alice", "grant", strings.Repeat("d", 64), spec.CreatedAt, time.Hour)
+	if err != nil || !approved.Snapshot().Request.ObjectCeiling.Equal(spec.Request.ObjectCeiling) || !revision.Snapshot().ObjectCeiling.Equal(spec.Request.ObjectCeiling) {
+		t.Fatal("domain transition dropped object ceiling", err)
+	}
+	ceiling.Scope.TenantID = "other"
+	spec.Request.ObjectCeiling, err = grants.NewObjectCeiling(ceiling)
+	if err != nil || spec.Request.Valid() {
+		t.Fatal("foreign object ceiling accepted", err)
+	}
+}

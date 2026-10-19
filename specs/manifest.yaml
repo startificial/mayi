@@ -363,7 +363,7 @@
       ],
       "implemented_sections": [],
       "deviations": [
-        "Mayi initial document profile requires one exact registered location, nonempty identifier/actions and PAR; unregistered type semantics fail closed."
+        "Mayi requires typed RAR authority for every resource grant; the initial object/action profile requires one exact registered location and nonempty identifier/actions. Every interactive authorization uses PAR; unregistered type semantics fail closed."
       ]
     },
     {
@@ -379,7 +379,7 @@
       ],
       "implemented_sections": [],
       "deviations": [
-        "Mayi requires PAR for the P2 object-RAR profile; other supported profiles may apply per-client PAR policy."
+        "Mayi requires PAR for every interactive authorization request; no per-client or scope-only bypass is supported."
       ]
     }
   ]

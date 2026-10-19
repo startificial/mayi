@@ -246,7 +246,7 @@ The OAuth 2.0 Security Best Current Practice (RFC 9700) is the baseline; FAPI 2.
 | ID | Requirement | Level | Standard | Verified |
 | --- | --- | --- | --- | --- |
 | SEC-1 | Every recommendation of the OAuth Security BCP applied; deviations listed and justified | MUST | RFC 9700 |  |
-| SEC-2 | Pushed authorization requests protect back-channel request integrity; required for the P2 object-RAR profile and configurable per client for other profiles | SHOULD | RFC 9126 |  |
+| SEC-2 | Pushed authorization requests are required for every interactive authorization request, with client binding, immutable request contents and no direct front-channel bypass | MUST | RFC 9126 |  |
 | SEC-3 | Signed request objects for clients that need integrity of authorization parameters | MAY | RFC 9101 |  |
 | SEC-4 | JWT-secured authorization responses | MAY | OpenID JARM |  |
 | SEC-5 | Step-up authentication: resources return `insufficient_user_authentication` with required `acr_values` or `max_age`, and the server re-authenticates (MFA) before issuing | MUST | RFC 9470 |  |
@@ -357,7 +357,7 @@ Every published RFC the server must be checked against, with the requirements th
 | [RFC 8725](https://www.rfc-editor.org/rfc/rfc8725) | JSON Web Token Best Current Practices | LIFE-11, SEC-9 | MUST | Not checked |
 | [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) | JWT Profile for OAuth 2.0 Access Tokens | RES-5, RES-7, RES-9, OIDC-2, M2M-4 | MUST | Not checked |
 | [RFC 9101](https://www.rfc-editor.org/rfc/rfc9101) | JWT-Secured Authorization Request (JAR) | SEC-3 | MAY | Not checked |
-| [RFC 9126](https://www.rfc-editor.org/rfc/rfc9126) | Pushed Authorization Requests (PAR) | SEC-2, SEC-10, RES-10 | MUST for object-RAR profile | Not checked |
+| [RFC 9126](https://www.rfc-editor.org/rfc/rfc9126) | Pushed Authorization Requests (PAR) | SEC-2, SEC-10, RES-10 | MUST for interactive authorization | Not checked |
 | [RFC 9207](https://www.rfc-editor.org/rfc/rfc9207) | Authorization Server Issuer Identification | DISC-4, SEC-6 | MUST | Not checked |
 | [RFC 9396](https://www.rfc-editor.org/rfc/rfc9396) | Rich Authorization Requests (RAR) | RES-10 | MUST | Not checked |
 | [RFC 9449](https://www.rfc-editor.org/rfc/rfc9449) | Demonstrating Proof of Possession (DPoP) | BIND-1 to BIND-4, BIND-6, BIND-7, WEB-2 | MUST | Not checked |

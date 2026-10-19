@@ -101,18 +101,23 @@ func (s *Store) Run(ctx context.Context, scope grants.Scope, fn func(tokens.Tran
 }
 func (t *transaction) Credential(ctx context.Context, hash string) (tokens.Credential, error) {
 	c := tokens.Credential{Scope: t.scope}
+	var objects []byte
 	err := t.tx.QueryRow(ctx, `SELECT c.hash,c.kind,c.client_id,c.resource,c.grant_id,c.revision,
  c.pkce_challenge,c.binding_thumbprint,c.redirect_uri,c.ceiling_scopes,c.issued_at,c.expires_at,
- COALESCE(f.absolute_deadline,c.expires_at),c.consumed,c.origin_code,COALESCE(c.family_id,''),COALESCE(c.parent_issuance_id,'')
+ COALESCE(f.absolute_deadline,c.expires_at),c.consumed,c.origin_code,COALESCE(c.family_id,''),COALESCE(c.parent_issuance_id,''),c.object_ceiling
  FROM mayi.credentials c JOIN mayi.clients cl ON cl.tenant_id=c.tenant_id AND cl.client_id=c.client_id
  LEFT JOIN mayi.refresh_families f ON f.tenant_id=c.tenant_id AND f.family_id=c.family_id
  WHERE c.tenant_id=$1 AND c.hash=$2 AND cl.enabled FOR UPDATE OF c FOR SHARE OF cl`, t.scope.TenantID, hash).Scan(
-		&c.Hash, &c.Kind, &c.ClientID, &c.Resource, &c.GrantID, &c.Revision, &c.PKCEChallenge, &c.BindingThumbprint, &c.RedirectURI, &c.CeilingScopes, &c.IssuedAt, &c.ExpiresAt, &c.FamilyDeadline, &c.Consumed, &c.OriginCode, &c.FamilyID, &c.ParentIssuanceID)
+		&c.Hash, &c.Kind, &c.ClientID, &c.Resource, &c.GrantID, &c.Revision, &c.PKCEChallenge, &c.BindingThumbprint, &c.RedirectURI, &c.CeilingScopes, &c.IssuedAt, &c.ExpiresAt, &c.FamilyDeadline, &c.Consumed, &c.OriginCode, &c.FamilyID, &c.ParentIssuanceID, &objects)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, tokens.ErrInvalidCredential
 	}
 	if err != nil {
 		return c, err
+	}
+	c.ObjectCeiling, err = decodeObjectCeiling(objects, t.scope, c.Resource)
+	if err != nil {
+		return tokens.Credential{}, tokens.ErrInvalidCredential
 	}
 	t.credential = &c
 	return c, nil
@@ -123,15 +128,24 @@ func (t *transaction) GrantRevision(ctx context.Context, id string, number uint6
 	}
 	spec := grants.RevisionSpec{Scope: t.scope, GrantID: id, Number: number}
 	state := tokens.GrantState{PolicyVersion: t.version}
-	err := t.tx.QueryRow(ctx, `SELECT g.client_id,g.subject,g.principal_type,g.resource,r.scopes,r.expires_at,g.current_scopes,g.expires_at,g.revoked
+	var objects, currentObjects []byte
+	err := t.tx.QueryRow(ctx, `SELECT g.client_id,g.subject,g.principal_type,g.resource,r.scopes,r.expires_at,g.current_scopes,g.expires_at,g.revoked,r.object_ceiling,g.current_object_ceiling
  FROM mayi.grants g JOIN mayi.grant_revisions r USING(tenant_id,grant_id)
  WHERE g.tenant_id=$1 AND g.grant_id=$2 AND r.revision=$3 FOR UPDATE OF g`, t.scope.TenantID, id, number).Scan(
-		&spec.ClientID, &spec.Subject, &spec.PrincipalType, &spec.Resource, &spec.Scopes, &spec.ExpiresAt, &state.CurrentScopes, &state.AuthorizationDeadline, &state.Revoked)
+		&spec.ClientID, &spec.Subject, &spec.PrincipalType, &spec.Resource, &spec.Scopes, &spec.ExpiresAt, &state.CurrentScopes, &state.AuthorizationDeadline, &state.Revoked, &objects, &currentObjects)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return state, tokens.ErrInvalidCredential
 	}
 	if err != nil {
 		return state, err
+	}
+	spec.ObjectCeiling, err = decodeObjectCeiling(objects, t.scope, spec.Resource)
+	if err != nil {
+		return tokens.GrantState{}, tokens.ErrInvalidCredential
+	}
+	state.CurrentObjectCeiling, err = decodeObjectCeiling(currentObjects, t.scope, spec.Resource)
+	if err != nil || spec.ObjectCeiling.IsZero() != state.CurrentObjectCeiling.IsZero() || spec.ObjectCeiling.IsZero() != t.credential.ObjectCeiling.IsZero() {
+		return tokens.GrantState{}, tokens.ErrInvalidCredential
 	}
 	state.Revision, err = grants.NewRevision(spec)
 	if err != nil {
@@ -193,6 +207,9 @@ func (t *transaction) RevokeReplay(ctx context.Context, c tokens.Credential) err
 }
 func (t *transaction) CommitIssuance(ctx context.Context, c tokens.Credential, i tokens.Issuance) error {
 	if t.credential == nil || c.Hash != t.credential.Hash || i.Claims.Scope != t.scope || i.Claims.GrantID != c.GrantID || i.Claims.Revision != c.Revision {
+		return tokens.ErrInvalidCredential
+	}
+	if !c.ObjectCeiling.IsZero() || !t.credential.ObjectCeiling.IsZero() {
 		return tokens.ErrInvalidCredential
 	}
 	tag, err := t.tx.Exec(ctx, `UPDATE mayi.credentials SET consumed=true WHERE tenant_id=$1 AND hash=$2 AND NOT consumed AND expires_at>clock_timestamp() AND $3>clock_timestamp()`, t.scope.TenantID, c.Hash, i.Claims.ExpiresAt)
