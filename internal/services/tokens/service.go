@@ -36,12 +36,14 @@ type Credential struct {
 	PKCEChallenge, BindingThumbprint        string
 	RedirectURI                             string
 	CeilingScopes                           []string
-	ObjectCeiling                           grants.ObjectCeiling
-	IssuedAt                                time.Time
-	ExpiresAt                               time.Time
-	FamilyDeadline                          time.Time
-	OriginCode, FamilyID, ParentIssuanceID  string
-	Consumed                                bool
+	// ObjectBound is the narrow presence projection used before proof checks.
+	// Closed object redemption needs no object identifiers in this lookup.
+	ObjectBound                            bool
+	IssuedAt                               time.Time
+	ExpiresAt                              time.Time
+	FamilyDeadline                         time.Time
+	OriginCode, FamilyID, ParentIssuanceID string
+	Consumed                               bool
 }
 type GrantState struct {
 	Revision              grants.Revision
@@ -118,7 +120,7 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 		if cmd.Kind == AuthorizationCode && (!credential.ExpiresAt.After(credential.IssuedAt) || credential.ExpiresAt.After(credential.IssuedAt.Add(60*time.Second))) {
 			return ErrInvalidCredential
 		}
-		if !credential.ObjectCeiling.IsZero() {
+		if credential.ObjectBound {
 			return ErrInvalidCredential
 		}
 		state, err := tx.GrantRevision(ctx, credential.GrantID, credential.Revision)

@@ -26,7 +26,7 @@ func TestObjectRedemptionCannotFallBackToScopeOnlyIssuance(t *testing.T) {
 				switch position {
 				case "credential":
 					c := f.store.state.credentials[f.cmd.CredentialHash]
-					c.ObjectCeiling = objects
+					c.ObjectBound = true
 					f.store.state.credentials[c.Hash] = c
 				case "revision":
 					s := f.store.state.grant.Revision.Snapshot()
@@ -58,7 +58,7 @@ func TestObjectReplayStillRequiresPossessionAndRevokes(t *testing.T) {
 			t.Run(kind+"/"+mode, func(t *testing.T) {
 				f := newFixture(t, kind)
 				c := f.store.state.credentials[f.cmd.CredentialHash]
-				c.ObjectCeiling = fixtureObjects(t, f)
+				c.ObjectBound = true
 				c.Consumed = true
 				f.store.state.credentials[c.Hash] = c
 				switch mode {

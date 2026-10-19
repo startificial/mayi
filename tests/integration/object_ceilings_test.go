@@ -118,8 +118,8 @@ func TestP2ObjectSnapshotsRoundTripAcrossAuthorizationRevisionAndCode(t *testing
 	}
 	if err := e.store.Run(ctx, request.TenantIssuer, func(tx tokens.Transaction) error {
 		c, err := tx.Credential(ctx, secretHash("object-code"))
-		if err != nil || !c.ObjectCeiling.Equal(request.ObjectCeiling) {
-			t.Fatal("code lost exact object ceiling", err)
+		if err != nil || !c.ObjectBound {
+			t.Fatal("credential authentication projection lost binding or loaded object payload", err)
 		}
 		state, err := tx.GrantRevision(ctx, c.GrantID, c.Revision)
 		if err != nil || !state.Revision.Snapshot().ObjectCeiling.Equal(request.ObjectCeiling) || !state.CurrentObjectCeiling.Equal(request.ObjectCeiling) {
@@ -293,5 +293,40 @@ func TestP2StoredObjectCodeDeniesScopeOnlyIssuanceAndPreservesReplayCutoff(t *te
 	var revoked bool
 	if err := e.admin.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM mayi.revoked_code_lineages WHERE tenant_id='a' AND origin_code=$1)`, cmd.CredentialHash).Scan(&revoked); err != nil || !revoked {
 		t.Fatal("object code replay failed authoritative lineage cutoff", err)
+	}
+}
+
+func TestP2CredentialAuthenticationDoesNotRehydrateObjectPayload(t *testing.T) {
+	e, request, p := storedObjectWorkflow(t)
+	ctx := context.Background()
+	if err := completeStoredObject(ctx, e, p, nil); err != nil {
+		t.Fatal(err)
+	}
+	// An owner-inserted malformed authority body must not be needed to check
+	// client/PKCE possession. The closed path reads only its presence, then denies.
+	if _, err := e.admin.Exec(ctx, `INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,origin_code,pkce_challenge,redirect_uri,object_ceiling)
+ SELECT tenant_id,'malformed-object-code',kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,'malformed-object-code',pkce_challenge,redirect_uri,
+ jsonb_set(object_ceiling,'{details,0,identifier}','false'::jsonb) FROM mayi.credentials WHERE tenant_id='a'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.store.Run(ctx, request.TenantIssuer, func(tx tokens.Transaction) error {
+		c, err := tx.Credential(ctx, "malformed-object-code")
+		if err != nil || !c.ObjectBound {
+			t.Fatal("authentication lookup decoded object payload", err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	effects := &objectIssuanceEffects{}
+	svc, err := app.NewIssuance(e.store, clock{}, effects, effects, e.store, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, proof := range []string{"incorrect-verifier", verifier} {
+		r, err := svc.Redeem(ctx, tokens.Command{Caller: tokens.Caller{Scope: request.TenantIssuer, ClientID: request.ClientID}, CredentialHash: "malformed-object-code", Kind: tokens.AuthorizationCode, Resource: request.ResourceURI, Verifier: proof, RedirectURI: request.RedirectURI})
+		if !errors.Is(err, tokens.ErrInvalidCredential) || r.AccessToken != "" || effects.calls != 0 {
+			t.Fatal("malformed object authority reached issuance", err)
+		}
 	}
 }
