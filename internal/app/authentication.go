@@ -61,7 +61,11 @@ func NewBrowser(ctx context.Context, c Config, t TenantConfig, store *postgres.S
 	if err != nil {
 		return nil, err
 	}
-	pushed, err := oauth.NewPushed(scope, client, consent)
+	proofs, err := newProofs(scope, store, hash)
+	if err != nil {
+		return nil, err
+	}
+	pushed, err := oauth.NewPushed(scope, client, consent, proofs)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +90,7 @@ func NewBrowser(ctx context.Context, c Config, t TenantConfig, store *postgres.S
 	router.HandleFunc("POST "+base+"/par", pushed.Push)
 	router.HandleFunc("GET "+base+"/authorize", browser.Authorize)
 	for _, binding := range t.ResourceBindings {
-		pushed, err := oauth.NewResourcePushed(scope, client, consent, binding.Resource)
+		pushed, err := oauth.NewResourcePushed(scope, client, consent, binding.Resource, binding.ID, proofs)
 		if err != nil {
 			return nil, err
 		}

@@ -1,7 +1,7 @@
 # P3 agent and unknown-client preview
 
-P3 is **in progress**. The first slice implements native callback registration
-and resource-owned metadata/Bearer challenges. P2 remains the complete core
+P3 is **in progress**. Native callback registration, resource-owned discovery/challenges and the shared
+ES256 DPoP sender-binding profile are implemented. P2 remains the complete core
 authorization preview. [ADR 0025](adr/0025-p3-native-callbacks-and-resource-discovery.md)
 records ownership and the exact capability boundary; [P3 evidence](../tests/conformance/p3-evidence.json)
 links automated tests, without claiming certification.
@@ -55,9 +55,8 @@ GET/HEAD succeed only on the exact path without query; unsupported methods recei
 
 Metadata publishes selected public scopes, RAR types and header credential
 transport. Configure those from the API's enforced public contract. It does not
-fetch clients, authorize objects or reveal private registration/ACL data. Do not
-advertise DPoP through this metadata helper until the remaining P3 binding profile
-and tests are delivered.
+fetch clients, authorize objects or reveal private registration/ACL data. DPoP metadata and nonce/challenge support are implemented by the second slice
+below; browser CORS and the WebCrypto sample remain outstanding.
 
 Missing-credential challenges let a client discover metadata and the issuer.
 Malformed transport, invalid token, insufficient public permission and unavailable
@@ -69,9 +68,46 @@ Every protected load/mutation still belongs inside WithAccess's guarded callback
 - CIMD resolution, safe cache/conditional fetch and immutable metadata correlation.
 - DCR, quotas and optional initial-access credentials using the same registration rules.
 - Tenant policy for any-client, approved-host and administrator-approved registration.
-- Complete DPoP token/resource, nonce, policy and copied-token interoperability evidence.
 - Browser-held-token example using a non-exportable WebCrypto key.
 
 Run `go run ./tools/checks`, `go test -race -count=1 ./...`, `go vet ./...`,
 formatting checks and `go run ./tools/p0`. The real-service harness is required:
 plain go test skips PostgreSQL/OpenBao tests when its explicit environment is absent.
+
+## ES256 DPoP sender binding
+
+The second P3 slice implements the shared sender-binding profile in
+[ADR 0026](adr/0026-p3-dpop-nonces-and-binding.md). Apply migration 16 before the
+upgraded runtime, using the separate owner connection. Existing client creation
+accepts `dpop_bound_access_tokens: true`; tenant/resource require_binding also
+continues to enforce binding. Missing proof authority fails closed on issuance,
+refresh and subsequent online checks. DPoP is additional to client authentication.
+
+For an interactive flow, include the SHA-256 public JWK thumbprint as dpop_jkt in
+PAR, or send a DPoP proof header for that exact PAR endpoint. When both are
+present they must match. Keep S256 and required typed RAR. The key stays fixed
+through codes and refresh families. A token proof cannot introduce a new key for
+an already approved authorization. Confidential machine requests can bind their
+key at the token endpoint using their normal client authentication.
+
+Every proof uses a fresh unpredictable jti, current iat, exact HTTP method and
+public HTTPS target without query/fragment, typ dpop+jwt, alg ES256 and the public
+P-256 JWK. No private JWK fields or token-controlled key URLs are accepted. At a
+resource include ath = unpadded base64url(SHA-256(access token bytes)); token/PAR
+proofs omit ath. Send access tokens using Authorization: DPoP with the DPoP header.
+A copied token, a missing/wrong key or Bearer downgrade cannot reach payloads.
+
+A valid proof without a current nonce receives use_dpop_nonce and DPoP-Nonce:
+400 at token/PAR, or 401 with WWW-Authenticate: DPoP at the resource. On this exact
+response only, retry with a freshly signed proof containing the returned nonce.
+Cache nonce values separately by issuer/resource endpoint and key, never confuse
+these with OIDC nonce/state, and reuse a current nonce with new proof IDs. Nonces
+expire after one minute. Missing/invalid/stale nonce does not consume credentials
+or call the protected payload. Shared state failure is 503, with no fallback.
+Never automatically retry an ambiguous code/refresh response or reuse a proof JWT.
+
+Resources use SDK Config.RequireDPoP and the same MetadataConfig.RequireDPoP
+policy; optional-binding resources use WriteDPoPChallenge for DPoP requests.
+Metadata advertises ES256 and whether binding is required. Cross-origin browser
+CORS/header exposure and the non-exportable WebCrypto sample remain outstanding;
+this protocol fixture is not a browser compatibility claim.

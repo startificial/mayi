@@ -57,7 +57,7 @@ func TestAuthorizationRejectsExpiryMalformedProofAndExpansion(t *testing.T) {
 	if !spec.Request.MatchesObjectRegistration(current) {
 		t.Fatal("valid registration refused")
 	}
-	for _, mode := range []string{"unregistered redirect", "wrong resource", "unknown permission", "disabled client", "binding required", "unapproved resource", "malformed PKCE", "empty permissions"} {
+	for _, mode := range []string{"unregistered redirect", "wrong resource", "unknown permission", "disabled client", "binding required", "client binding required", "resource binding required", "unapproved resource", "malformed PKCE", "empty permissions"} {
 		t.Run(mode, func(t *testing.T) {
 			s, c := example()
 			switch mode {
@@ -71,6 +71,10 @@ func TestAuthorizationRejectsExpiryMalformedProofAndExpansion(t *testing.T) {
 				c.Client.Enabled = false
 			case "binding required":
 				c.Policy.RequireBinding = true
+			case "client binding required":
+				c.Client.RequireBinding = true
+			case "resource binding required":
+				c.Resource.RequireBinding = true
 			case "unapproved resource":
 				c.Client.Resources = []string{"other"}
 			case "malformed PKCE":

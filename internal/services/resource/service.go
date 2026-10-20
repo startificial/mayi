@@ -14,6 +14,12 @@ import (
 var ErrDenied = errors.New("resource access denied")
 var ErrUnavailable = errors.New("resource authority unavailable")
 var ErrInsufficientScope = errors.New("resource permission scope required")
+var ErrInvalidProof = errors.New("invalid resource proof")
+
+type NonceChallenge struct{ Nonce string }
+
+func (*NonceChallenge) Error() string { return "resource DPoP nonce required" }
+func (*NonceChallenge) Unwrap() error { return ErrDenied }
 
 type Request struct{ Type, Identifier, Action, Permission, Proof, Method, URL string }
 type Decision struct {
@@ -27,9 +33,10 @@ type Service struct {
 	scope       grants.Scope
 	resource    string
 	profiles    []resources.ObjectProfile
+	requireDPoP bool
 }
 
-func New(status Status, permissions PermissionGuard, clock Clock, scope grants.Scope, resource string, profiles []resources.ObjectProfile) (*Service, error) {
+func New(status Status, permissions PermissionGuard, clock Clock, scope grants.Scope, resource string, profiles []resources.ObjectProfile, requireDPoP bool) (*Service, error) {
 	if status == nil || permissions == nil || clock == nil || !scope.Valid() || !resources.ValidURI(resource) || len(profiles) == 0 {
 		return nil, ErrUnavailable
 	}
@@ -38,7 +45,7 @@ func New(status Status, permissions PermissionGuard, clock Clock, scope grants.S
 			return nil, ErrUnavailable
 		}
 	}
-	return &Service{status, permissions, clock, scope, resource, slices.Clone(profiles)}, nil
+	return &Service{status, permissions, clock, scope, resource, slices.Clone(profiles), requireDPoP}, nil
 }
 func (s *Service) WithAccess(ctx context.Context, raw string, r Request, fn func(context.Context, Decision) error) error {
 	if fn == nil || raw == "" || len(raw) > 65536 || !grants.ValidScopes([]string{r.Permission}) {
@@ -52,15 +59,28 @@ func (s *Service) WithAccess(ctx context.Context, raw string, r Request, fn func
 		if ctx.Err() != nil {
 			return errors.Join(ErrUnavailable, ctx.Err())
 		}
+		var nonce *NonceChallenge
+		if errors.As(err, &nonce) {
+			return nonce
+		}
+		if errors.Is(err, ErrInvalidProof) {
+			return errors.Join(ErrDenied, ErrInvalidProof)
+		}
 		if errors.Is(err, ErrDenied) {
 			return ErrDenied
 		}
 		return ErrUnavailable
 	}
 	c := verified.Claims
-	now := s.clock.Now()
-	if c.Scope != s.scope || c.Resource != s.resource || c.ID == "" || !now.Before(c.ExpiresAt) || c.IssuedAt.After(now.Add(5*time.Second)) || c.ExpiresAt.After(c.IssuedAt.Add(15*time.Minute)) || !c.ObjectCeiling.Permits(s.scope, s.resource, r.Type, r.Identifier, r.Action) || c.BindingThumbprint != "" && !verified.ProofVerified {
+	if s.requireDPoP && c.BindingThumbprint == "" {
 		return ErrDenied
+	}
+	now := s.clock.Now()
+	if c.Scope != s.scope || c.Resource != s.resource || c.ID == "" || !now.Before(c.ExpiresAt) || c.IssuedAt.After(now.Add(5*time.Second)) || c.ExpiresAt.After(c.IssuedAt.Add(15*time.Minute)) || !c.ObjectCeiling.Permits(s.scope, s.resource, r.Type, r.Identifier, r.Action) {
+		return ErrDenied
+	}
+	if c.BindingThumbprint != "" && !verified.ProofVerified {
+		return errors.Join(ErrDenied, ErrInvalidProof)
 	}
 	if _, err := resources.ValidateObjectRequest(s.scope, s.resource, s.profiles, c.ObjectCeiling.Snapshot().Details); err != nil {
 		return ErrDenied

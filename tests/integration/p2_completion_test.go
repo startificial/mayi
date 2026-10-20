@@ -198,7 +198,7 @@ func TestP2BoundPARRejectsConflictsAndCrossResourceReferenceUse(t *testing.T) {
 	l := newLiveProtocol(t)
 	ctx := context.Background()
 	scope := l.proof.TenantIssuer
-	bound, err := oauth.NewResourcePushed(scope, l.clients, l.consent, "https://api.example")
+	bound, err := oauth.NewResourcePushed(scope, l.clients, l.consent, "https://api.example", "api", l.proofs)
 	if err != nil {
 		t.Fatal(err)
 	}

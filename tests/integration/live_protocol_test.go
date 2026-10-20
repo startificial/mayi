@@ -46,6 +46,7 @@ type liveProtocol struct {
 	proof          authorization.AccessProof
 	clients        *clientservice.Service
 	resourceSecret string
+	proofs         *tokens.ProofService
 }
 
 // This transport retains configured public URLs and HTTP codec behavior while
@@ -471,7 +472,11 @@ func newLiveProtocol(t *testing.T) *liveProtocol {
 		t.Fatal(err)
 	}
 
-	proofs, err := tokens.NewProofs(cryptoadapter.NewDPoP(), e.store, clock{})
+	nonceSource, err := cryptoadapter.NewProofNonces(proof.TenantIssuer, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proofs, err := tokens.NewProofs(cryptoadapter.NewDPoP(), e.store, e.store, nonceSource, clock{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -515,7 +520,7 @@ func newLiveProtocol(t *testing.T) *liveProtocol {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &liveProtocol{e, protocol, consent, proof, clients, secret}
+	return &liveProtocol{e, protocol, consent, proof, clients, secret, proofs}
 }
 func protocolPost(handler http.HandlerFunc, form url.Values, id, secret string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest("POST", "https://auth.example/t/a/token", strings.NewReader(form.Encode()))

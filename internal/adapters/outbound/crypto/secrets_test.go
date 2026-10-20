@@ -25,7 +25,7 @@ func TestCredentialDigestsSeparateContextAndRetainVersions(t *testing.T) {
 	for _, c := range []struct {
 		scope        grants.Scope
 		purpose, raw string
-	}{{grants.Scope{TenantID: "b", Issuer: scope.Issuer}, "refresh_token", raw}, {grants.Scope{TenantID: "a", Issuer: "https://other.example/t/a"}, "refresh_token", raw}, {scope, "authorization_code", raw}, {scope, "client_secret", raw}, {scope, "access_token", raw}, {scope, "refresh_token", "v2." + strings.Repeat("A", 43)}} {
+	}{{grants.Scope{TenantID: "b", Issuer: scope.Issuer}, "refresh_token", raw}, {grants.Scope{TenantID: "a", Issuer: "https://other.example/t/a"}, "refresh_token", raw}, {scope, "authorization_code", raw}, {scope, "client_secret", raw}, {scope, "access_token", raw}, {scope, "dpop_nonce", raw}, {scope, "refresh_token", "v2." + strings.Repeat("A", 43)}} {
 		digest, err := hasher.Digest(c.scope, c.purpose, c.raw)
 		if err != nil || seen[digest] {
 			t.Fatal("credential contexts collided", err)

@@ -174,11 +174,27 @@
       "target_sections": [
         "4",
         "5",
+        "6",
         "7",
+        "8",
+        "9",
         "10"
       ],
-      "implemented_sections": [],
-      "deviations": []
+      "implemented_sections": [
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10"
+      ],
+      "deviations": [
+        "ES256/P-256 and strict bounded JOSE/claim fields only; header proof and dpop_jkt supported at PAR.",
+        "Required one-minute endpoint/key/tenant/purpose nonces; atomic PostgreSQL nonce recheck and replay consume.",
+        "Scheme/host/default-port normalization, exact escaped paths, dot-segment rejection; no general URI equivalence or browser interoperability claim.",
+        "Interactive credentials prebind the key at PAR. Browser WebCrypto/CORS example remains pending."
+      ]
     },
     {
       "id": "rfc8693",

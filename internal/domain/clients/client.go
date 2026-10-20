@@ -11,6 +11,7 @@ import (
 const MaxAuthorizationDetailsTypes = 32
 
 type Client struct {
+	RequireBinding            bool
 	ApplicationType           string
 	Introspection             bool
 	AuthenticationVersion     uint64

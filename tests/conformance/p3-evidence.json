@@ -1,7 +1,7 @@
 {
   "version": 1,
   "phase": "P3",
-  "profile": "native-and-resource-discovery-preview",
+  "profile": "native-resource-discovery-and-es256-dpop-preview",
   "certified": false,
   "required_commands": [
     "go run ./tools/checks",
@@ -35,6 +35,19 @@
       "sections": [
         "3",
         "3.1"
+      ]
+    },
+    {
+      "id": "rfc9449",
+      "revision": "RFC 9449",
+      "sections": [
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10"
       ]
     }
   ],
@@ -92,12 +105,65 @@
           "test": "TestP3ResourceChallengeDiscoveryAndOnlineCutoff"
         }
       ]
+    },
+    {
+      "capability": "es256-dpop-sender-binding",
+      "requirements": [
+        "BIND-1",
+        "BIND-2",
+        "BIND-3",
+        "BIND-4",
+        "BIND-6",
+        "CLI-11"
+      ],
+      "checks": [
+        {
+          "path": "internal/domain/tokens/proof_test.go",
+          "test": "TestProofTargetsKeepAuthorityAndEscapedPaths"
+        },
+        {
+          "path": "internal/adapters/outbound/crypto/dpop_test.go",
+          "test": "TestDPoPStrictParsingRejectsAmbiguousClaimsAndKeys"
+        },
+        {
+          "path": "internal/services/tokens/proofs_test.go",
+          "test": "TestProofAdmissionFailsBeforeAuthorityAndDistinguishesUnavailableState"
+        },
+        {
+          "path": "tests/integration/p3_dpop_test.go",
+          "test": "TestP3DPoPClientResourceNonceRotationReplayAndCutoff"
+        },
+        {
+          "path": "tests/integration/p3_proof_state_test.go",
+          "test": "TestP3ProofNoncesAreSharedScopedAndFailClosed"
+        },
+        {
+          "path": "tests/integration/p3_par_proof_test.go",
+          "test": "TestP3PARProofHeaderPinsKeyAndRejectsMismatchedThumbprints"
+        },
+        {
+          "path": "pkg/resource/metadata_test.go",
+          "test": "TestDPoPMetadataNonceAndErrorChallengesMatchRequiredBinding"
+        },
+        {
+          "path": "tests/integration/p3_native_test.go",
+          "test": "TestP3NativeCallbacksPersistAndPinTheRequestedRedirect"
+        },
+        {
+          "path": "tests/integration/p3_dpop_test.go",
+          "test": "TestP3MachineClientBindingRequiresProof"
+        },
+        {
+          "path": "internal/domain/authorization/transaction_test.go",
+          "test": "TestAuthorizationRejectsExpiryMalformedProofAndExpansion"
+        }
+      ]
     }
   ],
   "limitations": [
-    "P3 is in progress: CIMD, DCR, client policy, remaining DPoP/nonce coverage and browser-held-token example are outstanding.",
-    "CORE-13 evidence here is the Bearer resource profile; DPoP challenges and later step-up profiles have separate gates.",
-    "Native URI protocol fixtures do not establish mobile/desktop platform association or real-browser compatibility.",
+    "P3 is in progress: CIMD, DCR, unknown-client tenant policy and browser-held-token example remain outstanding.",
+    "ES256 only; strict header/claim profile and conservative escaped-path handling are documented in ADR 0026.",
+    "Native and DPoP protocol fixtures do not establish platform associations, CORS/browser support or certification.",
     "No external certification or full RFC/README conformance claim."
   ]
 }

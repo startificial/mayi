@@ -92,7 +92,7 @@ func (r Request) matchesRegistration(current Registration) bool {
 	if !r.Valid() || !current.Client.Valid() || !current.Resource.Valid() || !current.Policy.Valid() || !current.Client.Enabled || current.Client.ID != r.ClientID || current.Resource.URI != r.ResourceURI || !current.Client.AllowsRedirect(r.RedirectURI) || !slices.Contains(current.Client.Resources, current.Resource.ID) {
 		return false
 	}
-	if (current.Policy.RequireBinding || current.Resource.RequireBinding) && r.BindingThumbprint == "" {
+	if (current.Policy.RequireBinding || current.Resource.RequireBinding || current.Client.RequireBinding) && r.BindingThumbprint == "" {
 		return false
 	}
 	return current.Resource.AllowsUserScopes(r.PermissionScopes)

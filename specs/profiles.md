@@ -45,5 +45,6 @@ Only the documented P2 base/online resource preview is enabled by matching confi
 The first P3 slice adds resource-owned RFC 9728 metadata and RFC 6750 Bearer
 challenges through the existing resource SDK, plus native callback registration.
 [P3 evidence](../tests/conformance/p3-evidence.json) is partial phase evidence:
-CIMD, DCR, client policy, complete DPoP/nonce evidence and the WebCrypto sample
-remain outstanding. No unknown-client or full MCP profile is enabled.
+CIMD, DCR, client policy, the WebCrypto sample remain outstanding. The shared ES256 DPoP profile with
+nonce/replay state, PAR prebinding and resource enforcement is now implemented
+with bounded protocol evidence. No unknown-client or full MCP profile is enabled.

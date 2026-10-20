@@ -98,7 +98,7 @@ func newProtocol(ctx context.Context, c Config, t TenantConfig, scope grants.Sco
 		return nil, err
 	}
 
-	proofs, err := tokens.NewProofs(cryptoadapter.NewDPoP(), store, systemClock{})
+	proofs, err := newProofs(scope, store, hash)
 	if err != nil {
 		return nil, err
 	}
@@ -107,4 +107,12 @@ func newProtocol(ctx context.Context, c Config, t TenantConfig, scope grants.Sco
 		return nil, err
 	}
 	return oauth.NewProtocol(scope, client, consent, issuance, machine, status, hash, proofs)
+}
+
+func newProofs(scope grants.Scope, store *postgres.Store, hash *cryptoadapter.SecretHasher) (*tokens.ProofService, error) {
+	nonceSource, err := cryptoadapter.NewProofNonces(scope, hash)
+	if err != nil {
+		return nil, err
+	}
+	return tokens.NewProofs(cryptoadapter.NewDPoP(), store, store, nonceSource, systemClock{})
 }

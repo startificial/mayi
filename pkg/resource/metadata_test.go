@@ -31,10 +31,10 @@ func TestResourceMetadataKeepsEachAudienceAndTrustedIssuer(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		var d map[string]any
-		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &d) != nil || d["resource"] != audience || strings.Contains(w.Body.String(), "attacker") || strings.Contains(w.Body.String(), "evil") || strings.Contains(w.Body.String(), "dpop_") || w.Header().Get("Cache-Control") != "no-store" {
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &d) != nil || d["resource"] != audience || strings.Contains(w.Body.String(), "attacker") || strings.Contains(w.Body.String(), "evil") || w.Header().Get("Cache-Control") != "no-store" {
 			t.Fatal("incorrect advertised metadata", w.Code, w.Body.String())
 		}
-		if d["authorization_servers"].([]any)[0] != "https://auth.example/t/a" || d["bearer_methods_supported"].([]any)[0] != "header" {
+		if d["dpop_signing_alg_values_supported"].([]any)[0] != "ES256" || d["dpop_bound_access_tokens_required"] != false || d["authorization_servers"].([]any)[0] != "https://auth.example/t/a" || d["bearer_methods_supported"].([]any)[0] != "header" {
 			t.Fatal("wrong advertised capabilities")
 		}
 		for _, method := range []string{"POST", "PUT", "DELETE"} {
@@ -167,5 +167,56 @@ func TestResourceCredentialTransportSelectsSafeChallenge(t *testing.T) {
 		if test.status == 401 && strings.Contains(w.Header().Get("WWW-Authenticate"), "error=") {
 			t.Fatal("missing auth has error")
 		}
+	}
+}
+
+func TestDPoPMetadataNonceAndErrorChallengesMatchRequiredBinding(t *testing.T) {
+	h, err := resource.NewMetadata(resource.MetadataConfig{RequireDPoP: true, Issuer: "https://auth.example/t/a", Audience: "https://api.example", Name: "Bound API", PermissionScopes: []string{"read"}, AuthorizationDetailTypes: []string{"https://api.example/types/document/v1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", h.MetadataURL(), nil))
+	var document struct {
+		Require    bool     `json:"dpop_bound_access_tokens_required"`
+		Algorithms []string `json:"dpop_signing_alg_values_supported"`
+		Bearer     []string `json:"bearer_methods_supported"`
+	}
+	if json.Unmarshal(w.Body.Bytes(), &document) != nil || !document.Require || len(document.Bearer) != 0 || len(document.Algorithms) != 1 || document.Algorithms[0] != "ES256" {
+		t.Fatal("required binding metadata mismatch")
+	}
+	nonce := "v1." + strings.Repeat("A", 43)
+	for _, test := range []struct {
+		err    error
+		status int
+		code   string
+		nonce  bool
+	}{
+		{resource.ErrMissingCredential, 401, "", false},
+		{resource.ErrInvalidProof, 401, "invalid_dpop_proof", false},
+		{&resource.NonceChallenge{Nonce: nonce}, 401, "use_dpop_nonce", true},
+		{resource.ErrUnavailable, 503, "temporarily_unavailable", false},
+		{&resource.NonceChallenge{Nonce: "invalid\r\nX-Leak: secret"}, 503, "temporarily_unavailable", false},
+	} {
+		w := httptest.NewRecorder()
+		h.WriteChallenge(w, test.err)
+		if w.Code != test.status || strings.Contains(w.Body.String()+w.Header().Get("DPoP-Nonce"), "secret") {
+			t.Fatal("unsafe DPoP failure", w.Code)
+		}
+		if test.status == 401 && (!strings.HasPrefix(w.Header().Get("WWW-Authenticate"), "DPoP ") || !strings.Contains(w.Header().Get("WWW-Authenticate"), `algs="ES256"`)) {
+			t.Fatal("binding scheme or algorithms missing")
+		}
+		if test.nonce != (w.Header().Get("DPoP-Nonce") == nonce) {
+			t.Fatal("nonce delivery mismatch")
+		}
+		if test.code != "" && !strings.Contains(w.Body.String(), `"error":"`+test.code+`"`) {
+			t.Fatal("wrong DPoP error code")
+		}
+	}
+	optional := metadata(t, "https://api.example")
+	w = httptest.NewRecorder()
+	optional.WriteDPoPChallenge(w, resource.ErrInsufficientScope, "read")
+	if w.Code != 403 || !strings.HasPrefix(w.Header().Get("WWW-Authenticate"), "DPoP ") || !strings.Contains(w.Header().Get("WWW-Authenticate"), `scope="read"`) {
+		t.Fatal("optional-binding DPoP scope challenge mismatch")
 	}
 }

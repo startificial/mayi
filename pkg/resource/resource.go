@@ -24,6 +24,12 @@ var ErrUnavailable = errors.New("resource authority unavailable")
 var ErrInsufficientScope = errors.New("resource permission scope required")
 var ErrMissingCredential = errors.New("resource credential missing")
 var ErrInvalidRequest = errors.New("invalid resource credential transport")
+var ErrInvalidProof = errors.New("invalid resource DPoP proof")
+
+type NonceChallenge struct{ Nonce string }
+
+func (*NonceChallenge) Error() string { return "resource DPoP nonce required" }
+func (*NonceChallenge) Unwrap() error { return ErrDenied }
 
 type Profile struct {
 	Type    string
@@ -31,6 +37,7 @@ type Profile struct {
 }
 type Action struct{ Name, Description string }
 type Config struct {
+	RequireDPoP                                                             bool
 	Tenant, Issuer, Audience, IntrospectionEndpoint, ClientID, ClientSecret string
 	Profiles                                                                []Profile
 	AllowInsecureLoopback                                                   bool
@@ -81,7 +88,7 @@ func New(c Config, guard PermissionGuard) (*Client, error) {
 	bridge := status.NewPermissionBridge(func(ctx context.Context, d service.Decision, fn func(context.Context) error) error {
 		return guard.WithPermission(ctx, principal(d), request(d.Request), fn)
 	})
-	validator, err := service.New(remote, bridge, clock{}, scope, c.Audience, profiles)
+	validator, err := service.New(remote, bridge, clock{}, scope, c.Audience, profiles, c.RequireDPoP)
 	if err != nil {
 		return nil, ErrUnavailable
 	}
@@ -99,6 +106,13 @@ func (c *Client) WithAccess(ctx context.Context, token string, r Request, fn fun
 		return ErrDenied
 	}
 	err := c.service.WithAccess(ctx, token, service.Request{Type: r.Type, Identifier: r.Identifier, Action: r.Action, Permission: r.Permission, Proof: r.Proof, Method: r.Method, URL: r.URL}, func(ctx context.Context, d service.Decision) error { return fn(ctx, principal(d)) })
+	var nonce *service.NonceChallenge
+	if errors.As(err, &nonce) {
+		return &NonceChallenge{Nonce: nonce.Nonce}
+	}
+	if errors.Is(err, service.ErrInvalidProof) {
+		return errors.Join(ErrDenied, ErrInvalidProof)
+	}
 	if errors.Is(err, service.ErrInsufficientScope) {
 		return errors.Join(ErrDenied, ErrInsufficientScope)
 	}
@@ -151,6 +165,9 @@ func HeaderToken(r *http.Request) (string, error) {
 		scheme = "Bearer"
 	} else if strings.EqualFold(scheme, "DPoP") {
 		scheme = "DPoP"
+	}
+	if scheme == "DPoP" && r.Header.Get("DPoP") == "" {
+		return "", errors.Join(ErrDenied, ErrInvalidProof)
 	}
 	if !ok || token == "" || len(token) > 65536 || strings.ContainsAny(token, " \r\n\t") || scheme != "Bearer" && scheme != "DPoP" || scheme == "DPoP" && r.Header.Get("DPoP") == "" || scheme == "Bearer" && r.Header.Get("DPoP") != "" {
 		return "", errors.Join(ErrDenied, ErrInvalidRequest)

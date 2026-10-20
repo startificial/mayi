@@ -148,4 +148,23 @@ missing credentials, host spoofing, secret redaction and invalid hint configurat
 The resource service tests establish authority-before-permission/payload ordering;
 the real-service P3 fixture proves metadata discovery and current ACL/revocation
 cutoff. [P3 evidence](../tests/conformance/p3-evidence.json) tracks this bounded
-profile. DPoP challenges/nonces and later step-up details remain separate gates.
+profile. The DPoP profile below adds nonce/challenge recovery; step-up remains a later gate.
+
+
+## P3 DPoP challenges
+
+The ES256 profile uses 400 use_dpop_nonce with DPoP-Nonce at token/PAR, and 401
+with WWW-Authenticate: DPoP, algs, resource_metadata and DPoP-Nonce at the resource.
+These explicit challenges occur before credential consumption or protected
+callbacks. Sign a new proof with the returned nonce and a fresh jti to retry that
+challenge. Missing/invalid proof uses invalid_dpop_proof; inactive authority uses
+invalid_token. Cross-key/tenant/purpose/target nonce substitution cannot admit a
+proof. Key loss requires a new approval rather than rebinding a refresh family.
+
+Unavailable nonce/replay state is 503 temporarily_unavailable without a nonce or
+an authentication challenge. A timeout/5xx is not proof that a one-use exchange
+failed, and must not trigger automatic credential/proof replay. Resource SDK
+NonceChallenge supports errors.As and also wraps ErrDenied; check its specific
+recovery before a generic denial. Browser CORS/header exposure and the WebCrypto
+sample remain explicit later P3 work. See [the P3 runbook](p3-agent-clients.md#es256-dpop-sender-binding)
+and [profile evidence](../tests/conformance/p3-evidence.json).

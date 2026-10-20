@@ -3,6 +3,7 @@ package resource
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,7 +44,7 @@ func TestResourceScopeChallengeRequiresValidLocalAuthorityBeforePermissionLoad(t
 		t.Fatal(err)
 	}
 	base := tokens.AccessClaims{Scope: scope, ID: "token-1", GrantID: "grant-1", Revision: 1, ClientID: "web", Subject: "user:alice", PrincipalType: "user", Resource: "https://api.example", Scopes: []string{"other"}, ObjectCeiling: ceiling, IssuedAt: now, ExpiresAt: now.Add(5 * time.Minute)}
-	for _, mode := range []string{"scope", "foreign tenant", "foreign resource", "invalid principal", "foreign object", "unavailable"} {
+	for _, mode := range []string{"scope", "foreign tenant", "foreign resource", "invalid principal", "foreign object", "unavailable", "required binding", "nonce", "invalid proof"} {
 		t.Run(mode, func(t *testing.T) {
 			claims := base
 			var statusErr error
@@ -56,8 +57,12 @@ func TestResourceScopeChallengeRequiresValidLocalAuthorityBeforePermissionLoad(t
 				claims.Subject = ""
 			case "unavailable":
 				statusErr = ErrUnavailable
+			case "nonce":
+				statusErr = &NonceChallenge{Nonce: "v1." + strings.Repeat("A", 43)}
+			case "invalid proof":
+				statusErr = ErrInvalidProof
 			}
-			svc, err := New(statusFixture{claims, statusErr}, forbiddenGuard{t}, fixedClock{now}, scope, base.Resource, []resources.ObjectProfile{profile})
+			svc, err := New(statusFixture{claims, statusErr}, forbiddenGuard{t}, fixedClock{now}, scope, base.Resource, []resources.ObjectProfile{profile}, mode == "required binding")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -69,6 +74,15 @@ func TestResourceScopeChallengeRequiresValidLocalAuthorityBeforePermissionLoad(t
 			if mode == "scope" {
 				if !errors.Is(err, ErrInsufficientScope) || !errors.Is(err, ErrDenied) {
 					t.Fatal("scope failure lacks typed challenge", err)
+				}
+			} else if mode == "nonce" {
+				var nonce *NonceChallenge
+				if !errors.As(err, &nonce) {
+					t.Fatal("nonce challenge lost", err)
+				}
+			} else if mode == "invalid proof" {
+				if !errors.Is(err, ErrInvalidProof) {
+					t.Fatal("proof error classification lost", err)
 				}
 			} else if mode == "unavailable" {
 				if !errors.Is(err, ErrUnavailable) {

@@ -49,6 +49,7 @@ func protocolClient(p clients.Principal) fosite.Client {
 
 type Protocol struct {
 	boundResource string
+	pushedTarget  string
 	scope         grants.Scope
 	auth          *clients.Service
 	consent       *authorization.Service
@@ -57,23 +58,24 @@ type Protocol struct {
 	proof         *tokens.ProofService
 }
 
-func NewPushed(scope grants.Scope, auth *clients.Service, consent *authorization.Service) (*Protocol, error) {
-	if !scope.Valid() || auth == nil || consent == nil {
+func NewPushed(scope grants.Scope, auth *clients.Service, consent *authorization.Service, proof *tokens.ProofService) (*Protocol, error) {
+	if !scope.Valid() || auth == nil || consent == nil || proof == nil {
 		return nil, tokens.ErrUnavailable
 	}
-	return &Protocol{scope: scope, auth: auth, consent: consent}, nil
+	return &Protocol{scope: scope, auth: auth, consent: consent, proof: proof, pushedTarget: scope.Issuer + "/par"}, nil
 }
 
 // NewResourcePushed binds the compatibility route to trusted startup configuration.
-func NewResourcePushed(scope grants.Scope, auth *clients.Service, consent *authorization.Service, resource string) (*Protocol, error) {
-	if !resources.ValidURI(resource) {
+func NewResourcePushed(scope grants.Scope, auth *clients.Service, consent *authorization.Service, resource, bindingID string, proof *tokens.ProofService) (*Protocol, error) {
+	if !resources.ValidURI(resource) || !resources.ValidID(bindingID) {
 		return nil, tokens.ErrUnavailable
 	}
-	h, err := NewPushed(scope, auth, consent)
+	h, err := NewPushed(scope, auth, consent, proof)
 	if err != nil {
 		return nil, err
 	}
 	h.boundResource = resource
+	h.pushedTarget = scope.Issuer + "/r/" + bindingID + "/par"
 	return h, nil
 }
 func NewProtocol(scope grants.Scope, auth *clients.Service, consent *authorization.Service, issuance *tokens.Service, machine *tokens.MachineService, status *tokens.StatusService, hash tokens.SecretHasher, proof *tokens.ProofService) (*Protocol, error) {
@@ -93,7 +95,7 @@ func NewProtocol(scope grants.Scope, auth *clients.Service, consent *authorizati
 	}}
 	config.TokenEndpointHandlers.Append(h)
 	config.TokenEndpointHandlers.Append(&machineHandler{machine})
-	return &Protocol{scope: scope, auth: auth, consent: consent, status: status, provider: fosite.NewOAuth2Provider(&protocolRegistry{}, config), proof: proof}, nil
+	return &Protocol{scope: scope, auth: auth, consent: consent, status: status, provider: fosite.NewOAuth2Provider(&protocolRegistry{}, config), proof: proof, pushedTarget: scope.Issuer + "/par"}, nil
 }
 func protocolError(w http.ResponseWriter, code string, status int) {
 	w.Header().Set("Content-Type", "application/json")
@@ -197,6 +199,24 @@ func (h *Protocol) Push(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if len(r.Header.Values("DPoP")) > 1 || len(r.Header.Values("DPoP")) == 1 && r.Header.Get("DPoP") == "" {
+		protocolError(w, "invalid_dpop_proof", 400)
+		return
+	}
+	if raw := r.Header.Get("DPoP"); raw != "" {
+		thumb, err := h.proof.Verify(r.Context(), h.scope, tokens.ProofRequest{JWT: raw, Method: "POST", URL: h.pushedTarget})
+		if err != nil {
+			if !proofFailure(w, err) {
+				protocolError(w, "invalid_dpop_proof", 400)
+			}
+			return
+		}
+		if v.Has("dpop_jkt") && v.Get("dpop_jkt") != thumb {
+			protocolError(w, "invalid_dpop_proof", 400)
+			return
+		}
+		v.Set("dpop_jkt", thumb)
+	}
 	v.Del("client_assertion")
 	v.Del("client_assertion_type")
 	request, err := DecodePushedInput(v.Encode(), h.scope)
@@ -256,13 +276,16 @@ func (h *Protocol) Token(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	caller := tokens.Caller{Scope: h.scope, ClientID: principal.Client.ID, AuthenticationVersion: principal.Version}
-	if len(r.Header.Values("DPoP")) > 1 {
+	if len(r.Header.Values("DPoP")) > 1 || len(r.Header.Values("DPoP")) == 1 && r.Header.Get("DPoP") == "" {
 		protocolError(w, "invalid_dpop_proof", 400)
 		return
 	}
 	if proof := r.Header.Get("DPoP"); proof != "" {
 		caller.BindingThumbprint, err = h.proof.Verify(r.Context(), h.scope, tokens.ProofRequest{JWT: proof, Method: "POST", URL: h.scope.Issuer + "/token"})
 		if err != nil {
+			if proofFailure(w, err) {
+				return
+			}
 			protocolError(w, "invalid_dpop_proof", 400)
 			return
 		}
@@ -337,6 +360,9 @@ func (h *Protocol) Introspect(w http.ResponseWriter, r *http.Request) {
 	}
 	result, verified, err := h.status.Inspect(r.Context(), statusPrincipal(h.scope, p), tokens.Introspection{Token: v.Get("token"), Resource: v.Get("resource"), Proof: v.Get("dpop"), Method: v.Get("method"), URL: v.Get("url")})
 	if err != nil {
+		if proofFailure(w, err) {
+			return
+		}
 		if rateFailure(w, err) {
 			return
 		}
@@ -348,6 +374,24 @@ func (h *Protocol) Introspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeIntrospection(w, result, verified)
+}
+
+func proofFailure(w http.ResponseWriter, err error) bool {
+	var nonce *tokens.NonceChallenge
+	if errors.As(err, &nonce) {
+		w.Header().Set("DPoP-Nonce", nonce.Nonce)
+		protocolError(w, "use_dpop_nonce", 400)
+		return true
+	}
+	if errors.Is(err, tokens.ErrInvalidProof) {
+		protocolError(w, "invalid_dpop_proof", 400)
+		return true
+	}
+	if errors.Is(err, tokens.ErrUnavailable) {
+		protocolError(w, "temporarily_unavailable", 503)
+		return true
+	}
+	return false
 }
 func (h *Protocol) Revoke(w http.ResponseWriter, r *http.Request) {
 	v, ok := protocolForm(w, r)

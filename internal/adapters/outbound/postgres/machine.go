@@ -35,7 +35,7 @@ func (m *machineTransaction) MachinePolicy(ctx context.Context) (tokens.MachineP
 		return tokens.MachinePolicy{}, tokens.ErrInvalidCredential
 	}
 	var objects []byte
-	p := tokens.MachinePolicy{Profiles: r.ObjectProfiles, AccessSeconds: min(r.Client.AccessTokenSeconds, r.Resource.AccessTokenSeconds, r.Policy.MaxAccessTokenSeconds), GrantSeconds: r.Policy.MaxGrantSeconds, RequireBinding: r.Policy.RequireBinding || r.Resource.RequireBinding}
+	p := tokens.MachinePolicy{Profiles: r.ObjectProfiles, AccessSeconds: min(r.Client.AccessTokenSeconds, r.Resource.AccessTokenSeconds, r.Policy.MaxAccessTokenSeconds), GrantSeconds: r.Policy.MaxGrantSeconds, RequireBinding: r.Policy.RequireBinding || r.Resource.RequireBinding || r.Client.RequireBinding}
 	if err := t.tx.QueryRow(ctx, `SELECT scopes,object_ceiling FROM mayi.machine_authorizations WHERE tenant_id=$1 AND client_id=$2 AND resource=$3 FOR SHARE`, t.scope.TenantID, m.caller.ClientID, m.resource).Scan(&p.Scopes, &objects); err != nil {
 		return p, tokens.ErrInvalidCredential
 	}

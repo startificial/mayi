@@ -50,6 +50,7 @@ type resourceDTO struct {
 	RequireBinding     bool       `json:"require_binding"`
 }
 type clientDTO struct {
+	RequireBinding            bool     `json:"dpop_bound_access_tokens"`
 	ApplicationType           string   `json:"application_type"`
 	AuthMethod                string   `json:"token_endpoint_auth_method"`
 	Machine                   bool     `json:"machine"`
@@ -142,7 +143,7 @@ func (h *Handler) CreateClient(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	value := clients.Client{ApplicationType: input.ApplicationType, ID: input.ID, Name: input.Name, RedirectURIs: input.RedirectURIs, Resources: input.Resources, AccessTokenSeconds: input.AccessTokenSeconds, Enabled: input.Enabled, AuthorizationDetailsTypes: input.AuthorizationDetailsTypes, AuthMethod: input.AuthMethod, Machine: input.Machine, Introspection: input.Introspection}
+	value := clients.Client{RequireBinding: input.RequireBinding, ApplicationType: input.ApplicationType, ID: input.ID, Name: input.Name, RedirectURIs: input.RedirectURIs, Resources: input.Resources, AccessTokenSeconds: input.AccessTokenSeconds, Enabled: input.Enabled, AuthorizationDetailsTypes: input.AuthorizationDetailsTypes, AuthMethod: input.AuthMethod, Machine: input.Machine, Introspection: input.Introspection}
 	if err := h.service.CreateClient(r.Context(), middleware.Actor(r), h.scope, value); err != nil {
 		failure(w, err)
 		return
@@ -155,7 +156,7 @@ func (h *Handler) Client(w http.ResponseWriter, r *http.Request) {
 		failure(w, err)
 		return
 	}
-	httptransport.JSON(w, 200, clientDTO{ApplicationType: value.EffectiveApplicationType(), ID: value.ID, Name: value.Name, RedirectURIs: value.RedirectURIs, Resources: value.Resources, AccessTokenSeconds: value.AccessTokenSeconds, Enabled: value.Enabled, AuthorizationDetailsTypes: value.AuthorizationDetailsTypes, AuthMethod: value.AuthMethod, Machine: value.Machine, Introspection: value.Introspection})
+	httptransport.JSON(w, 200, clientDTO{RequireBinding: value.RequireBinding, ApplicationType: value.EffectiveApplicationType(), ID: value.ID, Name: value.Name, RedirectURIs: value.RedirectURIs, Resources: value.Resources, AccessTokenSeconds: value.AccessTokenSeconds, Enabled: value.Enabled, AuthorizationDetailsTypes: value.AuthorizationDetailsTypes, AuthMethod: value.AuthMethod, Machine: value.Machine, Introspection: value.Introspection})
 }
 func (h *Handler) PublishKey(w http.ResponseWriter, r *http.Request) {
 	version, err := strconv.Atoi(r.PathValue("version"))

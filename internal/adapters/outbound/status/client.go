@@ -56,7 +56,22 @@ func (c *Client) ValidateToken(ctx context.Context, q resource.TokenRequest) (re
 		return resource.ValidatedToken{}, resource.ErrUnavailable
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, 128<<10+1))
-	if err != nil || len(body) > 128<<10 || response.StatusCode != 200 {
+	if err != nil || len(body) > 128<<10 {
+		return resource.ValidatedToken{}, resource.ErrUnavailable
+	}
+	if response.StatusCode != 200 {
+		var failure struct {
+			Error string `json:"error"`
+		}
+		if !uniqueJSON(body) || json.Unmarshal(body, &failure) != nil {
+			return resource.ValidatedToken{}, resource.ErrUnavailable
+		}
+		if response.StatusCode == 400 && failure.Error == "use_dpop_nonce" && len(response.Header.Values("DPoP-Nonce")) == 1 && domain.ValidProofNonce(response.Header.Get("DPoP-Nonce")) {
+			return resource.ValidatedToken{}, &resource.NonceChallenge{Nonce: response.Header.Get("DPoP-Nonce")}
+		}
+		if response.StatusCode == 400 && failure.Error == "invalid_dpop_proof" {
+			return resource.ValidatedToken{}, resource.ErrInvalidProof
+		}
 		return resource.ValidatedToken{}, resource.ErrUnavailable
 	}
 	var wire struct {

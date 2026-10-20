@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -47,11 +48,25 @@ func TestRealDPoPBindingAndAtomicReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := tokens.NewProofs(cryptoadapter.NewDPoP(), e.store, clock{})
+	hasher, err := cryptoadapter.NewSecretHasher([]cryptoadapter.HashKey{{Version: 1, Key: []byte("01234567890123456789012345678901"), Active: true}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := tokens.ProofRequest{JWT: proof(t, key, nil), Method: "POST", URL: "https://auth.example/t/a/token", Nonce: "nonce"}
+	nonces, err := cryptoadapter.NewProofNonces(e.scope, hasher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := tokens.NewProofs(cryptoadapter.NewDPoP(), e.store, e.store, nonces, clock{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := tokens.ProofRequest{JWT: proof(t, key, map[string]any{"nonce": ""}), Method: "POST", URL: "https://auth.example/t/a/token"}
+	_, err = service.Verify(context.Background(), e.scope, request)
+	var nonce *tokens.NonceChallenge
+	if !errors.As(err, &nonce) {
+		t.Fatal("expected nonce challenge", err)
+	}
+	request.JWT = proof(t, key, map[string]any{"nonce": nonce.Nonce})
 	var group sync.WaitGroup
 	results := make(chan string, 2)
 	for i := 0; i < 2; i++ {

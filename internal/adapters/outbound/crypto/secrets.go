@@ -50,7 +50,7 @@ func (h *SecretHasher) Digest(scope grants.Scope, purpose, raw string) (string, 
 	prefix, secret, ok := strings.Cut(raw, ".")
 	version, err := strconv.Atoi(strings.TrimPrefix(prefix, "v"))
 	b, decode := base64.RawURLEncoding.DecodeString(secret)
-	if !scope.Valid() || !ok || err != nil || prefix != "v"+strconv.Itoa(version) || h.keys[version] == nil || decode != nil || len(b) != 32 || base64.RawURLEncoding.EncodeToString(b) != secret || purpose != "authorization_code" && purpose != "refresh_token" && purpose != "access_token" && purpose != "client_secret" {
+	if !scope.Valid() || !ok || err != nil || prefix != "v"+strconv.Itoa(version) || h.keys[version] == nil || decode != nil || len(b) != 32 || base64.RawURLEncoding.EncodeToString(b) != secret || purpose != "authorization_code" && purpose != "refresh_token" && purpose != "access_token" && purpose != "client_secret" && purpose != "dpop_nonce" {
 		return "", tokens.ErrInvalidCredential
 	}
 	mac := hmac.New(sha256.New, h.keys[version])

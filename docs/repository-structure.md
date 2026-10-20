@@ -205,3 +205,10 @@ owns the public resource capability projection and permission hints; the bounded
 `pkg/resource` composition maps its own config and HTTP metadata/challenge DTOs.
 It does not import server discovery, administration or persistence. See
 [ADR 0025](adr/0025-p3-native-callbacks-and-resource-discovery.md).
+
+P3 sender binding reuses token lifecycle's proof service and service-owned
+nonce/replay ports, the existing crypto/PostgreSQL adapters and the resource
+status contract. Client registration owns its binding flag; resource enforcement
+owns the SDK's local binding policy and public metadata. No parallel proof engine
+or public persistence dependency is introduced. See
+[ADR 0026](adr/0026-p3-dpop-nonces-and-binding.md).

@@ -2,7 +2,9 @@ package tokens
 
 import (
 	"context"
+	"errors"
 	"github.com/startificial/mayi/internal/domain/resources"
+	domain "github.com/startificial/mayi/internal/domain/tokens"
 	"net/url"
 	"slices"
 	"strings"
@@ -89,14 +91,29 @@ func (s *StatusService) Inspect(ctx context.Context, caller StatusCaller, q Intr
 	if err != nil || result.Claims.ID == "" || q.Proof == "" {
 		return result, false, err
 	}
-	target, e1 := url.Parse(q.URL)
-	audience, e2 := url.Parse(q.Resource)
-	if e1 != nil || e2 != nil || target.Scheme != audience.Scheme || target.Host != audience.Host || target.User != nil || target.Opaque != "" || target.Fragment != "" || target.RawQuery != "" || target.ForceQuery || (target.Path != audience.Path && !strings.HasPrefix(target.Path, strings.TrimSuffix(audience.Path, "/")+"/")) {
+	targetURI, ok := domain.ProofTarget(q.URL, false)
+	audienceURI, audienceOK := domain.ProofTarget(q.Resource, false)
+	target, _ := url.Parse(targetURI)
+	audience, _ := url.Parse(audienceURI)
+	if !ok || !audienceOK || target.Scheme != audience.Scheme || target.Host != audience.Host || (target.Path != audience.Path && !strings.HasPrefix(target.Path, strings.TrimSuffix(audience.Path, "/")+"/")) {
 		return Result{}, false, s.store.RecordInactive(ctx, caller, q.Resource)
 	}
-	thumb, err := s.proofs.Verify(ctx, caller.Scope, ProofRequest{JWT: q.Proof, Method: q.Method, URL: q.URL, AccessToken: q.Token})
-	if err != nil || thumb == "" || result.Claims.BindingThumbprint == "" || thumb != result.Claims.BindingThumbprint {
-		return Result{}, false, s.store.RecordInactive(ctx, caller, q.Resource)
+	if result.Claims.BindingThumbprint == "" {
+		return Result{}, false, ErrInvalidProof
+	}
+	thumb, err := s.proofs.Verify(ctx, caller.Scope, ProofRequest{JWT: q.Proof, Method: q.Method, URL: q.URL, AccessToken: q.Token, ExpectedThumbprint: result.Claims.BindingThumbprint})
+	if err != nil {
+		var challenge *NonceChallenge
+		if errors.As(err, &challenge) || errors.Is(err, ErrUnavailable) {
+			return Result{}, false, err
+		}
+		if e := s.store.RecordInactive(ctx, caller, q.Resource); e != nil {
+			return Result{}, false, ErrUnavailable
+		}
+		return Result{}, false, ErrInvalidProof
+	}
+	if thumb == "" || thumb != result.Claims.BindingThumbprint {
+		return Result{}, false, ErrInvalidProof
 	}
 	return result, true, nil
 }

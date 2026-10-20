@@ -27,10 +27,13 @@ type transaction struct {
 	grant             *tokens.GrantState
 }
 
-func (s *Store) ConsumeProof(ctx context.Context, scope grants.Scope, p tokens.VerifiedProof) error {
+func (s *Store) ConsumeProof(ctx context.Context, scope grants.Scope, p tokens.ProofReplay) error {
 	return s.Run(ctx, scope, func(value tokens.Transaction) error {
 		tx := value.(*transaction)
-		tag, err := tx.tx.Exec(ctx, `INSERT INTO mayi.proof_replays(tenant_id,thumbprint,proof_id,expires_at) SELECT $1,$2,$3,$4 WHERE $4>clock_timestamp() ON CONFLICT DO NOTHING`, scope.TenantID, p.Thumbprint, p.ID, p.ExpiresAt)
+		if _, err := tx.tx.Exec(ctx, `DELETE FROM mayi.proof_replays WHERE tenant_id=$1 AND (thumbprint,proof_id) IN (SELECT thumbprint,proof_id FROM mayi.proof_replays WHERE tenant_id=$1 AND expires_at<=clock_timestamp() ORDER BY expires_at LIMIT 100)`, scope.TenantID); err != nil {
+			return err
+		}
+		tag, err := tx.tx.Exec(ctx, `INSERT INTO mayi.proof_replays(tenant_id,thumbprint,proof_id,expires_at) SELECT $1,$2,$3,$4 WHERE $4>clock_timestamp() AND EXISTS(SELECT 1 FROM mayi.proof_nonces WHERE tenant_id=$1 AND purpose=$5 AND target=$6 AND thumbprint=$2 AND nonce_hash=$7 AND expires_at>clock_timestamp()) ON CONFLICT DO NOTHING`, scope.TenantID, p.Thumbprint, p.ID, p.ExpiresAt, p.Purpose, p.Target, p.NonceHash)
 		if err != nil {
 			return err
 		}
@@ -196,7 +199,7 @@ func (t *transaction) GrantRevision(ctx context.Context, id string, number uint6
 	if err != nil {
 		return tokens.GrantState{}, tokens.ErrInvalidCredential
 	}
-	if !current.Resource.Valid() || !current.Policy.Valid() || (current.Policy.RequireBinding || current.Resource.RequireBinding) && t.credential.BindingThumbprint == "" {
+	if !current.Resource.Valid() || !current.Policy.Valid() || (current.Policy.RequireBinding || current.Resource.RequireBinding || current.Client.RequireBinding) && t.credential.BindingThumbprint == "" {
 		return tokens.GrantState{}, tokens.ErrInvalidCredential
 	}
 	catalog := make([]string, 0, len(current.Resource.Scopes))

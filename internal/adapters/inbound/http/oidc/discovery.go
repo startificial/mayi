@@ -43,6 +43,7 @@ func (h *Handler) Metadata(w http.ResponseWriter, r *http.Request) {
 		issuer := h.scope.Issuer
 		value := map[string]any{"issuer": issuer, "jwks_uri": issuer + "/jwks", "token_endpoint": issuer + "/token", "introspection_endpoint": issuer + "/introspect", "revocation_endpoint": issuer + "/revoke", "grant_types_supported": []string{"client_credentials"}, "response_types_supported": []string{}, "token_endpoint_auth_methods_supported": []string{"none", "client_secret_basic", "private_key_jwt"}, "token_endpoint_auth_signing_alg_values_supported": []string{"ES256", "PS256", "RS256"}, "mayi_stage": "P2-preview"}
 		value["authorization_details_types_supported"] = document.AuthorizationDetailTypes
+		value["dpop_signing_alg_values_supported"] = []string{"ES256"}
 		if h.interactive {
 			value["authorization_endpoint"] = issuer + "/authorize"
 			value["pushed_authorization_request_endpoint"] = issuer + "/par"
