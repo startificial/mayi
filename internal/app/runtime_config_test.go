@@ -11,6 +11,31 @@ import (
 func validConfig() Config {
 	return Config{PublicOrigin: "https://auth.example", ListenAddress: "127.0.0.1:8080", RuntimeRole: "mayi_runtime", DatabaseMaxConnections: 5, TransitAddress: "https://bao.example", Tenants: []TenantConfig{{ID: "a", KeyName: "mayi-a", KeyVersions: []int{1}, InitialKeyVersion: 1, TransitTokenEnv: "MAYI_A_TRANSIT_TOKEN", Administrators: []AdministratorConfig{{ID: "admin", TokenSHA256: strings.Repeat("ab", 32), Permissions: []string{"policy:read"}}}}}}
 }
+
+func TestRegistrationCredentialCannotReuseAdministratorOrTenantTokens(t *testing.T) {
+	c := validConfig()
+	c.Tenants[0].InitialRegistrationTokenSHA256 = strings.Repeat("ef", 32)
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"raw-secret", strings.Repeat("EF", 32), c.Tenants[0].Administrators[0].TokenSHA256} {
+		c.Tenants[0].InitialRegistrationTokenSHA256 = bad
+		if c.Validate() == nil {
+			t.Fatal("unsafe registration credential admitted")
+		}
+	}
+	c = validConfig()
+	b := c.Tenants[0]
+	b.ID = "b"
+	b.KeyName = "mayi-b"
+	b.Administrators = []AdministratorConfig{{ID: "admin", TokenSHA256: strings.Repeat("cd", 32), Permissions: []string{"clients:read"}}}
+	b.InitialRegistrationTokenSHA256 = strings.Repeat("ef", 32)
+	c.Tenants[0].InitialRegistrationTokenSHA256 = b.InitialRegistrationTokenSHA256
+	c.Tenants = append(c.Tenants, b)
+	if c.Validate() == nil {
+		t.Fatal("shared tenant registration credential admitted")
+	}
+}
 func TestConfigRejectsSharedCredentialsAndTenantKeys(t *testing.T) {
 	for _, mode := range []string{"public listener", "duplicate tenant", "shared key", "shared admin token", "unknown permission", "duplicate version", "missing initial version", "untrusted env"} {
 		t.Run(mode, func(t *testing.T) {

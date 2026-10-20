@@ -1,7 +1,7 @@
 {
   "version": 1,
   "phase": "P3",
-  "profile": "native-resource-discovery-and-es256-dpop-preview",
+  "profile": "native-resource-discovery-es256-dpop-and-public-dcr-preview",
   "certified": false,
   "required_commands": [
     "go run ./tools/checks",
@@ -48,6 +48,15 @@
         "8",
         "9",
         "10"
+      ]
+    },
+    {
+      "id": "rfc7591",
+      "revision": "RFC 7591",
+      "sections": [
+        "2",
+        "3.1",
+        "3.2"
       ]
     }
   ],
@@ -164,6 +173,42 @@
         {
           "path": "tests/integration/foundation_regression_test.go",
           "test": "TestP2RejectsInheritedAuthorityUpdates"
+        }
+      ]
+    },
+    {
+      "capability": "public-dynamic-registration",
+      "requirements": [
+        "CLI-4"
+      ],
+      "checks": [
+        {
+          "path": "internal/domain/clients/registration_test.go",
+          "test": "TestPublicRegistrationCannotEnlargeTenantCeilings"
+        },
+        {
+          "path": "internal/services/administration/registration_test.go",
+          "test": "TestPublicRegistrationAdmissionPrecedesProtectedCatalog"
+        },
+        {
+          "path": "internal/services/administration/registration_test.go",
+          "test": "TestRegistrationUsesSharedRulesAndWithholdsUncommittedResult"
+        },
+        {
+          "path": "internal/adapters/inbound/http/oauth/registration_test.go",
+          "test": "TestRegistrationWireRejectsAmbiguousOrUnsupportedAuthority"
+        },
+        {
+          "path": "internal/adapters/outbound/crypto/registration_test.go",
+          "test": "TestInitialRegistrationCredentialsAreDistinctAndTenantBound"
+        },
+        {
+          "path": "tests/integration/p3_registration_test.go",
+          "test": "TestP3PublicRegistrationPolicyQuotaAndAtomicAudit"
+        },
+        {
+          "path": "tests/integration/browser_test.go",
+          "test": "TestP2ServerMountsConfiguredBrowserRoutes"
         }
       ]
     }

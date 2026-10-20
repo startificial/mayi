@@ -212,3 +212,10 @@ status contract. Client registration owns its binding flag; resource enforcement
 owns the SDK's local binding policy and public metadata. No parallel proof engine
 or public persistence dependency is introduced. See
 [ADR 0026](adr/0026-p3-dpop-nonces-and-binding.md).
+
+P3 public registration reuses `services/administration`'s client creation rules
+and tenant unit of work. `domain/clients` owns admission ceilings; the HTTP OAuth
+adapter translates bounded RFC 7591 metadata. The existing PostgreSQL adapter
+implements policy/quota/audit consistency and the crypto adapter supplies
+registration-only initial-access verification and random IDs. See
+[ADR 0028](adr/0028-public-dynamic-client-registration.md).

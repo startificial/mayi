@@ -168,3 +168,30 @@ NonceChallenge supports errors.As and also wraps ErrDenied; check its specific
 recovery before a generic denial. Browser CORS/header exposure and the WebCrypto
 sample remain explicit later P3 work. See [the P3 runbook](p3-agent-clients.md#es256-dpop-sender-binding)
 and [profile evidence](../tests/conformance/p3-evidence.json).
+
+## P3 client registration
+
+Public DCR uses RFC 7591 error JSON (`error`) and no-store responses. It never
+returns a raw decoder, database or credential error. The admin policy endpoint
+uses the existing local JSON error catalog. Public DCR has bounded JSON parsing,
+no cookie authentication, no credential/query transport and no browser CORS in
+this slice. Client names and unknown metadata are not reflected in errors.
+
+| Registration result | Response | Recovery |
+| --- | --- | --- |
+| Accepted public registration | 201 accepted metadata and client_id; no client secret or management token | Save the returned client ID and use required PAR/RAR/S256/DPoP and user consent. |
+| Malformed/oversized/ambiguous JSON, unsupported metadata/grants/authentication, unapproved resource/type/lifetime | 400 invalid_client_metadata | Correct the request against the documented public profile. Catalog failures are non-enumerating. |
+| Invalid callback syntax/profile | 400 invalid_redirect_uri | Use the registered web/native callback grammar. |
+| Missing required or bad supplied initial-access token | 401 invalid_token with WWW-Authenticate: Bearer realm="mayi-registration" | Obtain the separate current registration credential; never send an admin/API token. |
+| Administrator-only admission or cumulative quota exhausted | 403 invalid_client_metadata | Contact the operator to change admission/quota. No timed retry will free a quota slot. |
+| Shared request budget exhausted | 429 temporarily_unavailable with Retry-After: 60 | Wait at least that long before another attempt. A rejected attempt may already count toward the tenant budget. |
+| Required database/admission/material/audit unavailable or commit failed/uncertain | 503 temporarily_unavailable | No usable client is returned. Restore dependencies; reconcile an ambiguous registration with the operator before retrying to avoid duplicate registrations/quota use. |
+| Admin policy version stale | 409 conflict in the local error contract | Read the policy again, review it and submit with its current version. |
+
+Registration returns no user authority. An access token, code or refresh token
+must never be sent to DCR in place of an initial-access credential. The static
+initial-access credential is reusable for registration until its configured digest
+is revoked; it is not a registration-management token. Rotate/revoke across every
+replica. Registry changes and their audit/outbox record commit atomically; admission
+budgets commit separately. Open/admin-only changes affect future registrations,
+so revoke existing grants separately when a current client's access must stop.

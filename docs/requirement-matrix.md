@@ -48,7 +48,7 @@ The connected reference BFF and resource API prove read 123, deny 124/write befo
 | CLI-1 | MUST | P3 | Client registry and egress | A previously unknown permitted HTTPS client resolves from a validated CIMD document and cache policy is honored. | Planned (foundation evidence above where applicable) |
 | CLI-2 | MUST | P3 | Client registry and egress | DNS rebinding, private/mapped/link-local addresses, forbidden redirects and oversized/slow responses fail. | Planned (foundation evidence above where applicable) |
 | CLI-3 | MUST | P3 | Client registry and egress | Consent shows metadata host and redirect destination; policy rejects unapproved cross-origin or native redirect exceptions. | Planned (foundation evidence above where applicable) |
-| CLI-4 | MUST | P3 | Client registry and egress | DCR validates metadata, quotas and optional initial access tokens; public registration never creates trusted status. | Planned (foundation evidence above where applicable) |
+| CLI-4 | MUST | P3 | Client registry and egress | DCR validates metadata, quotas and optional initial access tokens; public registration never creates trusted status. | [P3 public DCR profile verified](../tests/conformance/p3-evidence.json); explicit public code/refresh profile, broader interoperability remains |
 | CLI-5 | SHOULD | P7 | Client registry and egress | Registration read/update/delete is limited to the owning registration token and invalidates affected metadata safely. | Planned (foundation evidence above where applicable) |
 | CLI-6 | MAY | P8 | Client registry and egress | Trusted software statements validate issuer, signature, audience and expiry; statements cannot bypass tenant policy. | Planned (foundation evidence above where applicable) |
 | CLI-7 | MUST | P1 | Client registry and egress | Tenant admins register clients; foreign-tenant reads and mutations fail. | Planned (foundation evidence above where applicable) |
@@ -58,7 +58,7 @@ The connected reference BFF and resource API prove read 123, deny 124/write befo
 | CLI-11 | MUST | P3 | Client registry and egress | Public code clients cannot bypass PKCE, refresh rotation or required sender binding. | [P3 ES256 profile verified](../tests/conformance/p3-evidence.json); browser sample remains WEB-2 |
 | CLI-12 | SHOULD | P3 | Client registry and egress | Web and native client metadata select distinct tested redirect-validation policies. | [P3 native/discovery slice verified](../tests/conformance/p3-evidence.json) |
 | CLI-13 | MAY | P8 | Client registry and egress | Attestation validates pinned trust, freshness and build policy without turning untrusted attestation into identity. | Planned (foundation evidence above where applicable) |
-| CLI-14 | MUST | P3 | Client registry and egress | Any-client, CIMD-host allowlist and admin-approved-only tenant policies have positive and negative cases. | Planned (foundation evidence above where applicable) |
+| CLI-14 | MUST | P3 | Client registry and egress | Any-client, CIMD-host allowlist and admin-approved-only tenant policies have positive and negative cases. | DCR open/admin-only admission verified in [P3 evidence](../tests/conformance/p3-evidence.json); CIMD host policy remains planned |
 
 ## RES
 

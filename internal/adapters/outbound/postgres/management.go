@@ -36,7 +36,7 @@ func classifyManagement(err error) error {
 	if errors.As(err, &pe) && (pe.Code == "23505" || pe.Code == "23503") {
 		return administration.ErrConflict
 	}
-	if errors.Is(err, administration.ErrConflict) || errors.Is(err, administration.ErrInvalid) || errors.Is(err, administration.ErrNotFound) {
+	if errors.Is(err, administration.ErrDenied) || errors.Is(err, administration.ErrInitialAccess) || errors.Is(err, administration.ErrRegistrationLimited) || errors.Is(err, administration.ErrRegistrationQuota) || errors.Is(err, administration.ErrConflict) || errors.Is(err, administration.ErrInvalid) || errors.Is(err, administration.ErrNotFound) {
 		return err
 	}
 	return administration.ErrUnavailable

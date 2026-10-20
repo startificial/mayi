@@ -188,8 +188,9 @@ func TestP2RejectsInheritedAuthorityUpdates(t *testing.T) {
 	defer e.admin.Exec(ctx, `REVOKE UPDATE(subject) ON mayi.grants FROM mayi_p2_authority_grants;
  REVOKE UPDATE ON mayi.credentials FROM mayi_p2_authority_grants;
  REVOKE UPDATE,DELETE ON mayi.proof_nonces,mayi.proof_replays FROM mayi_p2_authority_grants;
+ REVOKE UPDATE,DELETE ON mayi.dynamic_clients FROM mayi_p2_authority_grants;
  REVOKE mayi_p2_authority_grants FROM mayi_p1_runtime; DROP ROLE mayi_p2_authority_grants`)
-	for _, permission := range []string{"UPDATE(subject) ON mayi.grants", "UPDATE ON mayi.credentials", "UPDATE(expires_at) ON mayi.proof_nonces", "UPDATE ON mayi.proof_replays", "DELETE ON mayi.proof_nonces", "DELETE ON mayi.proof_replays"} {
+	for _, permission := range []string{"UPDATE(subject) ON mayi.grants", "UPDATE ON mayi.credentials", "UPDATE(expires_at) ON mayi.proof_nonces", "UPDATE ON mayi.proof_replays", "DELETE ON mayi.proof_nonces", "DELETE ON mayi.proof_replays", "UPDATE(client_id) ON mayi.dynamic_clients", "DELETE ON mayi.dynamic_clients"} {
 		if _, err := e.admin.Exec(ctx, `GRANT `+permission+` TO mayi_p2_authority_grants`); err != nil {
 			t.Fatal(err)
 		}

@@ -12,7 +12,7 @@ func TestConsentObjectDisplayEscapesNamesAndPreservesExactReferences(t *testing.
 		t.Fatal(err)
 	}
 	html := string(page)
-	for _, want := range []string{"workflow:123", "https://api.example/types/workflow/v1", "&lt;script&gt;private()&lt;/script&gt;", "&lt;img src=x onerror=private()&gt;", "Approval is currently unavailable."} {
+	for _, want := range []string{"workflow:123", "https://api.example/types/workflow/v1", "&lt;script&gt;private()&lt;/script&gt;", "&lt;img src=x onerror=private()&gt;", "Approval is currently unavailable.", "Registration does not verify the publisher."} {
 		if !strings.Contains(html, want) {
 			t.Fatal("missing safe exact display", want)
 		}

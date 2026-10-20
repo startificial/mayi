@@ -13,8 +13,11 @@ import (
 )
 
 type fake struct {
+	registration    clients.RegistrationPolicy
+	dynamic         int
 	t               *testing.T
 	denyAccess      bool
+	forbidCatalog   bool
 	p               policy.Tenant
 	audits, creates int
 	commitErr       error
@@ -40,6 +43,9 @@ func (f *fake) ProvisionTenant(context.Context, grants.Scope, identity.PublicKey
 func (f *fake) Policy(context.Context) (policy.Tenant, error)      { return f.p, nil }
 func (f *fake) SetPolicy(_ context.Context, p policy.Tenant) error { f.p = p; return nil }
 func (f *fake) Resource(context.Context, string) (resources.Resource, error) {
+	if f.forbidCatalog {
+		f.t.Fatal("catalog loaded before registration admission")
+	}
 	if f.resource.URI != "" {
 		return f.resource, nil
 	}
@@ -54,6 +60,9 @@ func (f *fake) ObjectProfile(context.Context, string, string) (resources.ObjectP
 	return f.profile, nil
 }
 func (f *fake) ClientObjectProfile(context.Context, string, []string) (resources.ObjectProfile, error) {
+	if f.forbidCatalog {
+		f.t.Fatal("profile loaded before registration admission")
+	}
 	return f.profile, nil
 }
 func (f *fake) CreateResource(context.Context, resources.Resource) error         { f.creates++; return nil }
@@ -134,3 +143,13 @@ func TestPolicyVersionCeilingsAndAtomicResult(t *testing.T) {
 		t.Fatal("uncommitted result escaped")
 	}
 }
+
+func (f *fake) RegistrationPolicy(context.Context) (clients.RegistrationPolicy, error) {
+	return f.registration, nil
+}
+func (f *fake) SetRegistrationPolicy(_ context.Context, p clients.RegistrationPolicy) error {
+	f.registration = p
+	return nil
+}
+func (f *fake) DynamicClientCount(context.Context) (int, error) { return f.dynamic, nil }
+func (f *fake) MarkDynamicClient(context.Context, string) error { f.dynamic++; return nil }

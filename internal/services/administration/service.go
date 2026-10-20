@@ -133,36 +133,8 @@ func (s *Service) CreateClient(ctx context.Context, actor Actor, scope grants.Sc
 		return ErrInvalid
 	}
 	return s.store.RunManagement(ctx, scope, func(tx Transaction) error {
-		p, err := tx.Policy(ctx)
-		if err != nil {
+		if err := validateClientRegistration(ctx, tx, scope, input); err != nil {
 			return err
-		}
-		if input.AccessTokenSeconds > p.MaxAccessTokenSeconds {
-			return ErrInvalid
-		}
-		registeredResources := make(map[string]resources.Resource, len(input.Resources))
-		for _, id := range input.Resources {
-			r, err := tx.Resource(ctx, id)
-			if err != nil {
-				return err
-			}
-			if input.AccessTokenSeconds > r.AccessTokenSeconds {
-				return ErrInvalid
-			}
-			registeredResources[r.URI] = r
-		}
-		for _, typ := range input.AuthorizationDetailsTypes {
-			profile, err := tx.ClientObjectProfile(ctx, typ, input.Resources)
-			if errors.Is(err, ErrNotFound) {
-				return ErrInvalid
-			}
-			if err != nil {
-				return err
-			}
-			definition := profile.Snapshot()
-			if definition.Scope != scope || definition.Type != typ || !input.AllowsObjectProfile(registeredResources[definition.Resource], profile) {
-				return ErrInvalid
-			}
 		}
 		if err := tx.CreateClient(ctx, input); err != nil {
 			return err
@@ -217,4 +189,41 @@ func (s *Service) ActivateKey(ctx context.Context, actor Actor, scope grants.Sco
 		}
 		return tx.Audit(ctx, "key_activated", actor.ID, key.ID)
 	})
+}
+
+// validateClientRegistration is shared by operator and public registration.
+// It runs after admission and inside the tenant management lock.
+func validateClientRegistration(ctx context.Context, tx Transaction, scope grants.Scope, input clients.Client) error {
+	p, err := tx.Policy(ctx)
+	if err != nil {
+		return err
+	}
+	if input.AccessTokenSeconds > p.MaxAccessTokenSeconds {
+		return ErrInvalid
+	}
+	registeredResources := make(map[string]resources.Resource, len(input.Resources))
+	for _, id := range input.Resources {
+		r, err := tx.Resource(ctx, id)
+		if err != nil {
+			return err
+		}
+		if input.AccessTokenSeconds > r.AccessTokenSeconds {
+			return ErrInvalid
+		}
+		registeredResources[r.URI] = r
+	}
+	for _, typ := range input.AuthorizationDetailsTypes {
+		profile, err := tx.ClientObjectProfile(ctx, typ, input.Resources)
+		if errors.Is(err, ErrNotFound) {
+			return ErrInvalid
+		}
+		if err != nil {
+			return err
+		}
+		definition := profile.Snapshot()
+		if definition.Scope != scope || definition.Type != typ || !input.AllowsObjectProfile(registeredResources[definition.Resource], profile) {
+			return ErrInvalid
+		}
+	}
+	return nil
 }

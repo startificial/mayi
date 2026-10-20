@@ -55,16 +55,17 @@ type ResourceBindingConfig struct {
 }
 
 type TenantConfig struct {
-	ResourceBindings    []ResourceBindingConfig `json:"resource_bindings,omitempty"`
-	ID                  string                  `json:"id"`
-	CredentialKeys      []CredentialKeyConfig   `json:"credential_keys,omitempty"`
-	ResourceAuthorities []string                `json:"resource_authorities,omitempty"`
-	KeyName             string                  `json:"key_name"`
-	KeyVersions         []int                   `json:"key_versions"`
-	InitialKeyVersion   int                     `json:"initial_key_version"`
-	TransitTokenEnv     string                  `json:"transit_token_env"`
-	Administrators      []AdministratorConfig   `json:"administrators"`
-	IdentityProvider    *IdentityProviderConfig `json:"identity_provider,omitempty"`
+	InitialRegistrationTokenSHA256 string                  `json:"initial_registration_token_sha256,omitempty"`
+	ResourceBindings               []ResourceBindingConfig `json:"resource_bindings,omitempty"`
+	ID                             string                  `json:"id"`
+	CredentialKeys                 []CredentialKeyConfig   `json:"credential_keys,omitempty"`
+	ResourceAuthorities            []string                `json:"resource_authorities,omitempty"`
+	KeyName                        string                  `json:"key_name"`
+	KeyVersions                    []int                   `json:"key_versions"`
+	InitialKeyVersion              int                     `json:"initial_key_version"`
+	TransitTokenEnv                string                  `json:"transit_token_env"`
+	Administrators                 []AdministratorConfig   `json:"administrators"`
+	IdentityProvider               *IdentityProviderConfig `json:"identity_provider,omitempty"`
 }
 
 // Provider trust is explicit startup configuration. Changing an issuer, client
@@ -192,6 +193,13 @@ func (c Config) Validate() error {
 				return ErrConfiguration
 			}
 			seenVersions[v] = true
+		}
+		if t.InitialRegistrationTokenSHA256 != "" {
+			digest, err := hex.DecodeString(t.InitialRegistrationTokenSHA256)
+			if err != nil || len(digest) != 32 || hex.EncodeToString(digest) != t.InitialRegistrationTokenSHA256 || seenTokens[t.InitialRegistrationTokenSHA256] {
+				return ErrConfiguration
+			}
+			seenTokens[t.InitialRegistrationTokenSHA256] = true
 		}
 		seenActors := map[string]bool{}
 		for _, a := range t.Administrators {

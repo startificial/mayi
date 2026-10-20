@@ -24,12 +24,13 @@ const ledgerReadOnly = `NOT has_table_privilege($1,'mayi.schema_migrations','INS
 // privileges. Fail closed unless the effective grants preserve this boundary.
 const authorityLifecycleOnly = `NOT EXISTS(
  SELECT 1 FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
- WHERE n.nspname='mayi' AND c.relname IN ('grants','credentials','refresh_families','issuances','proof_nonces','proof_replays')
+ WHERE n.nspname='mayi' AND c.relname IN ('grants','credentials','refresh_families','issuances','proof_nonces','proof_replays','dynamic_clients')
  AND a.attnum>0 AND NOT a.attisdropped
  AND a.attname<>CASE WHEN c.relname='credentials' THEN 'consumed' ELSE 'revoked' END
  AND has_column_privilege($1,c.oid,a.attnum,'UPDATE'))
  AND NOT has_table_privilege($1,'mayi.proof_nonces','DELETE')
- AND NOT has_table_privilege($1,'mayi.proof_replays','DELETE')`
+ AND NOT has_table_privilege($1,'mayi.proof_replays','DELETE')
+ AND NOT has_table_privilege($1,'mayi.dynamic_clients','DELETE')`
 
 // ApplyMigrations requires an operator-supplied owner connection. Never run it
 // automatically on server startup. A transaction lock serializes concurrent
@@ -119,6 +120,7 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, runtimeRole string
 		`REVOKE UPDATE ON mayi.grant_revisions,mayi.authorization_transactions FROM ` + role,
 		`REVOKE UPDATE ON mayi.resource_object_profiles FROM ` + role,
 		`REVOKE UPDATE ON mayi.client_object_types FROM ` + role,
+		`REVOKE UPDATE,DELETE ON mayi.dynamic_clients FROM ` + role,
 		`REVOKE UPDATE,DELETE ON mayi.proof_nonces,mayi.proof_replays FROM ` + role,
 		`REVOKE UPDATE ON mayi.pushed_requests,mayi.authorization_object_presentations FROM ` + role,
 		`GRANT UPDATE(consumed_at,authorization_hash) ON mayi.pushed_requests TO ` + role,
@@ -192,5 +194,5 @@ func rollback(tx pgx.Tx) {
 }
 
 func migrationSources() []string {
-	return []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed, migrations.ObjectPresentations, migrations.Lifecycle, migrations.RequiredAuthority, migrations.RequestBudgets, migrations.Incremental, migrations.AuditContext, migrations.NativeClients, migrations.DPoP, migrations.ProofStatePrivileges}
+	return []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed, migrations.ObjectPresentations, migrations.Lifecycle, migrations.RequiredAuthority, migrations.RequestBudgets, migrations.Incremental, migrations.AuditContext, migrations.NativeClients, migrations.DPoP, migrations.ProofStatePrivileges, migrations.Registration}
 }

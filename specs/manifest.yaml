@@ -465,6 +465,30 @@
       "deviations": [
         "Unsigned resource-owned single-AS metadata only; canonical HTTPS audience profile excludes query components. DPoP advertisement awaits the remaining P3 evidence."
       ]
+    },
+    {
+      "id": "rfc7591",
+      "revision": "RFC 7591",
+      "url": "https://www.rfc-editor.org/rfc/rfc7591.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc7591.txt",
+      "sha256": "f9cd8b8eefdb2d1b1bd5734310f246926db0abb4ec1b2f933f358d58327964e3",
+      "retrieved_on": "2026-10-19",
+      "target_phase": "P3",
+      "target_sections": [
+        "2",
+        "3.1",
+        "3.2"
+      ],
+      "implemented_sections": [
+        "2",
+        "3.1",
+        "3.2"
+      ],
+      "deviations": [
+        "Bounded public interactive profile: explicit none authentication and authorization_code plus refresh_token; mandatory DPoP, PAR, S256 and typed RAR. Other profiles are rejected.",
+        "Mayi resource-ID and RAR-type registration ceilings; tenant admission/quota and optional separately configured initial-access credential. No software statements or RFC 7592 management.",
+        "Unknown ordinary metadata is ignored. Ambiguous members, nulls and unsupported security metadata are rejected. See ADR 0028."
+      ]
     }
   ]
 }

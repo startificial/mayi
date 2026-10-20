@@ -24,6 +24,7 @@ type Store interface {
 	ProvisionTenant(context.Context, grants.Scope, identity.PublicKey, policy.Tenant, string) error
 }
 type Transaction interface {
+	RegistrationTransaction
 	Policy(context.Context) (policy.Tenant, error)
 	SetPolicy(context.Context, policy.Tenant) error
 	Resource(context.Context, string) (resources.Resource, error)

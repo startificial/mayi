@@ -6,7 +6,9 @@ import (
 	httptransport "github.com/startificial/mayi/internal/adapters/inbound/http"
 	"github.com/startificial/mayi/internal/adapters/inbound/http/admin"
 	"github.com/startificial/mayi/internal/adapters/inbound/http/middleware"
+	"github.com/startificial/mayi/internal/adapters/inbound/http/oauth"
 	"github.com/startificial/mayi/internal/adapters/inbound/http/oidc"
+	"github.com/startificial/mayi/internal/adapters/outbound/crypto"
 	"github.com/startificial/mayi/internal/adapters/outbound/postgres"
 	"github.com/startificial/mayi/internal/adapters/outbound/signing"
 	"github.com/startificial/mayi/internal/domain/grants"
@@ -149,6 +151,21 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 		if err != nil {
 			return nil, err
 		}
+		if len(t.CredentialKeys) > 0 && t.IdentityProvider != nil {
+			credentials, err := crypto.NewRegistrationCredentials(scope, t.InitialRegistrationTokenSHA256)
+			if err != nil {
+				return nil, err
+			}
+			registrations, err := administration.NewRegistration(store, credentials, store, scope)
+			if err != nil {
+				return nil, err
+			}
+			handler, err := oauth.NewRegistration(registrations, scope)
+			if err != nil {
+				return nil, err
+			}
+			router.HandleFunc("POST /t/"+t.ID+"/register", handler.Register)
+		}
 		h, err := admin.New(service, scope)
 		if err != nil {
 			return nil, err
@@ -172,6 +189,7 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 		router.Handle("GET "+base+"/grants", auth.Protect(scope, http.HandlerFunc(grantControls.List)))
 		router.Handle("POST "+base+"/grants/revoke", auth.Protect(scope, http.HandlerFunc(grantControls.Revoke)))
 		for pattern, handler := range map[string]http.HandlerFunc{
+			"GET " + base + "/client-registration-policy": h.RegistrationPolicy, "PUT " + base + "/client-registration-policy": h.RegistrationPolicy,
 			"GET " + base + "/policy": h.Policy, "PUT " + base + "/policy": h.Policy,
 			"POST " + base + "/resources": h.CreateResource, "GET " + base + "/resources/{id}": h.Resource,
 			"POST " + base + "/resources/{id}/object-profiles": h.RegisterObjectProfile,
