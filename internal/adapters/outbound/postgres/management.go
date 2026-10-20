@@ -111,7 +111,7 @@ func (m *management) CreateClient(ctx context.Context, c clients.Client) error {
 	if !c.Valid() {
 		return administration.ErrInvalid
 	}
-	_, err := m.tx.Exec(ctx, `INSERT INTO mayi.clients(tenant_id,client_id,enabled,name,redirect_uris,access_token_seconds,auth_method,machine,introspection) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, m.scope.TenantID, c.ID, c.Enabled, c.Name, c.RedirectURIs, c.AccessTokenSeconds, clientAuthMethod(c.AuthMethod), c.Machine, c.Introspection)
+	_, err := m.tx.Exec(ctx, `INSERT INTO mayi.clients(tenant_id,client_id,enabled,name,redirect_uris,access_token_seconds,auth_method,machine,introspection,application_type) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, m.scope.TenantID, c.ID, c.Enabled, c.Name, c.RedirectURIs, c.AccessTokenSeconds, clientAuthMethod(c.AuthMethod), c.Machine, c.Introspection, c.EffectiveApplicationType())
 	if err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func (m *management) CreateClient(ctx context.Context, c clients.Client) error {
 }
 func (m *management) Client(ctx context.Context, id string) (clients.Client, error) {
 	c := clients.Client{ID: id}
-	err := m.tx.QueryRow(ctx, `SELECT name,redirect_uris,access_token_seconds,enabled,auth_method,machine,auth_version,introspection FROM mayi.clients WHERE tenant_id=$1 AND client_id=$2`, m.scope.TenantID, id).Scan(&c.Name, &c.RedirectURIs, &c.AccessTokenSeconds, &c.Enabled, &c.AuthMethod, &c.Machine, &c.AuthenticationVersion, &c.Introspection)
+	err := m.tx.QueryRow(ctx, `SELECT name,redirect_uris,access_token_seconds,enabled,auth_method,machine,auth_version,introspection,application_type FROM mayi.clients WHERE tenant_id=$1 AND client_id=$2`, m.scope.TenantID, id).Scan(&c.Name, &c.RedirectURIs, &c.AccessTokenSeconds, &c.Enabled, &c.AuthMethod, &c.Machine, &c.AuthenticationVersion, &c.Introspection, &c.ApplicationType)
 	if err != nil {
 		return c, classifyManagement(err)
 	}

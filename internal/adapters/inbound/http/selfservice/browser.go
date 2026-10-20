@@ -132,14 +132,18 @@ func pagePolicy(formOrigin string) string {
 // Form-submission redirects retain the initiating document's form-action
 // constraints. Permit only the already authorized registered client's origin.
 func consentPolicy(redirect string) (string, error) {
-	if !clients.ValidAuthorizationRedirect(redirect) {
+	if !clients.ValidApplicationRedirect("native", redirect) {
 		return "", authorization.ErrInvalid
 	}
 	u, err := url.Parse(redirect)
 	if err != nil {
 		return "", err
 	}
-	return pagePolicy(u.Scheme + "://" + u.Host), nil
+	destination := u.Scheme + ":"
+	if u.Host != "" {
+		destination += "//" + u.Host
+	}
+	return pagePolicy(destination), nil
 }
 func (h *Handler) failure(w http.ResponseWriter, err error) {
 	var limited *authentication.LimitError

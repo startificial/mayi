@@ -40,7 +40,7 @@ func TestScopeOnlyPreviewRejectsRARAndPushedRequestsBeforeServices(t *testing.T)
 }
 
 func TestAuthorizationResponseRetainsRegisteredQueryBytes(t *testing.T) {
-	for _, base := range []string{"https://app.example/cb?next=%2fhome&x=one%20two&x=three&flag", "https://app.example/cb?provider=mayi&", "https://app.example/cb?", "https://app.example/cb"} {
+	for _, base := range []string{"https://app.example/cb?next=%2fhome&x=one%20two&x=three&flag", "https://app.example/cb?provider=mayi&", "https://app.example/cb?", "https://app.example/cb", "http://127.0.0.1:54321/cb?provider=mayi", "http://[::1]:54321/cb", "com.example.desktop:/cb?provider=mayi"} {
 		for _, code := range []string{"one-use-code", ""} {
 			out, err := responseRedirect(authorization.DecisionResult{RedirectURI: base, State: "state +/&", Code: code}, "https://auth.example/t/a")
 			if err != nil {
@@ -60,6 +60,19 @@ func TestAuthorizationResponseRetainsRegisteredQueryBytes(t *testing.T) {
 			if strings.Contains(base, "next=") && (q.Get("next") != "/home" || strings.Join(q["x"], "|") != "one two|three") {
 				t.Fatal("fixed query semantics changed", out)
 			}
+		}
+	}
+}
+
+func TestConsentPolicyLimitsNativeCallbackDestination(t *testing.T) {
+	for _, test := range []struct{ uri, destination string }{
+		{"http://127.0.0.1:54321/cb", "http://127.0.0.1:54321"},
+		{"http://[::1]:54321/cb", "http://[::1]:54321"},
+		{"com.example.desktop:/cb", "com.example.desktop:"},
+	} {
+		policy, err := consentPolicy(test.uri)
+		if err != nil || !strings.Contains(policy, "form-action 'self' "+test.destination+";") || strings.Contains(policy, "*") || !strings.Contains(policy, "frame-ancestors 'none'") {
+			t.Fatal("invalid native consent policy", policy, err)
 		}
 	}
 }

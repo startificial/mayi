@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "phase": "P3",
+  "profile": "native-and-resource-discovery-preview",
+  "certified": false,
+  "required_commands": [
+    "go run ./tools/checks",
+    "go test -race -count=1 ./...",
+    "go vet ./...",
+    "go run ./tools/p0"
+  ],
+  "specifications": [
+    {
+      "id": "rfc8252",
+      "revision": "RFC 8252",
+      "sections": [
+        "7.1",
+        "7.2",
+        "7.3",
+        "8.4"
+      ]
+    },
+    {
+      "id": "rfc9728",
+      "revision": "RFC 9728",
+      "sections": [
+        "2",
+        "3",
+        "5.1"
+      ]
+    },
+    {
+      "id": "rfc6750",
+      "revision": "RFC 6750",
+      "sections": [
+        "3",
+        "3.1"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "capability": "native-callbacks",
+      "requirements": [
+        "CORE-4",
+        "CLI-12"
+      ],
+      "checks": [
+        {
+          "path": "internal/domain/clients/native_test.go",
+          "test": "TestNativeCallbackPoliciesPreserveExactDestination"
+        },
+        {
+          "path": "internal/domain/clients/native_test.go",
+          "test": "TestNativeApplicationRequiresPublicRegistration"
+        },
+        {
+          "path": "tests/integration/p3_native_test.go",
+          "test": "TestP3NativeCallbacksPersistAndPinTheRequestedRedirect"
+        },
+        {
+          "path": "internal/adapters/inbound/http/selfservice/browser_test.go",
+          "test": "TestConsentPolicyLimitsNativeCallbackDestination"
+        }
+      ]
+    },
+    {
+      "capability": "resource-discovery-bearer-challenges",
+      "requirements": [
+        "DISC-3",
+        "CORE-13"
+      ],
+      "checks": [
+        {
+          "path": "pkg/resource/metadata_test.go",
+          "test": "TestResourceMetadataKeepsEachAudienceAndTrustedIssuer"
+        },
+        {
+          "path": "pkg/resource/metadata_test.go",
+          "test": "TestResourceChallengesAreSafeAndHaveDistinctRecovery"
+        },
+        {
+          "path": "pkg/resource/metadata_test.go",
+          "test": "TestResourceMetadataRejectsUntrustedConfigurationAndSnapshotsSlices"
+        },
+        {
+          "path": "internal/services/resource/service_test.go",
+          "test": "TestResourceScopeChallengeRequiresValidLocalAuthorityBeforePermissionLoad"
+        },
+        {
+          "path": "tests/integration/p3_resource_test.go",
+          "test": "TestP3ResourceChallengeDiscoveryAndOnlineCutoff"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "P3 is in progress: CIMD, DCR, client policy, remaining DPoP/nonce coverage and browser-held-token example are outstanding.",
+    "CORE-13 evidence here is the Bearer resource profile; DPoP challenges and later step-up profiles have separate gates.",
+    "Native URI protocol fixtures do not establish mobile/desktop platform association or real-browser compatibility.",
+    "No external certification or full RFC/README conformance claim."
+  ]
+}

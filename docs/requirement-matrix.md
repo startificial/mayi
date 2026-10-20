@@ -17,7 +17,7 @@ The connected reference BFF and resource API prove read 123, deny 124/write befo
 | CORE-1 | MUST | P2 | Protocol and authorization | Public and confidential code clients require S256; missing PKCE, plain and incorrect verifiers fail. | [P2 locally verified](../tests/conformance/p2-evidence.json) |
 | CORE-2 | MUST | P2 | Protocol and authorization | Implicit and password requests fail and are absent from discovery. | [P2 locally verified](../tests/conformance/p2-evidence.json) |
 | CORE-3 | MUST | P2 | Protocol and authorization | Wildcard, prefix, altered path and unregistered redirects fail without an unsafe redirect. | [P2 locally verified](../tests/conformance/p2-evidence.json) |
-| CORE-4 | MUST | P3 | Protocol and authorization | Native loopback port exception works; host/path changes fail; private schemes and claimed HTTPS have separate fixtures. | Planned (foundation evidence above where applicable) |
+| CORE-4 | MUST | P3 | Protocol and authorization | Native loopback port exception works; host/path changes fail; private schemes and claimed HTTPS have separate fixtures. | [P3 native/discovery slice verified](../tests/conformance/p3-evidence.json) |
 | CORE-5 | MUST | P2 | Protocol and authorization | A code expires within 60 seconds; concurrent redemption has one winner; authenticated reuse invalidates its issued lineage. | [P2 locally verified](../tests/conformance/p2-evidence.json) |
 | CORE-6 | MUST | P2 | Protocol and authorization | Public refresh follows rotation and any configured sender binding; stale credentials cannot mint new tokens. | [P2 locally verified](../tests/conformance/p2-evidence.json) |
 | CORE-7 | MUST | P2 | Protocol and authorization | Confidential clients obtain only approved machine-resource scopes. | [P2 locally verified](../tests/conformance/p2-evidence.json) |
@@ -26,7 +26,7 @@ The connected reference BFF and resource API prove read 123, deny 124/write befo
 | CORE-10 | SHOULD | P7 | Protocol and authorization | Device flow enforces expiry, polling interval, slow_down, rate limits and explicit user verification. | Planned (foundation evidence above where applicable) |
 | CORE-11 | MAY | P8 | Protocol and authorization | CIBA has client authentication, user binding, approval timeout and tested delivery/polling semantics. | Planned (foundation evidence above where applicable) |
 | CORE-12 | MUST | P2 | Protocol and authorization | Resources reject access tokens in query/body credentials and accept only the configured authorization scheme. | [P2 locally verified](../tests/conformance/p2-evidence.json) |
-| CORE-13 | MUST | P2 foundation / P3 completion | Protocol and authorization | P2 has endpoint-specific errors/recovery, typed mappings, trusted request correlation, redaction and denial/non-enumeration evidence. P3 completes resource challenges and discoverable resource metadata URLs. | [P2 locally verified](../tests/conformance/p2-evidence.json); P3 remainder planned |
+| CORE-13 | MUST | P2 foundation / P3 completion | Protocol and authorization | P2 has endpoint-specific errors/recovery, typed mappings, trusted request correlation, redaction and denial/non-enumeration evidence. P3 completes resource challenges and discoverable resource metadata URLs. | [P2 locally verified](../tests/conformance/p2-evidence.json); [P3 Bearer metadata/challenges verified](../tests/conformance/p3-evidence.json); binding/step-up profiles retain later gates |
 
 ## DISC
 
@@ -34,7 +34,7 @@ The connected reference BFF and resource API prove read 123, deny 124/write befo
 | --- | --- | --- | --- | ---  --- |
 | DISC-1 | MUST | P1 | Protocol and resource integration | RFC 8414 issuer-path discovery resolves correctly for two tenants and rejects spoofed hosts. | Planned (foundation evidence above where applicable) |
 | DISC-2 | MUST | P2 | Protocol and resource integration | OIDC discovery returns the same issuer and consistent endpoint and algorithm metadata. | [P2 locally verified](../tests/conformance/p2-evidence.json) |
-| DISC-3 | MUST | P3 | Protocol and resource integration | Each sample resource serves correct protected-resource metadata and advertises its URL in challenges. | Planned (foundation evidence above where applicable) |
+| DISC-3 | MUST | P3 | Protocol and resource integration | Each sample resource serves correct protected-resource metadata and advertises its URL in challenges. | [P3 native/discovery slice verified](../tests/conformance/p3-evidence.json) |
 | DISC-4 | MUST | P2 | Protocol and resource integration | Successful and applicable error authorization responses carry the correct iss; metadata advertises it. | [P2 locally verified](../tests/conformance/p2-evidence.json) |
 | DISC-5 | MUST | P5 | Protocol and resource integration | Metadata is generated from implemented capabilities, including CIMD and enabled binding/authentication methods. | Planned (foundation evidence above where applicable) |
 | DISC-6 | MAY | P8 | Protocol and resource integration | Signed metadata validates under configured trust and cannot override authoritative issuer identity inconsistently. | Planned (foundation evidence above where applicable) |
@@ -56,7 +56,7 @@ The connected reference BFF and resource API prove read 123, deny 124/write befo
 | CLI-9 | SHOULD | P7 | Client registry and egress | PKI and self-signed mTLS client authentication have certificate and reverse-proxy negative tests. | Planned (foundation evidence above where applicable) |
 | CLI-10 | MUST | P2 | Client registry and egress | Basic authentication validates hashed generated secrets and tested bounded rotation overlap. | [P2 locally verified](../tests/conformance/p2-evidence.json) |
 | CLI-11 | MUST | P3 | Client registry and egress | Public code clients cannot bypass PKCE, refresh rotation or required sender binding. | Planned (foundation evidence above where applicable) |
-| CLI-12 | SHOULD | P3 | Client registry and egress | Web and native client metadata select distinct tested redirect-validation policies. | Planned (foundation evidence above where applicable) |
+| CLI-12 | SHOULD | P3 | Client registry and egress | Web and native client metadata select distinct tested redirect-validation policies. | [P3 native/discovery slice verified](../tests/conformance/p3-evidence.json) |
 | CLI-13 | MAY | P8 | Client registry and egress | Attestation validates pinned trust, freshness and build policy without turning untrusted attestation into identity. | Planned (foundation evidence above where applicable) |
 | CLI-14 | MUST | P3 | Client registry and egress | Any-client, CIMD-host allowlist and admin-approved-only tenant policies have positive and negative cases. | Planned (foundation evidence above where applicable) |
 

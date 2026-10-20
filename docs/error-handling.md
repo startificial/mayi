@@ -124,3 +124,28 @@ OAuth adapters use fixed standard error names and no rejected values or raw inte
 Shared budget rejection is 429 with Retry-After. Known rejection before issuance does not resolve an earlier ambiguous one-use request. Never infer retry safety from timeout/5xx. The SDK returns typed ErrDenied/ErrUnavailable and preserves context cancellation; application callback errors remain the application's responsibility. See its integration guide for bounded form handling and body validation.
 
 Generated X-Request-ID values link responses, transport logs and durable audit/outbox. Trusted peer IP and bounded printable User-Agent are stored as metadata; rejected credentials, bodies and arbitrary key URLs never become diagnostic text. Missing denial-audit storage is itself logged as security_audit_unavailable and never permits a rejected action.
+
+## P3 resource challenges
+
+The [resource SDK](../pkg/resource/README.md#resource-discovery-and-challenges)
+provides resource-owned metadata and Bearer challenge encoding. It deliberately
+uses OAuth JSON/challenges rather than the local management envelope. Missing
+credentials get 401 with only resource_metadata; malformed credential transport
+gets 400 invalid_request; invalid, foreign, inactive or object-denied authority
+gets generic 401 invalid_token. A typed insufficient permission scope gets 403
+insufficient_scope and an optional explicitly public configured scope hint.
+A foreign tuple or unknown object never produces a permission/existence hint.
+
+Unavailable authority is 503 temporarily_unavailable without WWW-Authenticate.
+Unclassified callback errors and invalid public hint configuration become fixed
+500 server_error. Never translate a dependency failure into an invitation to
+reauthenticate, echo raw error strings or retry a one-use exchange automatically.
+All these responses use no-store; the challenge URL comes from trusted resource
+configuration, including path-based audiences, never request Host/forwarded headers.
+
+Tests in pkg/resource/metadata_test.go cover status/body/headers, malformed and
+missing credentials, host spoofing, secret redaction and invalid hint configuration.
+The resource service tests establish authority-before-permission/payload ordering;
+the real-service P3 fixture proves metadata discovery and current ACL/revocation
+cutoff. [P3 evidence](../tests/conformance/p3-evidence.json) tracks this bounded
+profile. DPoP challenges/nonces and later step-up details remain separate gates.

@@ -11,6 +11,7 @@ import (
 const MaxAuthorizationDetailsTypes = 32
 
 type Client struct {
+	ApplicationType           string
 	Introspection             bool
 	AuthenticationVersion     uint64
 	AuthMethod                string
@@ -28,6 +29,9 @@ func ValidClientID(id string) bool {
 	return resources.ValidID(id) || strings.HasPrefix(id, "client:") && resources.ValidID(strings.TrimPrefix(id, "client:"))
 }
 func (c Client) Valid() bool {
+	if c.ApplicationType != "" && c.ApplicationType != "web" && c.ApplicationType != "native" || c.ApplicationType == "native" && (c.Machine || c.Introspection || c.AuthMethod != "" && c.AuthMethod != "none") {
+		return false
+	}
 	if c.Introspection && (c.AuthMethod == "" || c.AuthMethod == "none") {
 		return false
 	}
@@ -40,7 +44,7 @@ func (c Client) Valid() bool {
 	}
 	seen := map[string]bool{}
 	for _, uri := range c.RedirectURIs {
-		if !ValidRedirectURI(uri) || seen[uri] {
+		if !ValidApplicationRedirect(c.EffectiveApplicationType(), uri) || seen[uri] {
 			return false
 		}
 		seen[uri] = true
@@ -60,6 +64,29 @@ func (c Client) Valid() bool {
 		seen[typ] = true
 	}
 	return true
+}
+
+// EffectiveApplicationType preserves the registered web profile when omitted.
+// Native applications are public even when they use claimed HTTPS callbacks.
+func (c Client) EffectiveApplicationType() string {
+	if c.ApplicationType == "" {
+		return "web"
+	}
+	return c.ApplicationType
+}
+
+// AllowsRedirect applies the loopback port exception only to registered native
+// clients. The exact requested URI is subsequently pinned by PAR and the code.
+func (c Client) AllowsRedirect(raw string) bool {
+	if !c.Valid() || !ValidApplicationRedirect(c.EffectiveApplicationType(), raw) {
+		return false
+	}
+	for _, registered := range c.RedirectURIs {
+		if RedirectMatches(c.EffectiveApplicationType(), registered, raw) {
+			return true
+		}
+	}
+	return false
 }
 
 // AllowsObjectProfile checks the client's registered vocabulary/resource

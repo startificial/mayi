@@ -14,7 +14,16 @@ import (
 )
 
 func TestP2EvidenceReferencesExecutableChecksAndPinnedStandards(t *testing.T) {
-	data, err := os.ReadFile("p2-evidence.json")
+	verifyEvidence(t, "p2-evidence.json", "P2", 7)
+}
+
+func TestP3EvidenceReferencesExecutableChecksAndPinnedStandards(t *testing.T) {
+	verifyEvidence(t, "p3-evidence.json", "P3", 2)
+}
+
+func verifyEvidence(t *testing.T, filename, phase string, minGroups int) {
+	t.Helper()
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +42,7 @@ func TestP2EvidenceReferencesExecutableChecksAndPinnedStandards(t *testing.T) {
 			Checks       []struct{ Path, Test string }
 		}
 	}
-	if json.Unmarshal(data, &manifest) != nil || manifest.Version != 1 || manifest.Phase != "P2" || manifest.Certified || len(manifest.Groups) < 7 {
+	if json.Unmarshal(data, &manifest) != nil || manifest.Version != 1 || manifest.Phase != phase || manifest.Certified || len(manifest.Groups) < minGroups {
 		t.Fatal("invalid preview evidence manifest")
 	}
 	pins, err := os.ReadFile("../../specs/manifest.yaml")

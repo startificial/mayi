@@ -80,8 +80,15 @@
         "7",
         "8"
       ],
-      "implemented_sections": [],
-      "deviations": []
+      "implemented_sections": [
+        "7.1",
+        "7.2",
+        "7.3",
+        "8.4"
+      ],
+      "deviations": [
+        "Native callbacks are operator registered. The native profile is public only; the loopback exception accepts exactly 127.0.0.1 and ::1, never localhost. Platform app association and external-browser behavior are not certified."
+      ]
     },
     {
       "id": "rfc8414",
@@ -399,6 +406,48 @@
       ],
       "deviations": [
         "Mayi requires PAR for every interactive authorization request; no per-client or scope-only bypass is supported."
+      ]
+    },
+    {
+      "id": "rfc6750",
+      "revision": "RFC 6750",
+      "url": "https://www.rfc-editor.org/rfc/rfc6750.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc6750.txt",
+      "sha256": "9dc385cf4ecdd85024e5a95e447ede9230e11700bf35251906b25b37557d604b",
+      "retrieved_on": "2026-10-19",
+      "target_phase": "P3",
+      "target_sections": [
+        "3",
+        "3.1"
+      ],
+      "implemented_sections": [
+        "3",
+        "3.1"
+      ],
+      "deviations": [
+        "SDK object-policy denials are generic invalid_token; scope hints require valid local token authority and explicit public permission configuration."
+      ]
+    },
+    {
+      "id": "rfc9728",
+      "revision": "RFC 9728",
+      "url": "https://www.rfc-editor.org/rfc/rfc9728.txt",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc9728.txt",
+      "sha256": "b65bcd0d9daf90fd7006a42cf48e0ac3ba24b7f5637d5197f2de41c6b91c8a89",
+      "retrieved_on": "2026-10-19",
+      "target_phase": "P3",
+      "target_sections": [
+        "2",
+        "3",
+        "5.1"
+      ],
+      "implemented_sections": [
+        "2",
+        "3",
+        "5.1"
+      ],
+      "deviations": [
+        "Unsigned resource-owned single-AS metadata only; canonical HTTPS audience profile excludes query components. DPoP advertisement awaits the remaining P3 evidence."
       ]
     }
   ]

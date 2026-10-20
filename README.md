@@ -30,6 +30,8 @@ P0 is complete: [the protocol-spike report](docs/p0/protocol-spike.md) records F
 
 P2 implements the [core authorization preview](docs/p2-core-authorization.md): required PAR/RAR, upstream OIDC, guarded consent, immutable incremental grant revisions, JWT/opaque access tokens, refresh rotation, online introspection/revocation, the Go resource SDK and encrypted reference BFF. PostgreSQL also coordinates cross-replica abuse limits. [Executable evidence](tests/conformance/p2-evidence.json) covers the preview; production operations, broader interoperability and certification remain later gates.
 
+P3 is [in progress](docs/p3-agent-clients.md): native callback registration and resource-owned metadata/Bearer challenges are implemented with [local evidence](tests/conformance/p3-evidence.json). CIMD, DCR, tenant client policy, remaining DPoP coverage and the browser-held-token sample are outstanding.
+
 ## The problems
 
 A platform that lets users, third-party clients and AI agents act on its resources needs one authorization server that solves eight separate problems. Each is independent: solving one does not solve the others.

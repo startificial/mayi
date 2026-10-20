@@ -41,7 +41,7 @@ func (r Request) Valid() bool {
 		}
 	}
 
-	if !r.TenantIssuer.Valid() || !resources.ValidID(r.ClientID) || !clients.ValidAuthorizationRedirect(r.RedirectURI) || !resources.ValidURI(r.ResourceURI) || !digestValue(r.PKCEChallenge) || r.BindingThumbprint != "" && !digestValue(r.BindingThumbprint) || len(r.State) > 1024 || !grants.ValidScopes(r.PermissionScopes) || len(r.PermissionScopes) == 0 {
+	if !r.TenantIssuer.Valid() || !resources.ValidID(r.ClientID) || !clients.ValidApplicationRedirect("native", r.RedirectURI) || !resources.ValidURI(r.ResourceURI) || !digestValue(r.PKCEChallenge) || r.BindingThumbprint != "" && !digestValue(r.BindingThumbprint) || len(r.State) > 1024 || !grants.ValidScopes(r.PermissionScopes) || len(r.PermissionScopes) == 0 {
 		return false
 	}
 	for _, c := range r.State {
@@ -89,7 +89,7 @@ func (r Request) MatchesObjectRegistration(current Registration) bool {
 }
 
 func (r Request) matchesRegistration(current Registration) bool {
-	if !r.Valid() || !current.Client.Valid() || !current.Resource.Valid() || !current.Policy.Valid() || !current.Client.Enabled || current.Client.ID != r.ClientID || current.Resource.URI != r.ResourceURI || !slices.Contains(current.Client.RedirectURIs, r.RedirectURI) || !slices.Contains(current.Client.Resources, current.Resource.ID) {
+	if !r.Valid() || !current.Client.Valid() || !current.Resource.Valid() || !current.Policy.Valid() || !current.Client.Enabled || current.Client.ID != r.ClientID || current.Resource.URI != r.ResourceURI || !current.Client.AllowsRedirect(r.RedirectURI) || !slices.Contains(current.Client.Resources, current.Resource.ID) {
 		return false
 	}
 	if (current.Policy.RequireBinding || current.Resource.RequireBinding) && r.BindingThumbprint == "" {

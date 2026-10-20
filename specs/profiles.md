@@ -10,7 +10,7 @@ These resolve the implementation plan's clarification table while preserving the
 
 | Requirements | Accepted interpretation and delivery condition |
 | --- | --- |
-| CORE-3/4 | Exact redirect matching, with only RFC 8252's native loopback port exception. Compare host/path/scheme; exceptions do not create wildcard redirects. Native fixtures arrive in P3. |
+| CORE-3/4 | Exact redirect matching, with only RFC 8252's native loopback port exception. Compare host/path/scheme; exceptions do not create wildcard redirects. The [first P3 slice](../docs/p3-agent-clients.md) proves registered public native callbacks, loopback port-only matching and exact redemption correlation. OS associations/browser interoperability remain unclaimed. |
 | CORE-5 | Code stores original authorization transaction, redirect, exact revision and S256 challenge; lifetime ≤60s. OAuth 2.1 -16 permits omission of redirect_uri at redemption. When present it must match the original exactly. Authenticated reuse commits lineage revocation before returning invalid_grant. |
 | GRANT-2 | Claims and approved typed RAR object/action tuples are immutable ceilings. Enforce the exact requested object/action and current resource-owned permissions before payload access; historical JWT claims cannot be edited after issuance. |
 | RES-10/GRANT-4/6/SEC-2 | [ADR 0010](../docs/adr/0010-rar-object-grants-prerequisite.md) makes RFC 9396 object grants a P2 prerequisite, with required RFC 9126 PAR for that profile. Use registered `authorization_details` types with exact audience/identifier/action semantics, safe consent, immutable revision/credential ceilings, standard token/JWT/introspection details and resource enforcement. Scope-only fallback, extra objects/actions and unknown semantics fail closed; P4 exchange must preserve/narrow these tuples. Additional type profiles may follow later. |
@@ -41,3 +41,9 @@ These resolve the implementation plan's clarification table while preserving the
 | FAPI / recommended profiles | Entire selected security profile, including required PAR and sender constraints | P7 profile-specific conformance and operational evidence |
 
 Only the documented P2 base/online resource preview is enabled by matching configuration and local evidence. Other profiles stay disabled until their evidence exists. Discovery must be derived from enforced configured capabilities, not from a library's available handlers. Implicit/password flows are never enabled. Do not compose an upstream all-enabled example.
+
+The first P3 slice adds resource-owned RFC 9728 metadata and RFC 6750 Bearer
+challenges through the existing resource SDK, plus native callback registration.
+[P3 evidence](../tests/conformance/p3-evidence.json) is partial phase evidence:
+CIMD, DCR, client policy, complete DPoP/nonce evidence and the WebCrypto sample
+remain outstanding. No unknown-client or full MCP profile is enabled.

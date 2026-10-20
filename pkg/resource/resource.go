@@ -21,6 +21,9 @@ import (
 
 var ErrDenied = errors.New("resource access denied")
 var ErrUnavailable = errors.New("resource authority unavailable")
+var ErrInsufficientScope = errors.New("resource permission scope required")
+var ErrMissingCredential = errors.New("resource credential missing")
+var ErrInvalidRequest = errors.New("invalid resource credential transport")
 
 type Profile struct {
 	Type    string
@@ -96,6 +99,9 @@ func (c *Client) WithAccess(ctx context.Context, token string, r Request, fn fun
 		return ErrDenied
 	}
 	err := c.service.WithAccess(ctx, token, service.Request{Type: r.Type, Identifier: r.Identifier, Action: r.Action, Permission: r.Permission, Proof: r.Proof, Method: r.Method, URL: r.URL}, func(ctx context.Context, d service.Decision) error { return fn(ctx, principal(d)) })
+	if errors.Is(err, service.ErrInsufficientScope) {
+		return errors.Join(ErrDenied, ErrInsufficientScope)
+	}
 	if errors.Is(err, service.ErrDenied) {
 		return ErrDenied
 	}
@@ -111,17 +117,17 @@ func (c *Client) WithAccess(ctx context.Context, token string, r Request, fn fun
 // HeaderToken is the sole supported credential location. Resource handlers must
 // reject query/body access-token parameters too, before invoking their service.
 func HeaderToken(r *http.Request) (string, error) {
-	if r == nil || r.URL == nil || len(r.Header.Values("Content-Type")) > 1 || len(r.Header.Get("DPoP")) > 8192 || r.URL.Query().Has("access_token") || len(r.Header.Values("Authorization")) != 1 || len(r.Header.Values("DPoP")) > 1 {
-		return "", ErrDenied
+	if r == nil || r.URL == nil || len(r.Header.Values("Content-Type")) > 1 || len(r.Header.Get("DPoP")) > 8192 || r.URL.Query().Has("access_token") || len(r.Header.Values("Authorization")) > 1 || len(r.Header.Values("DPoP")) > 1 {
+		return "", errors.Join(ErrDenied, ErrInvalidRequest)
 	}
 	query, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil || query.Has("access_token") {
-		return "", ErrDenied
+		return "", errors.Join(ErrDenied, ErrInvalidRequest)
 	}
 	if raw := r.Header.Get("Content-Type"); raw != "" {
 		media, _, err := mime.ParseMediaType(raw)
 		if err != nil {
-			return "", ErrDenied
+			return "", errors.Join(ErrDenied, ErrInvalidRequest)
 		}
 		if media == "application/x-www-form-urlencoded" && r.Body != nil {
 			original := r.Body
@@ -129,21 +135,29 @@ func HeaderToken(r *http.Request) (string, error) {
 			_ = original.Close()
 			r.Body = io.NopCloser(bytes.NewReader(body))
 			if err != nil || len(body) > 65536 {
-				return "", ErrDenied
+				return "", errors.Join(ErrDenied, ErrInvalidRequest)
 			}
 			form, err := url.ParseQuery(string(body))
 			if err != nil || form.Has("access_token") {
-				return "", ErrDenied
+				return "", errors.Join(ErrDenied, ErrInvalidRequest)
 			}
 		}
 	}
+	if len(r.Header.Values("Authorization")) == 0 && len(r.Header.Values("DPoP")) == 0 {
+		return "", errors.Join(ErrDenied, ErrMissingCredential)
+	}
 	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+	if strings.EqualFold(scheme, "Bearer") {
+		scheme = "Bearer"
+	} else if strings.EqualFold(scheme, "DPoP") {
+		scheme = "DPoP"
+	}
 	if !ok || token == "" || len(token) > 65536 || strings.ContainsAny(token, " \r\n\t") || scheme != "Bearer" && scheme != "DPoP" || scheme == "DPoP" && r.Header.Get("DPoP") == "" || scheme == "Bearer" && r.Header.Get("DPoP") != "" {
-		return "", ErrDenied
+		return "", errors.Join(ErrDenied, ErrInvalidRequest)
 	}
 	for _, c := range token {
 		if c < 0x21 || c > 0x7e {
-			return "", ErrDenied
+			return "", errors.Join(ErrDenied, ErrInvalidRequest)
 		}
 	}
 	return token, nil

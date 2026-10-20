@@ -62,10 +62,15 @@ func TestResourceCredentialsComeOnlyFromOneAuthorizationHeader(t *testing.T) {
 			}
 		})
 	}
-	r := httptest.NewRequest("GET", "https://api.example/documents/123", nil)
-	r.Header.Set("Authorization", "Bearer access")
-	if token, err := resource.HeaderToken(r); err != nil || token != "access" {
-		t.Fatal("valid header denied")
+	for _, scheme := range []string{"Bearer", "bearer", "BEARER", "DPoP", "dpop"} {
+		r := httptest.NewRequest("GET", "https://api.example/documents/123", nil)
+		r.Header.Set("Authorization", scheme+" access")
+		if strings.EqualFold(scheme, "DPoP") {
+			r.Header.Set("DPoP", "proof")
+		}
+		if token, err := resource.HeaderToken(r); err != nil || token != "access" {
+			t.Fatal("valid header denied", scheme)
+		}
 	}
 }
 

@@ -195,3 +195,13 @@ records the live lifecycle/status boundary and application-owned encrypted state
 ## P2 capability ownership
 
 `services/authentication` owns upstream/local authentication and finite shared request admission. `services/authorization` owns PAR, guarded presentation and approval; `domain/grants` owns immutable tuple ceilings and new-consent union. `services/tokens` owns code/refresh/machine lifecycle, online status and administered machine authority. `services/grants` owns user/operator grant views and revocation. `services/delivery` owns credential-free audit correlation and delivery. These additions use the existing contexts and layout; no shared repository or parallel protocol engine is introduced. `tests/conformance` retains a checked local evidence manifest, distinct from external certification.
+
+## P3 native and discovery ownership
+
+Client application type and callback rules remain in `domain/clients`, reused by
+authorization and the existing administration service. PostgreSQL stores the
+registered type; no parallel registration owner is added. `services/resource`
+owns the public resource capability projection and permission hints; the bounded
+`pkg/resource` composition maps its own config and HTTP metadata/challenge DTOs.
+It does not import server discovery, administration or persistence. See
+[ADR 0025](adr/0025-p3-native-callbacks-and-resource-discovery.md).

@@ -13,6 +13,7 @@ import (
 
 var ErrDenied = errors.New("resource access denied")
 var ErrUnavailable = errors.New("resource authority unavailable")
+var ErrInsufficientScope = errors.New("resource permission scope required")
 
 type Request struct{ Type, Identifier, Action, Permission, Proof, Method, URL string }
 type Decision struct {
@@ -58,7 +59,7 @@ func (s *Service) WithAccess(ctx context.Context, raw string, r Request, fn func
 	}
 	c := verified.Claims
 	now := s.clock.Now()
-	if c.Scope != s.scope || c.Resource != s.resource || c.ID == "" || !now.Before(c.ExpiresAt) || c.IssuedAt.After(now.Add(5*time.Second)) || c.ExpiresAt.After(c.IssuedAt.Add(15*time.Minute)) || !slices.Contains(c.Scopes, r.Permission) || !c.ObjectCeiling.Permits(s.scope, s.resource, r.Type, r.Identifier, r.Action) || c.BindingThumbprint != "" && !verified.ProofVerified {
+	if c.Scope != s.scope || c.Resource != s.resource || c.ID == "" || !now.Before(c.ExpiresAt) || c.IssuedAt.After(now.Add(5*time.Second)) || c.ExpiresAt.After(c.IssuedAt.Add(15*time.Minute)) || !c.ObjectCeiling.Permits(s.scope, s.resource, r.Type, r.Identifier, r.Action) || c.BindingThumbprint != "" && !verified.ProofVerified {
 		return ErrDenied
 	}
 	if _, err := resources.ValidateObjectRequest(s.scope, s.resource, s.profiles, c.ObjectCeiling.Snapshot().Details); err != nil {
@@ -66,6 +67,9 @@ func (s *Service) WithAccess(ctx context.Context, raw string, r Request, fn func
 	}
 	if _, err := grants.NewRevision(grants.RevisionSpec{Scope: c.Scope, GrantID: c.GrantID, Number: c.Revision, ClientID: c.ClientID, Subject: c.Subject, PrincipalType: c.PrincipalType, Resource: c.Resource, Scopes: c.Scopes, ObjectCeiling: c.ObjectCeiling, ExpiresAt: c.ExpiresAt}); err != nil {
 		return ErrDenied
+	}
+	if !slices.Contains(c.Scopes, r.Permission) {
+		return errors.Join(ErrDenied, ErrInsufficientScope)
 	}
 	decision := Decision{Claims: c, Request: r}
 	calls := 0
