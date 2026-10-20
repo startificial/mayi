@@ -77,7 +77,7 @@ plain go test skips PostgreSQL/OpenBao tests when its explicit environment is ab
 ## ES256 DPoP sender binding
 
 The second P3 slice implements the shared sender-binding profile in
-[ADR 0026](adr/0026-p3-dpop-nonces-and-binding.md). Apply migration 16 before the
+[ADR 0026](adr/0026-p3-dpop-nonces-and-binding.md). Apply migrations 16–17 before the
 upgraded runtime, using the separate owner connection. Existing client creation
 accepts `dpop_bound_access_tokens: true`; tenant/resource require_binding also
 continues to enforce binding. Missing proof authority fails closed on issuance,

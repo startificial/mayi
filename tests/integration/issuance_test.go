@@ -104,12 +104,12 @@ func setup(t *testing.T) *environment {
 	}
 	// The shared adapter always targets the current additive schema. Keep the
 	// original P0 behavioral fixtures, but run them against every migration.
-	for _, source := range []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed, migrations.ObjectPresentations, migrations.Lifecycle, migrations.RequiredAuthority, migrations.RequestBudgets, migrations.Incremental, migrations.AuditContext, migrations.NativeClients, migrations.DPoP} {
+	for _, source := range []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed, migrations.ObjectPresentations, migrations.Lifecycle, migrations.RequiredAuthority, migrations.RequestBudgets, migrations.Incremental, migrations.AuditContext, migrations.NativeClients, migrations.DPoP, migrations.ProofStatePrivileges} {
 		if _, err := admin.Exec(ctx, source); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := admin.Exec(ctx, `GRANT USAGE ON SCHEMA mayi TO mayi_runtime; GRANT SELECT,INSERT,UPDATE ON ALL TABLES IN SCHEMA mayi TO mayi_runtime; GRANT USAGE ON ALL SEQUENCES IN SCHEMA mayi TO mayi_runtime; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA mayi TO mayi_runtime; REVOKE INSERT,UPDATE ON mayi.grant_revisions FROM mayi_runtime; GRANT DELETE ON mayi.request_budgets,mayi.proof_nonces,mayi.proof_replays TO mayi_runtime`); err != nil {
+	if _, err := admin.Exec(ctx, `GRANT USAGE ON SCHEMA mayi TO mayi_runtime; GRANT SELECT,INSERT,UPDATE ON ALL TABLES IN SCHEMA mayi TO mayi_runtime; GRANT USAGE ON ALL SEQUENCES IN SCHEMA mayi TO mayi_runtime; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA mayi TO mayi_runtime; REVOKE INSERT,UPDATE ON mayi.grant_revisions FROM mayi_runtime; GRANT DELETE ON mayi.request_budgets TO mayi_runtime; REVOKE UPDATE,DELETE ON mayi.proof_nonces,mayi.proof_replays FROM mayi_runtime`); err != nil {
 		t.Fatal(err)
 	}
 	config, err := pgxpool.ParseConfig(os.Getenv("MAYI_P0_POSTGRES"))

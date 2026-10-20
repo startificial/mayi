@@ -156,6 +156,14 @@
         {
           "path": "internal/domain/authorization/transaction_test.go",
           "test": "TestAuthorizationRejectsExpiryMalformedProofAndExpansion"
+        },
+        {
+          "path": "tests/integration/p3_proof_privileges_test.go",
+          "test": "TestP3ProofCleanupCannotDeleteActiveOrForeignState"
+        },
+        {
+          "path": "tests/integration/foundation_regression_test.go",
+          "test": "TestP2RejectsInheritedAuthorityUpdates"
         }
       ]
     }

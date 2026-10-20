@@ -20,7 +20,7 @@ func (s *Store) ValidProofNonce(ctx context.Context, scope grants.Scope, purpose
 func (s *Store) RememberProofNonce(ctx context.Context, scope grants.Scope, purpose, target, thumb, hash string, expiry time.Time) error {
 	return s.Run(ctx, scope, func(raw tokens.Transaction) error {
 		t := raw.(*transaction)
-		if _, err := t.tx.Exec(ctx, `DELETE FROM mayi.proof_nonces WHERE tenant_id=$1 AND nonce_hash IN (SELECT nonce_hash FROM mayi.proof_nonces WHERE tenant_id=$1 AND expires_at<=clock_timestamp() ORDER BY expires_at LIMIT 100)`, scope.TenantID); err != nil {
+		if _, err := t.tx.Exec(ctx, `SELECT mayi.cleanup_expired_proof_state()`); err != nil {
 			return err
 		}
 		tag, err := t.tx.Exec(ctx, `INSERT INTO mayi.proof_nonces(tenant_id,purpose,target,thumbprint,nonce_hash,expires_at) SELECT $1,$2,$3,$4,$5,$6 WHERE $6>clock_timestamp() AND $6<=clock_timestamp()+interval '65 seconds'`, scope.TenantID, purpose, target, thumb, hash, expiry)

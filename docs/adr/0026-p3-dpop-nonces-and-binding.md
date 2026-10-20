@@ -54,7 +54,10 @@ Migration 16 adds this nonce table and per-client binding flag, with forced RLS
 and narrow runtime privileges. The proof replay port rechecks nonce validity and
 atomically inserts the unique tenant/key/jti under one database statement. A nonce
 can accompany several fresh proofs until expiry; one proof ID has one winner
-across replicas. Bounded cleanup removes expired nonce/replay rows. Application
+across replicas. Migration 17 supplies bounded expired-only cleanup through a tenant-scoped
+SECURITY DEFINER function with a fixed pg_catalog search path and revoked PUBLIC
+execution. Runtime cannot directly UPDATE or DELETE nonce/replay rows; effective
+inherited privileges are checked too. Cleanup preserves active and foreign state. Application
 clocks must be synchronized; database expiry predicates fail closed rather than
 accepting stale state. Missing/unavailable state returns unavailable, never a
 positive decision or an offline fallback.
