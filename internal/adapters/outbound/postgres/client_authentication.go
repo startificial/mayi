@@ -60,7 +60,7 @@ func (s *Store) Authentication(ctx context.Context, scope grants.Scope, id strin
 		if len(result.SecretHashes) > 2 {
 			return clients.ErrUnavailable
 		}
-		rows, err = t.tx.Query(ctx, `SELECT DISTINCT s.name FROM mayi.resource_scopes s JOIN mayi.client_resources c USING(tenant_id,resource_id) WHERE c.tenant_id=$1 AND c.client_id=$2 ORDER BY s.name LIMIT 129`, scope.TenantID, id)
+		rows, err = t.tx.Query(ctx, `SELECT DISTINCT s.name FROM mayi.resource_scopes s JOIN mayi.client_resources c USING(tenant_id,resource_id) WHERE c.tenant_id=$1 AND c.client_id=$2 AND c.resource_id=ANY($3::text[]) ORDER BY s.name LIMIT 129`, scope.TenantID, id, result.Client.Resources)
 		if err != nil {
 			return err
 		}
@@ -80,7 +80,7 @@ func (s *Store) Authentication(ctx context.Context, scope grants.Scope, id strin
 		if err != nil {
 			return err
 		}
-		rows, err = t.tx.Query(ctx, `SELECT r.uri FROM mayi.client_resources c JOIN mayi.resources r USING(tenant_id,resource_id) WHERE c.tenant_id=$1 AND c.client_id=$2 LIMIT 33`, scope.TenantID, id)
+		rows, err = t.tx.Query(ctx, `SELECT r.uri FROM mayi.client_resources c JOIN mayi.resources r USING(tenant_id,resource_id) WHERE c.tenant_id=$1 AND c.client_id=$2 AND c.resource_id=ANY($3::text[]) LIMIT 33`, scope.TenantID, id, result.Client.Resources)
 		if err != nil {
 			return err
 		}

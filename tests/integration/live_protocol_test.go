@@ -31,6 +31,8 @@ import (
 	"github.com/startificial/mayi/internal/adapters/outbound/egress"
 	"github.com/startificial/mayi/internal/adapters/outbound/postgres"
 	"github.com/startificial/mayi/internal/app"
+	"github.com/startificial/mayi/internal/domain/grants"
+	"github.com/startificial/mayi/internal/services/administration"
 	"github.com/startificial/mayi/internal/services/authentication"
 	"github.com/startificial/mayi/internal/services/authorization"
 	clientservice "github.com/startificial/mayi/internal/services/clients"
@@ -419,12 +421,25 @@ func TestP2UserAndAdministratorControlsAuthenticateBeforeLoading(t *testing.T) {
 	}
 }
 
-func newLiveProtocol(t *testing.T) *liveProtocol {
+func newLiveProtocol(t *testing.T, metadataFactory ...func(*foundation, grants.Scope) *administration.Metadata) *liveProtocol {
 	t.Helper()
 	ctx := context.Background()
 	signer := setup(t).signer
 	e, _, _, proof := setupAuthorization(t)
 	e.config.Tenants = []app.TenantConfig{{ID: "a"}}
+	var authMetadata []clientservice.ClientMetadataResolver
+	var consentMetadata []authorization.ClientMetadataResolver
+	var tokenMetadata []tokens.ClientMetadataResolver
+	if len(metadataFactory) > 1 {
+		t.Fatal("multiple metadata factories")
+	}
+	if len(metadataFactory) == 1 {
+		m := metadataFactory[0](e, proof.TenantIssuer)
+		authMetadata = append(authMetadata, m)
+		consentMetadata = append(consentMetadata, m)
+		tokenMetadata = append(tokenMetadata, m)
+	}
+
 	installBrowserResourceAuthority(t, e)
 	owner, err := postgres.NewResourceConsent(e.store, []postgres.ResourceConsentConfig{{Scope: proof.TenantIssuer, Resource: "https://api.example"}})
 	if err != nil {
@@ -438,7 +453,7 @@ func newLiveProtocol(t *testing.T) *liveProtocol {
 	if err != nil {
 		t.Fatal(err)
 	}
-	consent, err := authorization.New(e.store, clock{}, source, owner)
+	consent, err := authorization.New(e.store, clock{}, source, owner, consentMetadata...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,7 +469,7 @@ func newLiveProtocol(t *testing.T) *liveProtocol {
 	if err != nil {
 		t.Fatal(err)
 	}
-	clients, err := clientservice.New(e.store, clock{}, assertions, secrets, proof.TenantIssuer, admission)
+	clients, err := clientservice.New(e.store, clock{}, assertions, secrets, proof.TenantIssuer, admission, authMetadata...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -462,7 +477,7 @@ func newLiveProtocol(t *testing.T) *liveProtocol {
 	if err != nil {
 		t.Fatal(err)
 	}
-	issuance, err := app.NewIssuance(e.store, clock{}, signer, material, e.store, 5*time.Minute)
+	issuance, err := tokens.New(e.store, clock{}, cryptoadapter.New(), signer, material, e.store, 5*time.Minute, admission, tokenMetadata...)
 	if err != nil {
 		t.Fatal(err)
 	}

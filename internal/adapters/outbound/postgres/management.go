@@ -115,12 +115,15 @@ func (m *management) CreateClient(ctx context.Context, c clients.Client) error {
 	if redirects == nil {
 		redirects = []string{}
 	} // A machine client has an empty callback list, not SQL NULL.
-	_, err := m.tx.Exec(ctx, `INSERT INTO mayi.clients(tenant_id,client_id,enabled,name,redirect_uris,access_token_seconds,auth_method,machine,introspection,application_type,require_binding) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, m.scope.TenantID, c.ID, c.Enabled, c.Name, redirects, c.AccessTokenSeconds, clientAuthMethod(c.AuthMethod), c.Machine, c.Introspection, c.EffectiveApplicationType(), c.RequireBinding)
+	_, err := m.tx.Exec(ctx, `INSERT INTO mayi.clients(tenant_id,client_id,enabled,name,redirect_uris,access_token_seconds,auth_method,machine,introspection,application_type,require_binding,metadata_digest,metadata_policy_version,metadata_resources,metadata_types) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, m.scope.TenantID, c.ID, c.Enabled, c.Name, redirects, c.AccessTokenSeconds, clientAuthMethod(c.AuthMethod), c.Machine, c.Introspection, c.EffectiveApplicationType(), c.RequireBinding, c.MetadataDigest, c.MetadataPolicyVersion, metadataList(c, c.Resources), metadataList(c, c.AuthorizationDetailsTypes))
 	if err != nil {
 		return err
 	}
+	return m.createClientVocabulary(ctx, c)
+}
+func (m *management) createClientVocabulary(ctx context.Context, c clients.Client) error {
 	for _, id := range c.Resources {
-		if _, err := m.tx.Exec(ctx, `INSERT INTO mayi.client_resources VALUES($1,$2,$3)`, m.scope.TenantID, c.ID, id); err != nil {
+		if _, err := m.tx.Exec(ctx, `INSERT INTO mayi.client_resources VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, m.scope.TenantID, c.ID, id); err != nil {
 			return err
 		}
 	}
@@ -128,11 +131,11 @@ func (m *management) CreateClient(ctx context.Context, c clients.Client) error {
 		tag, err := m.tx.Exec(ctx, `INSERT INTO mayi.client_object_types(tenant_id,client_id,resource_id,type_uri)
  SELECT p.tenant_id,$2,p.resource_id,p.type_uri FROM mayi.resource_object_profiles p
  JOIN mayi.client_resources c ON c.tenant_id=p.tenant_id AND c.resource_id=p.resource_id AND c.client_id=$2
- WHERE p.tenant_id=$1 AND p.type_uri=$3`, m.scope.TenantID, c.ID, typ)
+ WHERE p.tenant_id=$1 AND p.type_uri=$3 ON CONFLICT DO NOTHING`, m.scope.TenantID, c.ID, typ)
 		if err != nil {
 			return classifyManagement(err)
 		}
-		if tag.RowsAffected() != 1 {
+		if tag.RowsAffected() != 1 && c.MetadataDigest == "" {
 			return administration.ErrInvalid
 		}
 	}
@@ -140,7 +143,8 @@ func (m *management) CreateClient(ctx context.Context, c clients.Client) error {
 }
 func (m *management) Client(ctx context.Context, id string) (clients.Client, error) {
 	c := clients.Client{ID: id}
-	err := m.tx.QueryRow(ctx, `SELECT name,redirect_uris,access_token_seconds,enabled,auth_method,machine,auth_version,introspection,application_type,require_binding FROM mayi.clients WHERE tenant_id=$1 AND client_id=$2`, m.scope.TenantID, id).Scan(&c.Name, &c.RedirectURIs, &c.AccessTokenSeconds, &c.Enabled, &c.AuthMethod, &c.Machine, &c.AuthenticationVersion, &c.Introspection, &c.ApplicationType, &c.RequireBinding)
+	var metadataResources, metadataTypes []string
+	err := m.tx.QueryRow(ctx, `SELECT name,redirect_uris,access_token_seconds,enabled,auth_method,machine,auth_version,introspection,application_type,require_binding,metadata_digest,metadata_policy_version,metadata_resources,metadata_types FROM mayi.clients WHERE tenant_id=$1 AND client_id=$2`, m.scope.TenantID, id).Scan(&c.Name, &c.RedirectURIs, &c.AccessTokenSeconds, &c.Enabled, &c.AuthMethod, &c.Machine, &c.AuthenticationVersion, &c.Introspection, &c.ApplicationType, &c.RequireBinding, &c.MetadataDigest, &c.MetadataPolicyVersion, &metadataResources, &metadataTypes)
 	if err != nil {
 		return c, classifyManagement(err)
 	}
@@ -174,6 +178,10 @@ func (m *management) Client(ctx context.Context, id string) (clients.Client, err
 	}
 	if err := rows.Err(); err != nil {
 		return clients.Client{}, err
+	}
+	if c.MetadataDigest != "" {
+		c.Resources = metadataResources
+		c.AuthorizationDetailsTypes = metadataTypes
 	}
 	if !c.Valid() {
 		return clients.Client{}, administration.ErrUnavailable
@@ -295,4 +303,11 @@ func (s *Store) AuthorizationDetailTypes(ctx context.Context, scope grants.Scope
 		return nil, discovery.ErrUnavailable
 	}
 	return result, nil
+}
+
+func metadataList(c clients.Client, values []string) []string {
+	if c.MetadataDigest == "" {
+		return []string{}
+	}
+	return values
 }

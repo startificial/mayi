@@ -46,6 +46,7 @@ func (h *Handler) Metadata(w http.ResponseWriter, r *http.Request) {
 		value["dpop_signing_alg_values_supported"] = []string{"ES256"}
 		if h.interactive {
 			value["registration_endpoint"] = issuer + "/register"
+			value["client_id_metadata_document_supported"] = true
 			value["authorization_endpoint"] = issuer + "/authorize"
 			value["pushed_authorization_request_endpoint"] = issuer + "/par"
 			value["require_pushed_authorization_requests"] = true

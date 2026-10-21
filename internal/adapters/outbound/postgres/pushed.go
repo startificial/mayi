@@ -20,8 +20,9 @@ func (a *authorizationTransaction) CreatePushed(ctx context.Context, p domain.Pu
 	if err != nil || objects == nil {
 		return authorization.ErrInvalid
 	}
-	tag, err := a.tx.Exec(ctx, `INSERT INTO mayi.pushed_requests(tenant_id,reference_hash,request_id,client_id,redirect_uri,resource_uri,permission_scopes,pkce_challenge,binding_thumbprint,client_state,object_ceiling,policy_version,created_at,expires_at)
- SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14 WHERE $14>clock_timestamp()`, a.tenantIssuer.TenantID, s.ReferenceHash, s.ID, r.ClientID, r.RedirectURI, r.ResourceURI, r.PermissionScopes, r.PKCEChallenge, r.BindingThumbprint, r.State, objects, s.PolicyVersion, s.CreatedAt, s.ExpiresAt)
+	tag, err := a.tx.Exec(ctx, `INSERT INTO mayi.pushed_requests(tenant_id,reference_hash,request_id,client_id,redirect_uri,resource_uri,permission_scopes,pkce_challenge,binding_thumbprint,client_state,object_ceiling,policy_version,created_at,expires_at,client_metadata_digest)
+ SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15 WHERE $14>clock_timestamp() AND EXISTS(SELECT 1 FROM mayi.clients c WHERE c.tenant_id=$1 AND c.client_id=$4 AND c.enabled AND c.metadata_digest=$15
+ AND (c.metadata_digest='' OR EXISTS(SELECT 1 FROM mayi.client_metadata_policies mp WHERE mp.tenant_id=c.tenant_id AND mp.version=c.metadata_policy_version)))`, a.tenantIssuer.TenantID, s.ReferenceHash, s.ID, r.ClientID, r.RedirectURI, r.ResourceURI, r.PermissionScopes, r.PKCEChallenge, r.BindingThumbprint, r.State, objects, s.PolicyVersion, s.CreatedAt, s.ExpiresAt, r.ClientMetadataDigest)
 	if err != nil || tag.RowsAffected() != 1 {
 		return authorization.ErrUnavailable
 	}
@@ -60,8 +61,8 @@ func (a *authorizationTransaction) Pushed(ctx context.Context, hash string) (dom
 	s.Request.TenantIssuer = a.tenantIssuer
 	var objects []byte
 	var consumed *time.Time
-	err := a.tx.QueryRow(ctx, `SELECT request_id,reference_hash,client_id,redirect_uri,resource_uri,permission_scopes,pkce_challenge,binding_thumbprint,client_state,object_ceiling,policy_version,created_at,expires_at,COALESCE(authorization_hash,''),consumed_at
- FROM mayi.pushed_requests WHERE tenant_id=$1 AND reference_hash=$2 AND client_id=$3`, a.tenantIssuer.TenantID, hash, a.pushed.ClientID).Scan(&s.ID, &s.ReferenceHash, &s.Request.ClientID, &s.Request.RedirectURI, &s.Request.ResourceURI, &s.Request.PermissionScopes, &s.Request.PKCEChallenge, &s.Request.BindingThumbprint, &s.Request.State, &objects, &s.PolicyVersion, &s.CreatedAt, &s.ExpiresAt, &s.AuthorizationHash, &consumed)
+	err := a.tx.QueryRow(ctx, `SELECT request_id,reference_hash,client_id,redirect_uri,resource_uri,permission_scopes,pkce_challenge,binding_thumbprint,client_state,object_ceiling,policy_version,created_at,expires_at,COALESCE(authorization_hash,''),consumed_at,client_metadata_digest
+ FROM mayi.pushed_requests WHERE tenant_id=$1 AND reference_hash=$2 AND client_id=$3`, a.tenantIssuer.TenantID, hash, a.pushed.ClientID).Scan(&s.ID, &s.ReferenceHash, &s.Request.ClientID, &s.Request.RedirectURI, &s.Request.ResourceURI, &s.Request.PermissionScopes, &s.Request.PKCEChallenge, &s.Request.BindingThumbprint, &s.Request.State, &objects, &s.PolicyVersion, &s.CreatedAt, &s.ExpiresAt, &s.AuthorizationHash, &consumed, &s.Request.ClientMetadataDigest)
 	if err != nil {
 		return domain.PushedRequest{}, authorization.ErrUnavailable
 	}
@@ -97,7 +98,7 @@ func (a *authorizationTransaction) ConsumePushed(ctx context.Context, next domai
 	}
 	tag, err := a.tx.Exec(ctx, `UPDATE mayi.pushed_requests SET consumed_at=$4,authorization_hash=$5
  WHERE tenant_id=$1 AND reference_hash=$2 AND client_id=$3 AND consumed_at IS NULL AND created_at<=$4 AND expires_at>$4 AND expires_at>clock_timestamp()
- AND request_id=$6 AND policy_version=$7 AND redirect_uri=$8 AND resource_uri=$9 AND permission_scopes=$10 AND pkce_challenge=$11 AND binding_thumbprint=$12 AND client_state=$13 AND object_ceiling=$14::jsonb AND created_at=$15 AND expires_at=$16`, a.tenantIssuer.TenantID, p.ReferenceHash, r.ClientID, now, w.HandleHash, p.ID, p.PolicyVersion, r.RedirectURI, r.ResourceURI, r.PermissionScopes, r.PKCEChallenge, r.BindingThumbprint, r.State, objects, p.CreatedAt, p.ExpiresAt)
+ AND request_id=$6 AND policy_version=$7 AND redirect_uri=$8 AND resource_uri=$9 AND permission_scopes=$10 AND pkce_challenge=$11 AND binding_thumbprint=$12 AND client_state=$13 AND object_ceiling=$14::jsonb AND created_at=$15 AND expires_at=$16 AND client_metadata_digest=$17`, a.tenantIssuer.TenantID, p.ReferenceHash, r.ClientID, now, w.HandleHash, p.ID, p.PolicyVersion, r.RedirectURI, r.ResourceURI, r.PermissionScopes, r.PKCEChallenge, r.BindingThumbprint, r.State, objects, p.CreatedAt, p.ExpiresAt, r.ClientMetadataDigest)
 	if err != nil {
 		return authorization.ErrUnavailable
 	}

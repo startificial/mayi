@@ -4,6 +4,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/startificial/mayi/internal/domain/clients"
 	"github.com/startificial/mayi/internal/domain/grants"
 	"github.com/startificial/mayi/internal/domain/resources"
 )
@@ -29,7 +30,7 @@ type ObjectConsentProjection struct{ spec ObjectConsentSpec }
 
 func NewObjectConsentProjection(s ObjectConsentSpec) (ObjectConsentProjection, error) {
 	c := s.Ceiling.Snapshot()
-	if !ValidHandleHash(s.AuthorizationHash) || !resources.ValidID(s.ClientID) || !grants.ValidUserSubject(s.Subject) || s.PermissionVersion == 0 || s.PermissionVersion > MaxPermissionVersion || !s.Ceiling.BoundTo(c.Scope, c.Resource) || len(c.Details) == 0 || len(s.Objects) != len(c.Details) {
+	if !ValidHandleHash(s.AuthorizationHash) || !clients.ValidClientID(s.ClientID) || !grants.ValidUserSubject(s.Subject) || s.PermissionVersion == 0 || s.PermissionVersion > MaxPermissionVersion || !s.Ceiling.BoundTo(c.Scope, c.Resource) || len(c.Details) == 0 || len(s.Objects) != len(c.Details) {
 		return ObjectConsentProjection{}, ErrInvalid
 	}
 	type target struct{ typ, id string }

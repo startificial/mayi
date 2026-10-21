@@ -121,7 +121,7 @@ func protocolForm(w http.ResponseWriter, r *http.Request) (url.Values, bool) {
 		return nil, false
 	}
 	v, err := pushedForm(string(body), MaxPushedFormBytes, map[string]int{
-		"client_id": 70, "client_assertion_type": 80, "client_assertion": 16384, "grant_type": 64, "code": 256, "refresh_token": 256, "code_verifier": 128, "redirect_uri": 2048, "resource": 2048, "scope": 8192, "authorization_details": MaxAuthorizationDetailsBytes,
+		"client_id": 2048, "client_assertion_type": 80, "client_assertion": 16384, "grant_type": 64, "code": 256, "refresh_token": 256, "code_verifier": 128, "redirect_uri": 2048, "resource": 2048, "scope": 8192, "authorization_details": MaxAuthorizationDetailsBytes,
 		"response_type": 4, "state": 1024, "code_challenge": 43, "code_challenge_method": 4, "nonce": 256, "dpop_jkt": 43, "token": 65536, "token_type_hint": 64, "dpop": 8192, "method": 16, "url": 2048,
 	})
 	if err != nil {

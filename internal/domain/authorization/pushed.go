@@ -21,7 +21,7 @@ type PushedSpec struct {
 type PushedRequest struct{ spec PushedSpec }
 
 func NewPushed(s PushedSpec) (PushedRequest, error) {
-	if !resources.ValidID(s.ID) || !ValidHandleHash(s.ReferenceHash) || !s.Request.Valid() || s.Request.ObjectCeiling.IsZero() || len(s.Request.State) < 16 || s.PolicyVersion == 0 || s.CreatedAt.IsZero() || !s.ExpiresAt.After(s.CreatedAt) || s.ExpiresAt.After(s.CreatedAt.Add(PushedLifetime)) {
+	if !resources.ValidID(s.ID) || !ValidHandleHash(s.ReferenceHash) || !s.Request.Valid() || !s.Request.PinnedMetadata() || s.Request.ObjectCeiling.IsZero() || len(s.Request.State) < 16 || s.PolicyVersion == 0 || s.CreatedAt.IsZero() || !s.ExpiresAt.After(s.CreatedAt) || s.ExpiresAt.After(s.CreatedAt.Add(PushedLifetime)) {
 		return PushedRequest{}, ErrInvalid
 	}
 	if s.AuthorizationHash == "" {
@@ -65,5 +65,5 @@ func (p PushedRequest) Begin(id, handleHash, browserHash, csrfHash string, now t
 // Equal preserves exact request correlation, including ordered scope bytes;
 // object authority retains the domain's exact tuple-set semantics.
 func (r Request) Equal(other Request) bool {
-	return r.OIDC == other.OIDC && r.OfflineAccess == other.OfflineAccess && r.Nonce == other.Nonce && r.TenantIssuer == other.TenantIssuer && r.ClientID == other.ClientID && r.RedirectURI == other.RedirectURI && r.ResourceURI == other.ResourceURI && r.PKCEChallenge == other.PKCEChallenge && r.BindingThumbprint == other.BindingThumbprint && r.State == other.State && slices.Equal(r.PermissionScopes, other.PermissionScopes) && r.ObjectCeiling.Equal(other.ObjectCeiling)
+	return r.ClientMetadataDigest == other.ClientMetadataDigest && r.OIDC == other.OIDC && r.OfflineAccess == other.OfflineAccess && r.Nonce == other.Nonce && r.TenantIssuer == other.TenantIssuer && r.ClientID == other.ClientID && r.RedirectURI == other.RedirectURI && r.ResourceURI == other.ResourceURI && r.PKCEChallenge == other.PKCEChallenge && r.BindingThumbprint == other.BindingThumbprint && r.State == other.State && slices.Equal(r.PermissionScopes, other.PermissionScopes) && r.ObjectCeiling.Equal(other.ObjectCeiling)
 }

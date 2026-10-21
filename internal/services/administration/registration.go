@@ -53,6 +53,13 @@ func (s *Service) SetRegistrationPolicy(ctx context.Context, actor Actor, scope 
 			return ErrConflict
 		}
 		if p.Mode == "open" {
+			metadataPolicy, err := tx.MetadataPolicy(ctx)
+			if err != nil {
+				return err
+			}
+			if !metadataPolicy.AllowsDynamicRegistration() {
+				return ErrDenied
+			}
 			// Validate the configured admission ceiling through the same registry
 			// rules used for each client before publishing the policy.
 			c, ok := p.Client("registration", clients.PublicRegistration{Name: "Registration", RedirectURIs: []string{"https://registration.example/callback"}, Resources: p.Resources, AuthorizationDetailsTypes: p.AuthorizationDetailsTypes})
@@ -109,6 +116,13 @@ func (s *Registration) Register(ctx context.Context, scope grants.Scope, initial
 			return ErrUnavailable
 		}
 		if p.Mode != "open" {
+			return ErrDenied
+		}
+		metadataPolicy, err := tx.MetadataPolicy(ctx)
+		if err != nil {
+			return err
+		}
+		if !metadataPolicy.AllowsDynamicRegistration() {
 			return ErrDenied
 		}
 		if p.RequireInitialAccess && !verified {

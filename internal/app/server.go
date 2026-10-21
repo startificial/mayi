@@ -189,6 +189,7 @@ func NewServer(ctx context.Context, c Config, pool *pgxpool.Pool, lookup func(st
 		router.Handle("GET "+base+"/grants", auth.Protect(scope, http.HandlerFunc(grantControls.List)))
 		router.Handle("POST "+base+"/grants/revoke", auth.Protect(scope, http.HandlerFunc(grantControls.Revoke)))
 		for pattern, handler := range map[string]http.HandlerFunc{
+			"GET " + base + "/cimd-policy": h.MetadataPolicy, "PUT " + base + "/cimd-policy": h.MetadataPolicy,
 			"GET " + base + "/client-registration-policy": h.RegistrationPolicy, "PUT " + base + "/client-registration-policy": h.RegistrationPolicy,
 			"GET " + base + "/policy": h.Policy, "PUT " + base + "/policy": h.Policy,
 			"POST " + base + "/resources": h.CreateResource, "GET " + base + "/resources/{id}": h.Resource,

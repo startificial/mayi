@@ -36,7 +36,8 @@ func (s *Store) AccessStatus(ctx context.Context, caller tokens.StatusCaller, ha
 		var currentScopes []string
 		var active bool
 		err := t.tx.QueryRow(ctx, `SELECT i.issuance_id,i.grant_id,i.revision,g.subject,g.principal_type,g.client_id,i.scopes,i.issued_at,i.expires_at,i.binding_thumbprint,i.signing_version,i.object_ceiling,g.current_object_ceiling,r.object_ceiling,g.current_scopes,
-   NOT i.revoked AND NOT g.revoked AND cl.enabled AND i.expires_at>clock_timestamp() AND i.issued_at<=clock_timestamp() AND g.expires_at>clock_timestamp() AND r.expires_at>clock_timestamp()
+   NOT i.revoked AND NOT g.revoked AND cl.enabled AND i.client_metadata_digest=cl.metadata_digest
+   AND (cl.metadata_digest='' OR EXISTS(SELECT 1 FROM mayi.client_metadata_policies mp WHERE mp.tenant_id=cl.tenant_id AND mp.version=cl.metadata_policy_version)) AND i.expires_at>clock_timestamp() AND i.issued_at<=clock_timestamp() AND g.expires_at>clock_timestamp() AND r.expires_at>clock_timestamp()
    AND NOT EXISTS(SELECT 1 FROM mayi.revoked_code_lineages l WHERE l.tenant_id=i.tenant_id AND l.origin_code=i.origin_code)
    AND (i.family_id IS NULL OR EXISTS(SELECT 1 FROM mayi.refresh_families f WHERE f.tenant_id=i.tenant_id AND f.family_id=i.family_id AND NOT f.revoked AND f.absolute_deadline>clock_timestamp()))
    AND (g.principal_type='machine' OR EXISTS(SELECT 1 FROM mayi.principal_memberships m WHERE m.tenant_id=g.tenant_id AND m.subject=g.subject AND m.active))

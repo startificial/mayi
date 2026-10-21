@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -576,5 +577,16 @@ func TestDirectRedemptionCannotBypassClientOrUserAdmission(t *testing.T) {
 				t.Fatal("client admission loaded protected authority")
 			}
 		})
+	}
+}
+
+func TestCIMDRedemptionWithoutResolutionCannotReachProtectedState(t *testing.T) {
+	f := newFixture(t, tokens.AuthorizationCode)
+	f.cmd.Caller.ClientID = "https://client.example/metadata.json"
+	f.cmd.Caller.ClientMetadataDigest = strings.Repeat("a", 64)
+	result, err := f.service.Redeem(context.Background(), f.cmd)
+	assertEmpty(t, result, err, tokens.ErrInvalidCredential)
+	if f.store.runs != 0 {
+		t.Fatal("CIMD redemption loaded protected state without resolver")
 	}
 }

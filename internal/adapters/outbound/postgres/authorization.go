@@ -107,6 +107,12 @@ func registration(ctx context.Context, tx pgx.Tx, scope grants.Scope, version ui
 	if err != nil {
 		return r, authorization.ErrInvalid
 	}
+	if r.Client.MetadataDigest != "" {
+		p, err := m.MetadataPolicy(ctx)
+		if err != nil || !p.Allows(clientID) || p.Version != r.Client.MetadataPolicyVersion {
+			return r, authorization.ErrDenied
+		}
+	}
 	var resourceID string
 	if err := tx.QueryRow(ctx, `SELECT resource_id FROM mayi.resources WHERE tenant_id=$1 AND uri=$2 FOR SHARE`, scope.TenantID, resourceURI).Scan(&resourceID); err != nil {
 		return r, authorization.ErrInvalid
@@ -122,7 +128,7 @@ func registration(ctx context.Context, tx pgx.Tx, scope grants.Scope, version ui
 	if err != nil {
 		return r, authorization.ErrUnavailable
 	}
-	rows, err := tx.Query(ctx, `SELECT type_uri FROM mayi.client_object_types WHERE tenant_id=$1 AND client_id=$2 AND resource_id=$3 ORDER BY type_uri LIMIT $4`, scope.TenantID, clientID, resourceID, len(r.Client.AuthorizationDetailsTypes)+1)
+	rows, err := tx.Query(ctx, `SELECT type_uri FROM mayi.client_object_types WHERE tenant_id=$1 AND client_id=$2 AND resource_id=$3 AND type_uri=ANY($5::text[]) ORDER BY type_uri LIMIT $4`, scope.TenantID, clientID, resourceID, len(r.Client.AuthorizationDetailsTypes)+1, r.Client.AuthorizationDetailsTypes)
 	if err != nil {
 		return domain.Registration{}, authorization.ErrUnavailable
 	}
@@ -159,8 +165,9 @@ func (a *authorizationTransaction) CreateAuthorization(ctx context.Context, w do
 	if err != nil {
 		return authorization.ErrInvalid
 	}
-	tag, err := a.tx.Exec(ctx, `INSERT INTO mayi.authorization_transactions(tenant_id,handle_hash,authorization_id,browser_binding_hash,csrf_hash,client_id,redirect_uri,resource_uri,permission_scopes,pkce_challenge,binding_thumbprint,client_state,policy_version,created_at,expires_at,status,object_ceiling,pushed_request_hash)
- SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'pending',$16,NULLIF($17,'') WHERE $15>clock_timestamp()`, a.tenantIssuer.TenantID, s.HandleHash, s.ID, s.BrowserBindingHash, s.CSRFHash, r.ClientID, r.RedirectURI, r.ResourceURI, r.PermissionScopes, r.PKCEChallenge, r.BindingThumbprint, r.State, s.PolicyVersion, s.CreatedAt, s.ExpiresAt, objects, s.PushedRequestHash)
+	tag, err := a.tx.Exec(ctx, `INSERT INTO mayi.authorization_transactions(tenant_id,handle_hash,authorization_id,browser_binding_hash,csrf_hash,client_id,redirect_uri,resource_uri,permission_scopes,pkce_challenge,binding_thumbprint,client_state,policy_version,created_at,expires_at,status,object_ceiling,pushed_request_hash,client_metadata_digest)
+ SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'pending',$16,NULLIF($17,''),$18 WHERE $15>clock_timestamp() AND EXISTS(SELECT 1 FROM mayi.clients c WHERE c.tenant_id=$1 AND c.client_id=$6 AND c.enabled AND c.metadata_digest=$18
+ AND (c.metadata_digest='' OR EXISTS(SELECT 1 FROM mayi.client_metadata_policies mp WHERE mp.tenant_id=c.tenant_id AND mp.version=c.metadata_policy_version)))`, a.tenantIssuer.TenantID, s.HandleHash, s.ID, s.BrowserBindingHash, s.CSRFHash, r.ClientID, r.RedirectURI, r.ResourceURI, r.PermissionScopes, r.PKCEChallenge, r.BindingThumbprint, r.State, s.PolicyVersion, s.CreatedAt, s.ExpiresAt, objects, s.PushedRequestHash, r.ClientMetadataDigest)
 	if err != nil || tag.RowsAffected() != 1 {
 		return authorization.ErrUnavailable
 	}
@@ -174,8 +181,8 @@ func (a *authorizationTransaction) Authorization(ctx context.Context, hash strin
 	s := domain.Spec{}
 	s.Request.TenantIssuer = a.tenantIssuer
 	var objects []byte
-	err := a.tx.QueryRow(ctx, `SELECT authorization_id,handle_hash,browser_binding_hash,csrf_hash,client_id,redirect_uri,resource_uri,permission_scopes,pkce_challenge,binding_thumbprint,client_state,policy_version,created_at,expires_at,status,COALESCE(subject,''),COALESCE(grant_id,''),COALESCE(code_hash,''),COALESCE(consent_session_hash,''),object_ceiling,COALESCE(pushed_request_hash,''),grant_revision
- FROM mayi.authorization_transactions WHERE tenant_id=$1 AND handle_hash=$2 FOR UPDATE`, a.tenantIssuer.TenantID, hash).Scan(&s.ID, &s.HandleHash, &s.BrowserBindingHash, &s.CSRFHash, &s.Request.ClientID, &s.Request.RedirectURI, &s.Request.ResourceURI, &s.Request.PermissionScopes, &s.Request.PKCEChallenge, &s.Request.BindingThumbprint, &s.Request.State, &s.PolicyVersion, &s.CreatedAt, &s.ExpiresAt, &s.Status, &s.Subject, &s.GrantID, &s.CodeHash, &s.ConsentSessionHash, &objects, &s.PushedRequestHash, &s.Revision)
+	err := a.tx.QueryRow(ctx, `SELECT authorization_id,handle_hash,browser_binding_hash,csrf_hash,client_id,redirect_uri,resource_uri,permission_scopes,pkce_challenge,binding_thumbprint,client_state,policy_version,created_at,expires_at,status,COALESCE(subject,''),COALESCE(grant_id,''),COALESCE(code_hash,''),COALESCE(consent_session_hash,''),object_ceiling,COALESCE(pushed_request_hash,''),grant_revision,client_metadata_digest
+ FROM mayi.authorization_transactions WHERE tenant_id=$1 AND handle_hash=$2 FOR UPDATE`, a.tenantIssuer.TenantID, hash).Scan(&s.ID, &s.HandleHash, &s.BrowserBindingHash, &s.CSRFHash, &s.Request.ClientID, &s.Request.RedirectURI, &s.Request.ResourceURI, &s.Request.PermissionScopes, &s.Request.PKCEChallenge, &s.Request.BindingThumbprint, &s.Request.State, &s.PolicyVersion, &s.CreatedAt, &s.ExpiresAt, &s.Status, &s.Subject, &s.GrantID, &s.CodeHash, &s.ConsentSessionHash, &objects, &s.PushedRequestHash, &s.Revision, &s.Request.ClientMetadataDigest)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Transaction{}, authorization.ErrDenied
@@ -275,16 +282,18 @@ func (a *authorizationTransaction) CompleteAuthorization(ctx context.Context, w 
 		if _, err := a.tx.Exec(ctx, `INSERT INTO mayi.grant_revisions(tenant_id,grant_id,revision,scopes,expires_at,object_ceiling) VALUES($1,$2,$3,$4,$5,$6)`, a.tenantIssuer.TenantID, g.GrantID, g.Number, g.Scopes, g.ExpiresAt, rootObjects); err != nil {
 			return err
 		}
-		if _, err := a.tx.Exec(ctx, `INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,pkce_challenge,redirect_uri,binding_thumbprint,origin_code,authorization_hash,object_ceiling)
- VALUES($1,$2,'authorization_code',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$2,$13,$14)`, a.tenantIssuer.TenantID, s.CodeHash, g.GrantID, g.Number, g.Resource, g.ClientID, r.PermissionScopes, now, now.Add(time.Minute), r.PKCEChallenge, r.RedirectURI, r.BindingThumbprint, s.HandleHash, objects); err != nil {
+		if _, err := a.tx.Exec(ctx, `INSERT INTO mayi.credentials(tenant_id,hash,kind,grant_id,revision,resource,client_id,ceiling_scopes,issued_at,expires_at,pkce_challenge,redirect_uri,binding_thumbprint,origin_code,authorization_hash,object_ceiling,client_metadata_digest)
+ VALUES($1,$2,'authorization_code',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$2,$13,$14,$15)`, a.tenantIssuer.TenantID, s.CodeHash, g.GrantID, g.Number, g.Resource, g.ClientID, r.PermissionScopes, now, now.Add(time.Minute), r.PKCEChallenge, r.RedirectURI, r.BindingThumbprint, s.HandleHash, objects, r.ClientMetadataDigest); err != nil {
 			return err
 		}
 
 		event = "authorization_approved"
 	}
 	tag, err := a.tx.Exec(ctx, `UPDATE mayi.authorization_transactions SET status=$3,subject=NULLIF($4,''),grant_id=NULLIF($5,''),code_hash=NULLIF($6,''),decided_at=$7,grant_revision=$20 WHERE tenant_id=$1 AND handle_hash=$2 AND status='pending' AND policy_version=$8 AND created_at<=$7 AND expires_at>$7 AND consent_session_hash=$9 AND expires_at>clock_timestamp()
- AND object_ceiling IS NOT DISTINCT FROM $11::jsonb AND client_id=$12 AND resource_uri=$13 AND permission_scopes=$14 AND redirect_uri=$15 AND pkce_challenge=$16 AND binding_thumbprint=$17 AND client_state=$18 AND COALESCE(pushed_request_hash,'')=$19
- AND EXISTS(SELECT 1 FROM mayi.browser_sessions session JOIN mayi.principal_memberships membership USING(tenant_id,subject) WHERE session.tenant_id=$1 AND session.session_hash=$9 AND session.subject=$10 AND NOT session.revoked AND session.last_used_at>clock_timestamp()-interval '15 minutes' AND session.expires_at>clock_timestamp() AND membership.active)`, a.tenantIssuer.TenantID, s.HandleHash, s.Status, s.Subject, s.GrantID, s.CodeHash, now, a.version, a.principal.SessionHash, a.principal.Subject, objects, r.ClientID, r.ResourceURI, r.PermissionScopes, r.RedirectURI, r.PKCEChallenge, r.BindingThumbprint, r.State, s.PushedRequestHash, s.Revision)
+ AND object_ceiling IS NOT DISTINCT FROM $11::jsonb AND client_id=$12 AND resource_uri=$13 AND permission_scopes=$14 AND redirect_uri=$15 AND pkce_challenge=$16 AND binding_thumbprint=$17 AND client_state=$18 AND COALESCE(pushed_request_hash,'')=$19 AND client_metadata_digest=$21
+ AND EXISTS(SELECT 1 FROM mayi.clients c WHERE c.tenant_id=$1 AND c.client_id=$12 AND c.enabled AND c.metadata_digest=$21
+ AND (c.metadata_digest='' OR EXISTS(SELECT 1 FROM mayi.client_metadata_policies mp WHERE mp.tenant_id=c.tenant_id AND mp.version=c.metadata_policy_version)))
+ AND EXISTS(SELECT 1 FROM mayi.browser_sessions session JOIN mayi.principal_memberships membership USING(tenant_id,subject) WHERE session.tenant_id=$1 AND session.session_hash=$9 AND session.subject=$10 AND NOT session.revoked AND session.last_used_at>clock_timestamp()-interval '15 minutes' AND session.expires_at>clock_timestamp() AND membership.active)`, a.tenantIssuer.TenantID, s.HandleHash, s.Status, s.Subject, s.GrantID, s.CodeHash, now, a.version, a.principal.SessionHash, a.principal.Subject, objects, r.ClientID, r.ResourceURI, r.PermissionScopes, r.RedirectURI, r.PKCEChallenge, r.BindingThumbprint, r.State, s.PushedRequestHash, s.Revision, r.ClientMetadataDigest)
 	if err != nil {
 		return err
 	}

@@ -33,9 +33,27 @@
       "target_sections": [
         "all"
       ],
-      "implemented_sections": [],
+      "implemented_sections": [
+        "3",
+        "4",
+        "4.1",
+        "4.2",
+        "5",
+        "5.1",
+        "5.2",
+        "6",
+        "7.1",
+        "8.1",
+        "8.4",
+        "8.6",
+        "8.7"
+      ],
       "deviations": [
-        "Mayi applies a same-origin redirect default and explicit native/approved exceptions."
+        "Bounded public profile requires explicit none authentication and authorization_code plus refresh_token. Confidential CIMD, remote/inline client keys and software statements are rejected; no certification claim.",
+        "Exact ASCII HTTPS DNS URL up to 2048 bytes, path required, no query/fragment/userinfo/dot paths, and default/explicit 443 only. Same-origin web callbacks; native/cross-origin exceptions require exact administrator approval.",
+        "Validated shared HTTP cache with five-minute maximum, no heuristic freshness or stale fallback. Conditional 304 is accepted only for a validated representation and sent validator, an explicit HTTP-cache interpretation of the draft 200-only wording.",
+        "No-store/private remove reusable metadata and validators; accepted registration and credential/audit security state is retained separately. Critical consent and redemption revalidate even fresh entries.",
+        "SHA-256 configuration fingerprint is bound to a monotonic accepted revision. Accepted metadata/policy changes invalidate older CIMD credentials through authoritative online state, including after an old document is restored."
       ]
     },
     {

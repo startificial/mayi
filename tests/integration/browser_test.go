@@ -292,12 +292,21 @@ func TestP2ServerMountsConfiguredBrowserRoutes(t *testing.T) {
 			PAR          bool     `json:"require_pushed_authorization_requests"`
 			Grants       []string `json:"grant_types_supported"`
 			Registration string   `json:"registration_endpoint"`
+			CIMD         bool     `json:"client_id_metadata_document_supported"`
 		}
 		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &metadata) != nil || metadata.Issuer != "https://auth.example/t/a" || metadata.Token != metadata.Issuer+"/token" || !metadata.PAR || len(metadata.Grants) != 3 || metadata.Registration != metadata.Issuer+"/register" {
 			t.Fatal("live discovery mismatch", w.Code, w.Body.String())
 		}
 	}
 	body := `{"client_name":"Agent","redirect_uris":["https://agent.example/cb"],"token_endpoint_auth_method":"none","grant_types":["authorization_code","refresh_token"],"mayi_resource_ids":["api"],"authorization_details_types":["https://api.example/types/item"]}`
+	metadataWire := api(t, h, "GET", "/.well-known/oauth-authorization-server/t/a", "", "")
+	var capabilities map[string]json.RawMessage
+	if json.Unmarshal(metadataWire.Body.Bytes(), &capabilities) != nil || string(capabilities["client_id_metadata_document_supported"]) != "true" {
+		t.Fatal("CIMD capability missing")
+	}
+	if w := api(t, h, "GET", "/admin/t/a/cimd-policy", e.tokens["a"], ""); w.Code != 200 {
+		t.Fatal("CIMD management route missing", w.Code)
+	}
 	if w := api(t, h, "POST", "/t/a/register", "", body); w.Code != 403 {
 		t.Fatal("configured registration route or closed default missing", w.Code)
 	}

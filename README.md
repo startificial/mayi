@@ -30,7 +30,7 @@ P0 is complete: [the protocol-spike report](docs/p0/protocol-spike.md) records F
 
 P2 implements the [core authorization preview](docs/p2-core-authorization.md): required PAR/RAR, upstream OIDC, guarded consent, immutable incremental grant revisions, JWT/opaque access tokens, refresh rotation, online introspection/revocation, the Go resource SDK and encrypted reference BFF. PostgreSQL also coordinates cross-replica abuse limits. [Executable evidence](tests/conformance/p2-evidence.json) covers the preview; production operations, broader interoperability and certification remain later gates.
 
-P3 is [in progress](docs/p3-agent-clients.md): native callback registration, resource discovery and ES256 DPoP binding/nonces are implemented with [local evidence](tests/conformance/p3-evidence.json). Bounded public DCR now adds atomic registration quotas, open/admin-only admission and optional initial-access credentials. CIMD, its host policy and the browser-held-token sample remain outstanding.
+P3 is [in progress](docs/p3-agent-clients.md): native callback registration, resource discovery and ES256 DPoP binding/nonces are implemented with [local evidence](tests/conformance/p3-evidence.json). Bounded public DCR now adds atomic registration quotas, open/admin-only admission and optional initial-access credentials. Public-client CIMD now adds shared caching, exact host/URL policy, guarded callback exceptions and immutable metadata/credential correlation. The browser-held-token sample and broader interoperability remain outstanding.
 
 ## The problems
 

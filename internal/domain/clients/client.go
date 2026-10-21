@@ -11,6 +11,8 @@ import (
 const MaxAuthorizationDetailsTypes = 32
 
 type Client struct {
+	MetadataDigest            string
+	MetadataPolicyVersion     uint64
 	RequireBinding            bool
 	ApplicationType           string
 	Introspection             bool
@@ -27,9 +29,15 @@ type Client struct {
 // Web clients use exact HTTPS redirects. Machine clients use a disjoint identity
 // namespace and confidential authentication, without browser redirects.
 func ValidClientID(id string) bool {
-	return resources.ValidID(id) || strings.HasPrefix(id, "client:") && resources.ValidID(strings.TrimPrefix(id, "client:"))
+	_, metadata := MetadataURL(id)
+	return metadata || resources.ValidID(id) || strings.HasPrefix(id, "client:") && resources.ValidID(strings.TrimPrefix(id, "client:"))
 }
 func (c Client) Valid() bool {
+	_, metadata := MetadataURL(c.ID)
+	if metadata && (!ValidMetadataDigest(c.MetadataDigest) || c.MetadataPolicyVersion == 0 || c.Machine || c.Introspection || c.AuthMethod != "none" || !c.RequireBinding) || !metadata && (c.MetadataDigest != "" || c.MetadataPolicyVersion != 0) {
+		return false
+	}
+
 	if c.ApplicationType != "" && c.ApplicationType != "web" && c.ApplicationType != "native" || c.ApplicationType == "native" && (c.Machine || c.Introspection || c.AuthMethod != "" && c.AuthMethod != "none") {
 		return false
 	}

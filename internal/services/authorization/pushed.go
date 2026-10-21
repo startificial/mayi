@@ -4,7 +4,9 @@ import (
 	"context"
 	"time"
 
+	"errors"
 	domain "github.com/startificial/mayi/internal/domain/authorization"
+	"github.com/startificial/mayi/internal/domain/clients"
 	"github.com/startificial/mayi/internal/domain/grants"
 	"github.com/startificial/mayi/internal/domain/resources"
 )
@@ -24,7 +26,7 @@ type PushedProof struct {
 }
 
 func (p PushedProof) Valid() bool {
-	return (p.ResourceURI == "" || resources.ValidURI(p.ResourceURI)) && p.TenantIssuer.Valid() && resources.ValidID(p.ClientID) && domain.ValidHandleHash(p.ReferenceHash) && domain.ValidHandleHash(p.BrowserBindingHash)
+	return (p.ResourceURI == "" || resources.ValidURI(p.ResourceURI)) && p.TenantIssuer.Valid() && clients.ValidClientID(p.ClientID) && domain.ValidHandleHash(p.ReferenceHash) && domain.ValidHandleHash(p.BrowserBindingHash)
 }
 
 // Push supports the currently registered public web-client model only. Future
@@ -41,6 +43,24 @@ func (s *Service) PushAuthenticated(ctx context.Context, request domain.Request,
 }
 func (s *Service) push(ctx context.Context, request domain.Request, authVersion uint64) (PushedResult, error) {
 	if !request.Valid() || request.ObjectCeiling.IsZero() || len(request.State) < 16 {
+		return PushedResult{}, ErrInvalid
+	}
+	if _, cimd := clients.MetadataURL(request.ClientID); cimd {
+		if s.metadata == nil {
+			return PushedResult{}, ErrDenied
+		}
+		c, err := s.metadata.ResolveClient(ctx, request.TenantIssuer, request.ClientID, false)
+		if err != nil {
+			if errors.Is(err, clients.ErrMetadataDenied) {
+				return PushedResult{}, ErrDenied
+			}
+			return PushedResult{}, ErrUnavailable
+		}
+		if request.ClientMetadataDigest != "" && request.ClientMetadataDigest != c.MetadataDigest {
+			return PushedResult{}, ErrDenied
+		}
+		request.ClientMetadataDigest = c.MetadataDigest
+	} else if request.ClientMetadataDigest != "" {
 		return PushedResult{}, ErrInvalid
 	}
 	now := s.clock.Now()

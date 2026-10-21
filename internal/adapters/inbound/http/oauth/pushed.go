@@ -20,7 +20,7 @@ import (
 // MaxPushedFormBytes allows percent expansion of the bounded RAR envelope and
 // the remaining bounded fields. Future handlers must bound reads before parsing.
 const MaxPushedFormBytes = 128 << 10
-const MaxPushedAuthorizationBytes = 2048
+const MaxPushedAuthorizationBytes = 8192
 const pushedURIPrefix = "urn:ietf:params:oauth:request_uri:"
 
 var ErrInvalidPushedRequest = errors.New("invalid pushed authorization request")
@@ -47,7 +47,7 @@ func DecodePushedRequest(raw string, scope grants.Scope, profiles ...resources.O
 // client/resource vocabulary and policy are checked by Push under its unit of work.
 func DecodePushedInput(raw string, scope grants.Scope) (domain.Request, error) {
 	v, err := pushedForm(raw, MaxPushedFormBytes, map[string]int{
-		"client_id": 64, "response_type": 4, "redirect_uri": 2048, "resource": 2048, "scope": 8192, "state": 1024,
+		"client_id": 2048, "response_type": 4, "redirect_uri": 2048, "resource": 2048, "scope": 8192, "state": 1024,
 		"code_challenge": 43, "code_challenge_method": 4, "authorization_details": MaxAuthorizationDetailsBytes, "nonce": 256, "dpop_jkt": 43,
 	})
 	if err != nil || len(v) < 9 || !scope.Valid() || v.Get("response_type") != "code" || v.Get("code_challenge_method") != "S256" || len(v.Get("state")) < 16 {
@@ -97,7 +97,7 @@ func DecodePushedInput(raw string, scope grants.Scope) (domain.Request, error) {
 // No URI is resolved or fetched. Issuer routing and the browser credential are
 // supplied by a trusted adapter; correlation does not authenticate a client.
 func DecodePushedAuthorization(raw string, scope grants.Scope, browserHash string) (authorization.PushedProof, error) {
-	v, err := pushedForm(raw, MaxPushedAuthorizationBytes, map[string]int{"client_id": 64, "request_uri": len(pushedURIPrefix) + 43})
+	v, err := pushedForm(raw, MaxPushedAuthorizationBytes, map[string]int{"client_id": 2048, "request_uri": len(pushedURIPrefix) + 43})
 	if err != nil || len(v) != 2 || !strings.HasPrefix(v.Get("request_uri"), pushedURIPrefix) {
 		return authorization.PushedProof{}, ErrInvalidPushedRequest
 	}

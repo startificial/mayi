@@ -4,12 +4,16 @@ import (
 	"context"
 
 	domain "github.com/startificial/mayi/internal/domain/authorization"
+	"github.com/startificial/mayi/internal/domain/clients"
 	"github.com/startificial/mayi/internal/domain/resources"
 )
 
 // Acquire resource permission before opening the final Mayi transaction. The
 // initial authorized read has already committed without binding or other effects.
 func (s *Service) prepareObjectConsent(ctx context.Context, proof AccessProof, actor Principal, candidate domain.Transaction) (Consent, error) {
+	if err := s.refreshMetadata(ctx, candidate); err != nil {
+		return Consent{}, err
+	}
 	var result Consent
 	err := s.withObjectConsent(ctx, actor, candidate, func(ctx context.Context, projection domain.ObjectConsentProjection) error {
 		var err error
@@ -65,6 +69,9 @@ func (s *Service) reloadObjectConsent(ctx context.Context, tx Transaction, proof
 }
 
 func (s *Service) approveObjectConsent(ctx context.Context, proof AccessProof, actor Principal, candidate domain.Transaction) (DecisionResult, error) {
+	if err := s.refreshMetadata(ctx, candidate); err != nil {
+		return DecisionResult{}, err
+	}
 	var result DecisionResult
 	err := s.withObjectConsent(ctx, actor, candidate, func(ctx context.Context, fresh domain.ObjectConsentProjection) error {
 		return s.store.RunAuthorization(ctx, proof.TenantIssuer, func(tx Transaction) error {
@@ -143,6 +150,9 @@ func objectConsentView(workflow domain.Transaction, current domain.Registration,
 func consentView(workflow domain.Transaction, current domain.Registration) Consent {
 	spec := workflow.Snapshot()
 	result := Consent{ClientName: current.Client.Name, ClientID: current.Client.ID, ResourceName: current.Resource.Name, ResourceURI: current.Resource.URI, RedirectURI: spec.Request.RedirectURI, ExpiresAt: spec.ExpiresAt, DecisionAvailable: true, OIDC: spec.Request.OIDC, OfflineAccess: spec.Request.OfflineAccess}
+	if u, ok := clients.MetadataURL(current.Client.ID); ok && current.Client.MetadataDigest != "" {
+		result.MetadataHost = u.Hostname()
+	}
 	for _, name := range spec.Request.PermissionScopes {
 		for _, permission := range current.Resource.Scopes {
 			if name == permission.Name {

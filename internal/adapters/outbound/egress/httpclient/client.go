@@ -80,6 +80,9 @@ func LiteralLoopback(host string) bool {
 	return err == nil && ip.IsLoopback()
 }
 func PublicIP(ip netip.Addr) bool {
+	if ip.Is4In6() {
+		return false
+	}
 	ip = ip.Unmap()
 	if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
 		return false

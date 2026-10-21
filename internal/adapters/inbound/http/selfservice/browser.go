@@ -294,7 +294,7 @@ func (h *Handler) Consent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Security-Policy", policy)
-	model := web.Consent{ClientName: view.ClientName, ClientID: view.ClientID, ResourceName: view.ResourceName, ResourceURI: view.ResourceURI, RedirectURI: view.RedirectURI, CSRF: f.CSRF, Action: h.base + "/consent", LogoutAction: h.base + "/session/end", DecisionAvailable: view.DecisionAvailable, OIDC: view.OIDC, OfflineAccess: view.OfflineAccess}
+	model := web.Consent{MetadataHost: view.MetadataHost, ClientName: view.ClientName, ClientID: view.ClientID, ResourceName: view.ResourceName, ResourceURI: view.ResourceURI, RedirectURI: view.RedirectURI, CSRF: f.CSRF, Action: h.base + "/consent", LogoutAction: h.base + "/session/end", DecisionAvailable: view.DecisionAvailable, OIDC: view.OIDC, OfflineAccess: view.OfflineAccess}
 	for _, p := range view.PermissionScopes {
 		model.Permissions = append(model.Permissions, web.Permission{Name: p.Name, Description: p.Description})
 	}

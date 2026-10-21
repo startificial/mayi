@@ -30,6 +30,7 @@ type BeginResult struct {
 	ExpiresAt         time.Time
 }
 type Consent struct {
+	MetadataHost                          string
 	OIDC, OfflineAccess                   bool
 	ClientName, ResourceName, RedirectURI string
 	ClientID, ResourceURI                 string
@@ -49,6 +50,7 @@ type Decision struct {
 }
 type DecisionResult struct{ Code, RedirectURI, State string }
 type Service struct {
+	metadata ClientMetadataResolver
 	store    Store
 	clock    Clock
 	material MaterialSource
@@ -57,11 +59,15 @@ type Service struct {
 
 // A nil object authority keeps typed consent closed. Composition must explicitly
 // select a reviewed resource-owner integration before enabling object display.
-func New(store Store, clock Clock, material MaterialSource, objects ObjectConsentAuthority) (*Service, error) {
-	if store == nil || clock == nil || material == nil {
+func New(store Store, clock Clock, material MaterialSource, objects ObjectConsentAuthority, metadata ...ClientMetadataResolver) (*Service, error) {
+	if len(metadata) > 1 || len(metadata) == 1 && metadata[0] == nil || store == nil || clock == nil || material == nil {
 		return nil, ErrUnavailable
 	}
-	return &Service{store: store, clock: clock, material: material, objects: objects}, nil
+	s := &Service{store: store, clock: clock, material: material, objects: objects}
+	if len(metadata) == 1 {
+		s.metadata = metadata[0]
+	}
+	return s, nil
 }
 func validMaterial(m Material) bool {
 	return resources.ValidID(m.ID) && len(m.Secret) >= 43 && len(m.Secret) <= 128 && domain.ValidHandleHash(m.Hash) && m.Secret != m.Hash
@@ -136,7 +142,7 @@ func (s *Service) Decide(ctx context.Context, d Decision) (DecisionResult, error
 		if err != nil {
 			return err
 		}
-		if d.Approve && !workflow.Snapshot().Request.ObjectCeiling.IsZero() {
+		if (d.Approve || workflow.Snapshot().Request.ClientMetadataDigest != "") && !workflow.Snapshot().Request.ObjectCeiling.IsZero() {
 			candidate = workflow
 			return nil
 		}
@@ -151,6 +157,9 @@ func (s *Service) Decide(ctx context.Context, d Decision) (DecisionResult, error
 		return DecisionResult{}, classified(err)
 	}
 	if candidate.Snapshot().HandleHash != "" {
+		if !d.Approve {
+			return s.denyMetadataConsent(ctx, d.Proof, actor, candidate)
+		}
 		return s.approveObjectConsent(ctx, d.Proof, actor, candidate)
 	}
 	return result, nil

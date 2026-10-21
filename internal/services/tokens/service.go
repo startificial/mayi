@@ -8,6 +8,7 @@ import (
 	"github.com/startificial/mayi/internal/services/authentication"
 	"time"
 
+	"github.com/startificial/mayi/internal/domain/clients"
 	"github.com/startificial/mayi/internal/domain/grants"
 	"github.com/startificial/mayi/internal/domain/resources"
 	domaintokens "github.com/startificial/mayi/internal/domain/tokens"
@@ -24,6 +25,7 @@ const RefreshToken = "refresh_token"
 // Caller must be built from authenticated client and verified sender-proof context
 // by an adapter. These fields are not accepted as claims from external input.
 type Caller struct {
+	ClientMetadataDigest        string
 	AuthenticationVersion       uint64
 	Scope                       grants.Scope
 	ClientID, BindingThumbprint string
@@ -37,6 +39,7 @@ type Command struct {
 	Objects                                              []grants.ObjectDetail
 }
 type Credential struct {
+	ClientMetadataDigest                    string
 	ClientAuthenticationVersion             uint64
 	Scope                                   grants.Scope
 	Hash, Kind, ClientID, Resource, GrantID string
@@ -87,6 +90,7 @@ type Result struct {
 	ObjectProfiles                     []resources.ObjectProfile
 }
 type Service struct {
+	metadata  ClientMetadataResolver
 	policy    Authorizer
 	clock     Clock
 	pkce      PKCEVerifier
@@ -97,11 +101,15 @@ type Service struct {
 	admission UsageAdmission
 }
 
-func New(policy Authorizer, clock Clock, pkce PKCEVerifier, signer Signer, material MaterialSource, store UnitOfWork, lifetime time.Duration, admission UsageAdmission) (*Service, error) {
-	if admission == nil || policy == nil || clock == nil || pkce == nil || signer == nil || material == nil || store == nil || lifetime <= 0 || lifetime > 15*time.Minute {
+func New(policy Authorizer, clock Clock, pkce PKCEVerifier, signer Signer, material MaterialSource, store UnitOfWork, lifetime time.Duration, admission UsageAdmission, metadata ...ClientMetadataResolver) (*Service, error) {
+	if len(metadata) > 1 || len(metadata) == 1 && metadata[0] == nil || admission == nil || policy == nil || clock == nil || pkce == nil || signer == nil || material == nil || store == nil || lifetime <= 0 || lifetime > 15*time.Minute {
 		return nil, ErrUnavailable
 	}
-	return &Service{policy: policy, clock: clock, pkce: pkce, signer: signer, material: material, store: store, lifetime: lifetime, admission: admission}, nil
+	s := &Service{policy: policy, clock: clock, pkce: pkce, signer: signer, material: material, store: store, lifetime: lifetime, admission: admission}
+	if len(metadata) == 1 {
+		s.metadata = metadata[0]
+	}
+	return s, nil
 }
 
 func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
@@ -110,6 +118,24 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 	}
 	if err := s.admission.Check(ctx, cmd.Caller.Scope, "token", "client", cmd.Caller.ClientID); err != nil {
 		return Result{}, err
+	}
+	if _, cimd := clients.MetadataURL(cmd.Caller.ClientID); cimd {
+		if s.metadata == nil {
+			return Result{}, ErrInvalidCredential
+		}
+		c, err := s.metadata.ResolveClient(ctx, cmd.Caller.Scope, cmd.Caller.ClientID, true)
+		if err != nil {
+			if errors.Is(err, clients.ErrMetadataDenied) {
+				return Result{}, ErrInvalidCredential
+			}
+			return Result{}, ErrUnavailable
+		}
+		if c.ID != cmd.Caller.ClientID || !c.Valid() {
+			return Result{}, ErrInvalidCredential
+		}
+		cmd.Caller.ClientMetadataDigest = c.MetadataDigest
+	} else if cmd.Caller.ClientMetadataDigest != "" {
+		return Result{}, ErrInvalidCredential
 	}
 	version, err := s.policy.AuthorizeRedemption(ctx, cmd.Caller, cmd.CredentialHash)
 	if err != nil || version == 0 {
@@ -123,7 +149,7 @@ func (s *Service) Redeem(ctx context.Context, cmd Command) (Result, error) {
 			return err
 		}
 		now := s.clock.Now()
-		if cmd.Caller.AuthenticationVersion != 0 && credential.ClientAuthenticationVersion != cmd.Caller.AuthenticationVersion || credential.Scope != cmd.Caller.Scope || credential.Hash != cmd.CredentialHash || credential.ClientID != cmd.Caller.ClientID || credential.Kind != cmd.Kind || cmd.Resource != "" && credential.Resource != cmd.Resource || credential.BindingThumbprint != cmd.Caller.BindingThumbprint {
+		if credential.ClientMetadataDigest != cmd.Caller.ClientMetadataDigest || cmd.Caller.AuthenticationVersion != 0 && credential.ClientAuthenticationVersion != cmd.Caller.AuthenticationVersion || credential.Scope != cmd.Caller.Scope || credential.Hash != cmd.CredentialHash || credential.ClientID != cmd.Caller.ClientID || credential.Kind != cmd.Kind || cmd.Resource != "" && credential.Resource != cmd.Resource || credential.BindingThumbprint != cmd.Caller.BindingThumbprint {
 			return ErrInvalidCredential
 		}
 		// Validate possession before allowing a replay to revoke anything.

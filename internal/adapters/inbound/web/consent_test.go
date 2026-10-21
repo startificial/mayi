@@ -28,3 +28,15 @@ func TestConsentObjectDisplayEscapesNamesAndPreservesExactReferences(t *testing.
 		t.Fatal("supported consent lost decisions", err)
 	}
 }
+
+func TestConsentDistinguishesMetadataHostFromPublisherName(t *testing.T) {
+	page, err := ConsentPage(Consent{ClientName: "Claimed publisher <script>", MetadataHost: "agent.example", ClientID: "https://agent.example/client.json", RedirectURI: "https://agent.example/cb"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Metadata fetched from HTTPS host:", "<bdi>agent.example</bdi>", "not the publisher", "Claimed publisher &lt;script&gt;", "https://agent.example/cb"} {
+		if !strings.Contains(string(page), want) {
+			t.Fatal("missing exact trust information", want)
+		}
+	}
+}

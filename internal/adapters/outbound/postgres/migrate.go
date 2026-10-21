@@ -194,5 +194,5 @@ func rollback(tx pgx.Tx) {
 }
 
 func migrationSources() []string {
-	return []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed, migrations.ObjectPresentations, migrations.Lifecycle, migrations.RequiredAuthority, migrations.RequestBudgets, migrations.Incremental, migrations.AuditContext, migrations.NativeClients, migrations.DPoP, migrations.ProofStatePrivileges, migrations.Registration}
+	return []string{migrations.Initial, migrations.Foundation, migrations.Authorization, migrations.Authentication, migrations.ObjectCeilings, migrations.ObjectProfiles, migrations.ClientObjectTypes, migrations.Pushed, migrations.ObjectPresentations, migrations.Lifecycle, migrations.RequiredAuthority, migrations.RequestBudgets, migrations.Incremental, migrations.AuditContext, migrations.NativeClients, migrations.DPoP, migrations.ProofStatePrivileges, migrations.Registration, migrations.Metadata}
 }

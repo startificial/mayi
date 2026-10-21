@@ -1,7 +1,7 @@
 # P3 agent and unknown-client preview
 
 P3 is **in progress**. Native callback registration, resource-owned discovery/challenges and the shared
-ES256 DPoP sender-binding profile and bounded public DCR are implemented. P2 remains the complete core
+ES256 DPoP sender-binding profile, bounded public DCR and public-client CIMD resolution/cache/host policy are implemented. P2 remains the complete core
 authorization preview. [ADR 0025](adr/0025-p3-native-callbacks-and-resource-discovery.md)
 records ownership and the exact capability boundary; [P3 evidence](../tests/conformance/p3-evidence.json)
 links automated tests, without claiming certification.
@@ -65,9 +65,9 @@ Every protected load/mutation still belongs inside WithAccess's guarded callback
 
 ## Outstanding P3 work
 
-- CIMD resolution, safe cache/conditional fetch and immutable metadata correlation.
+- Broader CIMD interoperability beyond the implemented public profile (including confidential CIMD).
 - Broader DCR interoperability and later registration management beyond the implemented public profile.
-- CIMD tenant policy, including approved hosts; DCR open/admin-only admission is implemented.
+- External interoperability/certification evidence beyond the local public-client profile.
 - Browser-held-token example using a non-exportable WebCrypto key.
 
 Run `go run ./tools/checks`, `go test -race -count=1 ./...`, `go vet ./...`,
@@ -190,4 +190,121 @@ clients. Failed transactions do not consume a slot; they still consume request
 budget. Capacity exhaustion requires the operator to raise the quota or keep
 registration closed; it is not solved by automatic retries. See the
 [registration error/recovery contract](error-handling.md#p3-client-registration).
-CIMD, its cache/digest/host policy and browser-held-token validation remain pending.
+The public CIMD profile below implements resolution/cache/host policy; confidential CIMD, broader interoperability and browser-held-token validation remain pending.
+
+
+## CIMD resolution and host policy
+
+Apply owner-run migration **19** before upgrading. [ADR 0029](adr/0029-cimd-resolution-and-authority-correlation.md)
+records the public profile, cache/authority distinction, URL identity and
+metadata-change semantics. Live interactive discovery advertises
+`client_id_metadata_document_supported: true`. Use the metadata document's exact
+HTTPS URL as `client_id` in PAR and every later request. No DCR call or client
+secret is required. All ordinary PAR/RAR/S256/DPoP and consent requirements remain.
+
+A tenant starts with administrator-only CIMD admission and no approved URLs.
+Use `GET /admin/t/{tenant}/cimd-policy` with `clients:read`, then PUT with
+`clients:write` and the exact returned version. For example:
+
+```json
+{
+  "version": 1,
+  "mode": "hosts",
+  "hosts": ["agent.example"],
+  "approved_clients": [],
+  "resources": ["api"],
+  "authorization_details_types": ["https://api.example/types/workflow/v1"],
+  "redirect_approvals": [],
+  "max_clients": 100,
+  "access_token_seconds": 300
+}
+```
+
+`hosts` approves exact DNS hosts, with no suffix/wildcard/subdomain inheritance.
+`any` allows any otherwise valid public DNS client URL. `admin_only` permits only
+entire exact URLs in `approved_clients`; omit hosts in these two modes. Resource
+and type IDs must already be registered, and only establish catalog eligibility.
+A policy with no permitted clients may omit ceilings and quota, as in the default.
+Updates return the next version. A configured policy change cuts off old CIMD
+credentials through authoritative online status and requires new authorization.
+This is stricter than DCR admission-only changes. For vocabulary changes, revoke
+old grants before reconnecting when an old union ceiling is no longer supported.
+
+Close public DCR before configuring `hosts`/`admin_only`, otherwise PUT returns
+409. Opening DCR while those restrictive modes are configured returns 403. `any`
+permits the separate DCR opt-in, quota and optional initial-access requirement.
+Existing DCR clients remain governed by their registrations and grant revocation;
+closing admission does not revoke those grants.
+
+Publish a document at the exact client URL, for example
+`https://agent.example/oauth-client.json`:
+
+```json
+{
+  "client_id": "https://agent.example/oauth-client.json",
+  "client_name": "Example agent",
+  "application_type": "web",
+  "token_endpoint_auth_method": "none",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "dpop_bound_access_tokens": true,
+  "redirect_uris": ["https://agent.example/callback"]
+}
+```
+
+The document must return 200 application/json, fit 32 KiB and contain its exact
+fetch URL as client_id. This profile requires explicit public authentication and
+both grant types, defaults response_types to code and application_type to web,
+and always binds credentials to DPoP. Shared secrets, key metadata,
+private_key_jwt and software statements are rejected here; registered confidential
+clients retain the existing non-CIMD capability. Unknown ordinary metadata is
+ignored and never triggers logo, client_uri or other secondary fetching.
+
+The URL has a 2048-byte limit, a canonical ASCII DNS host, HTTPS and a path;
+queries, fragments, userinfo, literal IPs, decoded dot paths and non-default ports
+are refused. Explicit :443 is supported but remains a distinct client ID.
+No redirects, environment proxy or local-development network exception is used.
+DNS and actual connection addresses must pass the public egress policy.
+
+Default web callbacks must share the document's HTTPS origin. For reviewed
+cross-origin or native callbacks, add an exact exception to redirect_approvals:
+
+```json
+{
+  "client_id": "https://agent.example/oauth-client.json",
+  "redirect_uris": ["com.example.agent:/callback"]
+}
+```
+
+The client must still be permitted by mode/host/exact-ID admission, declare the
+appropriate application_type and obey the existing callback grammar. Native
+loopback registrations retain the documented runtime-port exception. Consent
+shows the metadata host and actual callback, separately from the self-declared
+name; host control does not establish publisher reputation.
+
+Validated metadata is shared across replicas in PostgreSQL. Cache-Control,
+Age/Date/Expires, no-cache, no-store/private and conditional validators are
+honored with a five-minute maximum and no heuristic freshness. No-store/private
+purge the reusable document, validators and freshness. Accepted registry
+configuration and immutable credential correlations remain application security
+state; this is not a promise to erase those records. No-cache revalidates every
+use while retaining a validated representation for conditional requests. A 304
+is accepted only for a stored validated representation with a sent validator;
+unsolicited 304, all redirects, bad/mismatched documents and stale fallback fail.
+Fetch errors purge reusable cached data and never use the old HTTP entry to admit
+new authorization. Existing tokens remain subject to their accepted authority,
+policy and revocation; a transient fetch outage alone does not revoke them.
+
+Presentation, approval, denial redirect and code/refresh redemption revalidate
+even a still-fresh cache. The accepted fingerprint and monotonic revision stay
+pinned through PAR, consent, codes, refresh credentials and issuance records.
+A changed and later restored document cannot revive earlier credentials.
+Old tokens fail authoritative online status after accepted metadata/policy changes.
+Only validated results commit; stale replica fetches and policy races fail.
+All attempts share a 600/minute tenant budget and a cumulative registration quota.
+See [CIMD recovery/errors](error-handling.md#p3-cimd-resolution).
+
+The local evidence combines a synthetic public metadata port with real
+PostgreSQL/OpenBao/protocol flows, plus separate constrained HTTP/cache parsing
+fixtures. It does not claim browser, MCP, confidential CIMD or external
+certification coverage. No dependency/tool/license change is introduced.

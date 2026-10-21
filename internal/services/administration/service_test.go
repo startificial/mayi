@@ -106,7 +106,9 @@ func TestEveryManagementOperationAuthorizesBeforeProtectedAccess(t *testing.T) {
 			e9 := s.ProvisionTenant(context.Background(), actor, scope, 1)
 			e10 := s.RegisterObjectProfile(context.Background(), actor, scope, "api", resources.ObjectProfileSpec{})
 			_, e11 := s.ObjectProfile(context.Background(), actor, scope, "api", "https://api.example/types/workflow/v1")
-			for _, err := range []error{e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11} {
+			_, e12 := s.MetadataPolicy(context.Background(), actor, scope)
+			_, e13 := s.SetMetadataPolicy(context.Background(), actor, scope, clients.MetadataPolicy{})
+			for _, err := range []error{e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13} {
 				if !errors.Is(err, ErrDenied) {
 					t.Fatal("unauthorized operation did not deny")
 				}
@@ -153,3 +155,14 @@ func (f *fake) SetRegistrationPolicy(_ context.Context, p clients.RegistrationPo
 }
 func (f *fake) DynamicClientCount(context.Context) (int, error) { return f.dynamic, nil }
 func (f *fake) MarkDynamicClient(context.Context, string) error { f.dynamic++; return nil }
+
+func (f *fake) MetadataPolicy(context.Context) (clients.MetadataPolicy, error) {
+	return clients.DefaultMetadataPolicy(), nil
+}
+func (f *fake) SetMetadataPolicy(context.Context, clients.MetadataPolicy) error { return nil }
+func (f *fake) MetadataState(context.Context, string) (MetadataState, error) {
+	return MetadataState{}, nil
+}
+func (f *fake) MetadataClientCount(context.Context) (int, error)          { return 0, nil }
+func (f *fake) SaveMetadata(context.Context, uint64, MetadataState) error { return nil }
+func (f *fake) PurgeMetadataCache(context.Context, string, uint64) error  { return nil }

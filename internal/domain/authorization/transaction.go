@@ -23,6 +23,7 @@ const Denied = "denied"
 // Request preserves the client's exact redirect and permission ceiling. S256 is
 // the only accepted PKCE method; adapters must reject other methods before mapping.
 type Request struct {
+	ClientMetadataDigest                                                        string
 	OIDC, OfflineAccess                                                         bool
 	Nonce                                                                       string
 	TenantIssuer                                                                grants.Scope
@@ -32,6 +33,9 @@ type Request struct {
 }
 
 func (r Request) Valid() bool {
+	if r.ClientMetadataDigest != "" && !clients.ValidMetadataDigest(r.ClientMetadataDigest) {
+		return false
+	}
 	if r.OIDC && (len(r.Nonce) < 16 || len(r.Nonce) > 256) || !r.OIDC && r.Nonce != "" {
 		return false
 	}
@@ -41,7 +45,7 @@ func (r Request) Valid() bool {
 		}
 	}
 
-	if !r.TenantIssuer.Valid() || !resources.ValidID(r.ClientID) || !clients.ValidApplicationRedirect("native", r.RedirectURI) || !resources.ValidURI(r.ResourceURI) || !digestValue(r.PKCEChallenge) || r.BindingThumbprint != "" && !digestValue(r.BindingThumbprint) || len(r.State) > 1024 || !grants.ValidScopes(r.PermissionScopes) || len(r.PermissionScopes) == 0 {
+	if !r.TenantIssuer.Valid() || !clients.ValidClientID(r.ClientID) || !clients.ValidApplicationRedirect("native", r.RedirectURI) || !resources.ValidURI(r.ResourceURI) || !digestValue(r.PKCEChallenge) || r.BindingThumbprint != "" && !digestValue(r.BindingThumbprint) || len(r.State) > 1024 || !grants.ValidScopes(r.PermissionScopes) || len(r.PermissionScopes) == 0 {
 		return false
 	}
 	for _, c := range r.State {
@@ -89,7 +93,7 @@ func (r Request) MatchesObjectRegistration(current Registration) bool {
 }
 
 func (r Request) matchesRegistration(current Registration) bool {
-	if !r.Valid() || !current.Client.Valid() || !current.Resource.Valid() || !current.Policy.Valid() || !current.Client.Enabled || current.Client.ID != r.ClientID || current.Resource.URI != r.ResourceURI || !current.Client.AllowsRedirect(r.RedirectURI) || !slices.Contains(current.Client.Resources, current.Resource.ID) {
+	if !r.PinnedMetadata() || r.ClientMetadataDigest != current.Client.MetadataDigest || !r.Valid() || !current.Client.Valid() || !current.Resource.Valid() || !current.Policy.Valid() || !current.Client.Enabled || current.Client.ID != r.ClientID || current.Resource.URI != r.ResourceURI || !current.Client.AllowsRedirect(r.RedirectURI) || !slices.Contains(current.Client.Resources, current.Resource.ID) {
 		return false
 	}
 	if (current.Policy.RequireBinding || current.Resource.RequireBinding || current.Client.RequireBinding) && r.BindingThumbprint == "" {
@@ -121,7 +125,7 @@ func New(spec Spec) (Transaction, error) {
 	if !ValidHandleHash(spec.PushedRequestHash) || spec.PushedRequestHash == spec.HandleHash || spec.PushedRequestHash == spec.CSRFHash {
 		return Transaction{}, ErrInvalid
 	}
-	if !resources.ValidID(spec.ID) || !ValidHandleHash(spec.HandleHash) || !ValidHandleHash(spec.BrowserBindingHash) || !ValidHandleHash(spec.CSRFHash) || !spec.Request.Valid() || spec.ConsentSessionHash != "" && !ValidHandleHash(spec.ConsentSessionHash) || spec.PolicyVersion == 0 || spec.CreatedAt.IsZero() || !spec.ExpiresAt.After(spec.CreatedAt) || spec.ExpiresAt.After(spec.CreatedAt.Add(5*time.Minute)) {
+	if !resources.ValidID(spec.ID) || !ValidHandleHash(spec.HandleHash) || !ValidHandleHash(spec.BrowserBindingHash) || !ValidHandleHash(spec.CSRFHash) || !spec.Request.Valid() || !spec.Request.PinnedMetadata() || spec.ConsentSessionHash != "" && !ValidHandleHash(spec.ConsentSessionHash) || spec.PolicyVersion == 0 || spec.CreatedAt.IsZero() || !spec.ExpiresAt.After(spec.CreatedAt) || spec.ExpiresAt.After(spec.CreatedAt.Add(5*time.Minute)) {
 		return Transaction{}, ErrInvalid
 	}
 	switch spec.Status {
@@ -199,4 +203,9 @@ func (t Transaction) BindSession(hash string, now time.Time) (Transaction, error
 	}
 	s.ConsentSessionHash = hash
 	return New(s)
+}
+
+func (r Request) PinnedMetadata() bool {
+	_, url := clients.MetadataURL(r.ClientID)
+	return url && clients.ValidMetadataDigest(r.ClientMetadataDigest) || !url && r.ClientMetadataDigest == ""
 }

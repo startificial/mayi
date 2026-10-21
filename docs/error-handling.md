@@ -195,3 +195,31 @@ is revoked; it is not a registration-management token. Rotate/revoke across ever
 replica. Registry changes and their audit/outbox record commit atomically; admission
 budgets commit separately. Open/admin-only changes affect future registrations,
 so revoke existing grants separately when a current client's access must stop.
+
+
+## P3 CIMD resolution
+
+CIMD uses the existing PAR/token and browser error formats; no new public metadata
+fetch endpoint or raw upstream diagnostic is exposed. Host admission precedes
+cache/network access. Required metadata failure never redirects to an untrusted
+client or returns a credential. The admin policy endpoint uses the local catalog.
+
+| Situation | Result | Recovery |
+| --- | --- | --- |
+| Invalid URL, forbidden host/exact ID, invalid document or unsupported public profile at client authentication | 401 invalid_client at PAR/token | Correct the exact identifier/document or obtain administrator approval. No client state/redirect is echoed. |
+| Fetch/DNS/TLS/dependency/cache/admission/audit unavailable | 503 temporarily_unavailable at PAR/token; local browser unavailable response | Restore the dependency. Do not automatically replay codes or refresh tokens after an ambiguous response. |
+| Changed digest/policy at presentation or consent decision | Local 403 forbidden; no code or redirect | Start new PAR/login/consent against the current metadata. |
+| Changed metadata at code/refresh redemption | 400 invalid_grant; credential not consumed by this rejection | Restart authorization. Never alter the original callback or retry the same proof JWT. |
+| Accepted metadata or configured policy changes after issuance | Existing token becomes inactive at authoritative online status | Start new authorization; restore of an old document does not revive old credentials. |
+| Expired/no-cache/no-store cache entry | Revalidate; never fall back to stale data on failure | Publish a valid bounded public HTTPS document; check egress and cache headers. |
+| CIMD policy update has a stale version or conflicts with open public DCR | Admin 409 conflict | Read both policies, close DCR before restrictive modes, then submit the current version. |
+| Attempt to open DCR under configured host/admin-only policy | Admin 403 forbidden | Keep DCR closed or explicitly change CIMD admission to any before opting into DCR. |
+
+Each policy version is a deliberate security change for CIMD clients. When
+changing allowed vocabulary, revoke old grants before reconnecting if their
+immutable/incremental ceiling is no longer supported. A network failure does not
+refund request budget or imply that a one-use token operation rolled back. HTTP
+no-store removes reusable cached metadata, not accepted application security
+records, grants or audit. Invalid/error responses are never cached. Authentication
+and consent errors never include document bodies, URLs containing rejected data,
+private keys, raw SQL or credentials.

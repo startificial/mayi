@@ -34,7 +34,7 @@ type Revision struct{ spec RevisionSpec }
 // ValidReferences validates the grant's identity tuple independently of a
 // permission ceiling or lifetime. Reference projections need no synthetic grant.
 func (spec RevisionSpec) ValidReferences() bool {
-	if !spec.Scope.Valid() || !validID(spec.GrantID) || spec.Number == 0 || !validID(spec.ClientID) || !validID(spec.Subject) || spec.Resource == "" || len(spec.Resource) > 2048 {
+	if !spec.Scope.Valid() || !validID(spec.GrantID) || spec.Number == 0 || !validClientReference(spec.ClientID) || !validID(spec.Subject) || spec.Resource == "" || len(spec.Resource) > 2048 {
 		return false
 	}
 	switch spec.PrincipalType {
@@ -163,4 +163,18 @@ func (r Revision) Extend(request RevisionSpec) (Revision, error) {
 	request.Scopes = scopes
 	request.ObjectCeiling = objects
 	return NewRevision(request)
+}
+
+// Client references may be HTTPS CIMD identities; the registry owns identity
+// grammar. Other grant/subject references retain their existing 256-byte bound.
+func validClientReference(s string) bool {
+	if s == "" || len(s) > 2048 {
+		return false
+	}
+	for _, c := range s {
+		if c <= 0x20 || c >= 0x7f {
+			return false
+		}
+	}
+	return true
 }

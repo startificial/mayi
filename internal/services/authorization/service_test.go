@@ -248,3 +248,16 @@ func (m *material) NewCodeMaterial(ctx context.Context, _ grants.Scope) (authori
 func (s *store) CurrentApproval(context.Context, domain.Transaction, time.Time) (*grants.Revision, error) {
 	return nil, nil
 }
+
+func TestCIMDPushWithoutResolverCannotUseCallerSuppliedMetadataDigest(t *testing.T) {
+	svc, s, _, m, request, _ := setup(t)
+	request.ClientID = "https://client.example/metadata.json"
+	request.ClientMetadataDigest = strings.Repeat("a", 64)
+	runs, entropy := s.runs, m.next
+	if _, err := svc.Push(context.Background(), request); !errors.Is(err, authorization.ErrDenied) {
+		t.Fatal("caller-supplied metadata bypassed resolution", err)
+	}
+	if s.runs != runs || m.next != entropy {
+		t.Fatal("unresolved metadata reached storage or entropy")
+	}
+}

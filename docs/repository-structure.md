@@ -219,3 +219,10 @@ adapter translates bounded RFC 7591 metadata. The existing PostgreSQL adapter
 implements policy/quota/audit consistency and the crypto adapter supplies
 registration-only initial-access verification and random IDs. See
 [ADR 0028](adr/0028-public-dynamic-client-registration.md).
+
+P3 CIMD remains in the registry capability in `services/administration`, sharing
+client creation rules and the tenant unit of work. `domain/clients` owns exact
+metadata identity, host/callback admission and fingerprints. Authentication,
+authorization and tokens consume narrow resolution ports; `outbound/egress`
+fetches/parses and PostgreSQL coordinates cache generations, accepted revisions
+and credential correlations. See [ADR 0029](adr/0029-cimd-resolution-and-authority-correlation.md).

@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	domain "github.com/startificial/mayi/internal/domain/authorization"
+	"github.com/startificial/mayi/internal/domain/clients"
 	"github.com/startificial/mayi/internal/domain/grants"
 	"github.com/startificial/mayi/internal/domain/resources"
 	"github.com/startificial/mayi/internal/services/authorization"
@@ -81,7 +82,7 @@ func (a *ResourceConsent) Check(ctx context.Context) error {
 }
 
 func (a *ResourceConsent) WithObjectConsent(ctx context.Context, q authorization.ObjectConsentQuery, fn func(context.Context, domain.ObjectConsentProjection) error) error {
-	if fn == nil || !q.Ceiling.BoundTo(q.TenantIssuer, q.Ceiling.Snapshot().Resource) || len(q.Ceiling.Snapshot().Details) == 0 || !grants.ValidUserSubject(q.Subject) || !resources.ValidID(q.ClientID) || !domain.ValidHandleHash(q.AuthorizationHash) {
+	if fn == nil || !q.Ceiling.BoundTo(q.TenantIssuer, q.Ceiling.Snapshot().Resource) || len(q.Ceiling.Snapshot().Details) == 0 || !grants.ValidUserSubject(q.Subject) || !clients.ValidClientID(q.ClientID) || !domain.ValidHandleHash(q.AuthorizationHash) {
 		return authorization.ErrDenied
 	}
 	for _, owner := range a.owners {

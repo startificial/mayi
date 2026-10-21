@@ -1,7 +1,7 @@
 {
   "version": 1,
   "phase": "P3",
-  "profile": "native-resource-discovery-es256-dpop-and-public-dcr-preview",
+  "profile": "native-resource-discovery-dpop-public-dcr-and-cimd-preview",
   "certified": false,
   "required_commands": [
     "go run ./tools/checks",
@@ -57,6 +57,25 @@
         "2",
         "3.1",
         "3.2"
+      ]
+    },
+    {
+      "id": "cimd",
+      "revision": "draft-ietf-oauth-client-id-metadata-document-02",
+      "sections": [
+        "3",
+        "4",
+        "4.1",
+        "4.2",
+        "5",
+        "5.1",
+        "5.2",
+        "6",
+        "7.1",
+        "8.1",
+        "8.4",
+        "8.6",
+        "8.7"
       ]
     }
   ],
@@ -209,6 +228,85 @@
         {
           "path": "tests/integration/browser_test.go",
           "test": "TestP2ServerMountsConfiguredBrowserRoutes"
+        }
+      ]
+    },
+    {
+      "capability": "public-cimd-resolution-caching-and-host-policy",
+      "requirements": [
+        "CLI-1",
+        "CLI-2",
+        "CLI-3",
+        "CLI-14"
+      ],
+      "checks": [
+        {
+          "path": "internal/domain/clients/metadata_test.go",
+          "test": "TestCIMDIdentityAndHostAdmissionAreExact"
+        },
+        {
+          "path": "internal/domain/clients/metadata_test.go",
+          "test": "TestCIMDRedirectExceptionsAndDigestPreserveAuthority"
+        },
+        {
+          "path": "internal/services/administration/metadata_test.go",
+          "test": "TestCIMDAdmissionPrecedesCacheAndNetworkAccess"
+        },
+        {
+          "path": "internal/services/administration/metadata_test.go",
+          "test": "TestCIMDCacheRevalidationNoStoreAndFailureNeverWidenTrust"
+        },
+        {
+          "path": "internal/services/administration/metadata_test.go",
+          "test": "TestCIMDResolutionCannotCommitAcrossPolicyOrReplicaChanges"
+        },
+        {
+          "path": "internal/adapters/outbound/egress/metadata_test.go",
+          "test": "TestCIMDTransportParsingCachingAndConditionalRequests"
+        },
+        {
+          "path": "internal/adapters/outbound/egress/metadata_test.go",
+          "test": "TestCIMDRejectsAmbiguousPrivateAndOversizedMetadata"
+        },
+        {
+          "path": "internal/services/authorization/service_test.go",
+          "test": "TestCIMDPushWithoutResolverCannotUseCallerSuppliedMetadataDigest"
+        },
+        {
+          "path": "tests/contract/issuance_test.go",
+          "test": "TestCIMDRedemptionWithoutResolutionCannotReachProtectedState"
+        },
+        {
+          "path": "internal/adapters/inbound/web/consent_test.go",
+          "test": "TestConsentDistinguishesMetadataHostFromPublisherName"
+        },
+        {
+          "path": "tests/integration/p3_metadata_test.go",
+          "test": "TestP3CIMDUnknownURLClientCachesAndCompletesLiveAuthorization"
+        },
+        {
+          "path": "tests/integration/p3_metadata_test.go",
+          "test": "TestP3CIMDChangesBeforeConsentOrRedemptionFailWithoutConsumingCode"
+        },
+        {
+          "path": "tests/integration/p3_metadata_test.go",
+          "test": "TestP3CIMDNoStoreFailureAndPolicyCutoffAreShared"
+        },
+        {
+          "path": "tests/integration/p3_metadata_test.go",
+          "test": "TestP3CIMDSlowResponsesCannotOverwriteAnotherReplicaOrPolicy"
+        },
+        {
+          "path": "tests/integration/p3_metadata_test.go",
+          "test": "TestP3CIMDPolicyModesAuditRollbackAndDCRAdmission"
+        },
+        {
+          "path": "tests/integration/p3_metadata_test.go",
+          "test": "TestP3CIMDLongURLAndRARTypeRetainExactIdentity"
+        },
+        {
+          "path": "tests/integration/p3_metadata_test.go",
+          "test": "TestP3CIMDPersistenceRejectsCounterfeitMetadataPin"
         }
       ]
     }

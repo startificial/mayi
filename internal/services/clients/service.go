@@ -15,6 +15,7 @@ var ErrDenied = errors.New("client authentication denied")
 var ErrUnavailable = errors.New("client authentication unavailable")
 
 type Service struct {
+	metadata   ClientMetadataResolver
 	store      Store
 	clock      Clock
 	assertions AssertionVerifier
@@ -35,11 +36,15 @@ type Operator struct {
 	Permissions []string
 }
 
-func New(store Store, c Clock, a AssertionVerifier, secrets Secrets, scope grants.Scope, admission AuthenticationAdmission) (*Service, error) {
-	if admission == nil || store == nil || c == nil || a == nil || secrets == nil || !scope.Valid() {
+func New(store Store, c Clock, a AssertionVerifier, secrets Secrets, scope grants.Scope, admission AuthenticationAdmission, metadata ...ClientMetadataResolver) (*Service, error) {
+	if len(metadata) > 1 || len(metadata) == 1 && metadata[0] == nil || admission == nil || store == nil || c == nil || a == nil || secrets == nil || !scope.Valid() {
 		return nil, ErrUnavailable
 	}
-	return &Service{store, c, a, secrets, scope, admission}, nil
+	s := &Service{store: store, clock: c, assertions: a, secrets: secrets, scope: scope, admission: admission}
+	if len(metadata) == 1 {
+		s.metadata = metadata[0]
+	}
+	return s, nil
 }
 func (s *Service) Authenticate(ctx context.Context, p Proof) (Principal, error) {
 	if !domain.ValidClientID(p.ClientID) || len(p.Secret) > 256 || len(p.Assertion) > 16384 || p.Method != "none" && p.Method != "client_secret_basic" && p.Method != "private_key_jwt" {
@@ -55,12 +60,29 @@ func (s *Service) Authenticate(ctx context.Context, p Proof) (Principal, error) 
 	if err := s.admission.Check(ctx, s.scope, operation, "client", "authentication:"+p.ClientID); err != nil {
 		return Principal{}, err
 	}
+	var resolved domain.Client
+	if _, cimd := domain.MetadataURL(p.ClientID); cimd {
+		if s.metadata == nil {
+			return Principal{}, ErrDenied
+		}
+		var err error
+		resolved, err = s.metadata.ResolveClient(ctx, s.scope, p.ClientID, false)
+		if err != nil {
+			if errors.Is(err, domain.ErrMetadataDenied) {
+				return Principal{}, ErrDenied
+			}
+			return Principal{}, ErrUnavailable
+		}
+	}
 	a, err := s.store.Authentication(ctx, s.scope, p.ClientID)
 	if err != nil {
 		if errors.Is(err, ErrDenied) {
 			return Principal{}, ErrDenied
 		}
 		return Principal{}, ErrUnavailable
+	}
+	if resolved.ID != "" && (a.Client.MetadataDigest != resolved.MetadataDigest || a.Client.MetadataPolicyVersion != resolved.MetadataPolicyVersion) {
+		return Principal{}, ErrDenied
 	}
 	method := a.Client.AuthMethod
 	if method == "" {
