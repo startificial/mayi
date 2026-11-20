@@ -8,19 +8,22 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
 // developmentStack reuses the exact reviewed service sources and private
 // lifecycle. The runtime gets scoped credentials; no dev root token is written
 // into the application environment. All data disappears when this process exits.
-func developmentStack(ctx context.Context, root, session, socket, address, pgdir string, env []string) error {
+func developmentStack(ctx context.Context, root, session, socket, address, pgdir string, env []string, port int) error {
 	if err := run(ctx, root, env, io.Discard, filepath.Join(pgdir, "psql"), "-h", socket, "-U", "mayi_test", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-c", `CREATE ROLE mayi_owner LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS; CREATE ROLE mayi_runtime LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS; GRANT CREATE ON DATABASE postgres TO mayi_owner`); err != nil {
 		return err
 	}
@@ -54,7 +57,10 @@ func developmentStack(ctx context.Context, root, session, socket, address, pgdir
 	var tenants []any
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
 	var environment strings.Builder
-	fmt.Fprintf(&environment, "export MAYI_DATABASE_URL=%s\nexport MAYI_MIGRATION_DATABASE_URL=%s\n", quote("host="+socket+" user=mayi_runtime dbname=postgres sslmode=disable"), quote("host="+socket+" user=mayi_owner dbname=postgres sslmode=disable"))
+	runtimeDSN := "host=" + socket + " user=mayi_runtime dbname=postgres sslmode=disable"
+	ownerDSN := "host=" + socket + " user=mayi_owner dbname=postgres sslmode=disable"
+	transitEnv := append([]string{}, env...)
+	fmt.Fprintf(&environment, "export MAYI_DATABASE_URL=%s\nexport MAYI_MIGRATION_DATABASE_URL=%s\n", quote(runtimeDSN), quote(ownerDSN))
 	for _, id := range []string{"demo", "demo2"} {
 		key := "mayi-" + id
 		if err := call("POST", "transit/keys/"+key, map[string]any{"type": "ecdsa-p256", "exportable": false, "allow_plaintext_backup": false}, nil); err != nil {
@@ -79,10 +85,15 @@ func developmentStack(ctx context.Context, root, session, socket, address, pgdir
 		admin := base64.RawURLEncoding.EncodeToString(entropy[:])
 		digest := sha256.Sum256([]byte(admin))
 		envName := "MAYI_" + strings.ToUpper(id) + "_TRANSIT_TOKEN"
+		transitEnv = append(transitEnv, envName+"="+token.Auth.Token)
 		fmt.Fprintf(&environment, "export %s=%s\nexport MAYI_%s_ADMIN_TOKEN=%s\n", envName, quote(token.Auth.Token), strings.ToUpper(id), quote(admin))
 		tenants = append(tenants, map[string]any{"id": id, "key_name": key, "key_versions": []int{1}, "initial_key_version": 1, "transit_token_env": envName, "administrators": []any{map[string]any{"id": "operator", "token_sha256": hex.EncodeToString(digest[:]), "permissions": []string{"policy:read", "policy:write", "resources:read", "resources:write", "clients:read", "clients:write", "keys:write"}}}})
 	}
-	config := map[string]any{"public_origin": "https://auth.localhost", "listen_address": "127.0.0.1:8080", "runtime_role": "mayi_runtime", "database_max_connections": 6, "allow_insecure_loopback": true, "transit_address": address, "tenants": tenants}
+	listen := "127.0.0.1:8080"
+	if port != 0 {
+		listen = fmt.Sprintf("127.0.0.1:%d", port)
+	}
+	config := map[string]any{"public_origin": "https://auth.localhost", "listen_address": listen, "runtime_role": "mayi_runtime", "database_max_connections": 6, "allow_insecure_loopback": true, "transit_address": address, "tenants": tenants}
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return err
@@ -95,7 +106,38 @@ func developmentStack(ctx context.Context, root, session, socket, address, pgdir
 	if err := os.WriteFile(envPath, []byte(environment.String()), 0600); err != nil {
 		return err
 	}
+	if port != 0 {
+		ownerEnv := append(append([]string{}, transitEnv...), "MAYI_MIGRATION_DATABASE_URL="+ownerDSN)
+		runtimeEnv := append(transitEnv, "MAYI_DATABASE_URL="+runtimeDSN)
+		return serveDevelopment(ctx, root, session, configPath, env, ownerEnv, runtimeEnv)
+	}
 	fmt.Printf("Isolated local stack ready; data is removed on exit. In another terminal:\nsource %s\ngo run ./cmd/mayi migrate -config %s\ngo run ./cmd/mayi provision -config %s -tenant demo\ngo run ./cmd/mayi provision -config %s -tenant demo2\nenv -u MAYI_MIGRATION_DATABASE_URL go run ./cmd/mayi serve -config %s\n", envPath, configPath, configPath, configPath, configPath)
 	<-ctx.Done()
 	return nil
+}
+
+func serveDevelopment(ctx context.Context, root, session, configPath string, buildEnv, ownerEnv, runtimeEnv []string) error {
+	binary := filepath.Join(session, "mayi")
+	if err := run(ctx, root, buildEnv, os.Stderr, "go", "build", "-mod=readonly", "-o", binary, "./cmd/mayi"); err != nil {
+		return err
+	}
+	if err := run(ctx, root, ownerEnv, os.Stderr, binary, "migrate", "-config", configPath); err != nil {
+		return err
+	}
+	for _, tenant := range []string{"demo", "demo2"} {
+		if err := run(ctx, root, ownerEnv, os.Stderr, binary, "provision", "-config", configPath, "-tenant", tenant); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("Isolated local stack configured. Development credentials are in %s/environment.sh\n", session)
+	server := exec.CommandContext(ctx, binary, "serve", "-config", configPath)
+	server.Dir, server.Env = root, runtimeEnv
+	server.Stdout, server.Stderr = os.Stdout, os.Stderr
+	server.Cancel = func() error { return server.Process.Signal(syscall.SIGTERM) }
+	server.WaitDelay = 10 * time.Second
+	err := server.Run()
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+	return err
 }

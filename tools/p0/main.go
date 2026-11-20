@@ -231,7 +231,12 @@ func main() {
 func mainRun() error {
 	cache := flag.String("cache", filepath.Join(os.TempDir(), "mayi-p0-services"), "private service build cache")
 	development := flag.Bool("development", false, "keep an isolated local PostgreSQL/Transit stack running until interrupted")
+	developmentPort := flag.Int("development-port", 0, "migrate, provision and serve Mayi on a loopback port in development mode")
+	prepare := flag.Bool("prepare", false, "build and cache the reviewed services without starting them")
 	flag.Parse()
+	if (*prepare && *development) || *developmentPort < 0 || *developmentPort > 65535 || (*developmentPort != 0 && !*development) {
+		return fmt.Errorf("choose prepare or development mode; a development port requires development mode and must be between 1 and 65535")
+	}
 	root, err := os.Getwd()
 	if err != nil {
 		return err
@@ -328,6 +333,9 @@ func mainRun() error {
 			return fmt.Errorf("%s: %w; log %s", a.Name, err, log.Name())
 		}
 	}
+	if *prepare {
+		return nil
+	}
 	session, err := os.MkdirTemp("/tmp", "mayi-p0-")
 	if err != nil {
 		return err
@@ -392,7 +400,7 @@ func mainRun() error {
 		return fmt.Errorf("OpenBao did not start; log %s", baolog.Name())
 	}
 	if *development {
-		return developmentStack(ctx, root, session, socket, url, pgdir, env)
+		return developmentStack(ctx, root, session, socket, url, pgdir, env, *developmentPort)
 	}
 	fmt.Println("Running real PostgreSQL and OpenBao integration tests")
 	testenv := make([]string, 0, len(env)+5)

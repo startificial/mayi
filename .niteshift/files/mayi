@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+
+# Go's toolchain selector downloads and verifies the version pinned in go.mod.
+# Niteshift provides the bootstrap Go distribution outside the default PATH.
+export PATH="$PATH:/usr/local/go/bin"
+go_version="$(awk '$1 == "go" { print $2; exit }' go.mod)"
+go_root="$(GOWORK=off GOTOOLCHAIN="go${go_version:?missing Go version in go.mod}" go env GOROOT)"
+export PATH="$go_root/bin:$PATH" GOTOOLCHAIN=local GOWORK=off GOFLAGS=-mod=readonly
+
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/mayi/niteshift"
+umask 077
+mkdir -p "$cache"
+case "${1:-}" in
+    prepare)
+        # These host build tools are the same platform prerequisites as Mayi CI.
+        for tool in gcc make perl bison flex; do
+            if ! command -v "$tool" >/dev/null; then
+                echo "Mayi needs the host PostgreSQL build prerequisite $tool. See docs/p0/protocol-spike.md." >&2
+                exit 1
+            fi
+        done
+        go mod download all
+        go build -o "$cache/p0" ./tools/p0
+        "$cache/p0" -cache "$cache/services" -prepare
+        CGO_ENABLED=0 go build -o /dev/null ./cmd/mayi
+        ;;
+    serve)
+        go build -o "$cache/p0" ./tools/p0
+        args=("$cache/p0" -cache "$cache/services" -development -development-port "${PORT:?Niteshift service port is required}")
+        # PostgreSQL rejects UID 0. Map the sandbox user within a Linux user
+        # namespace so the stack can still read the checkout and build cache.
+        if (( EUID == 0 )); then
+            exec unshare --map-user=nobody --map-group=nogroup "${args[@]}"
+        fi
+        exec "${args[@]}"
+        ;;
+    go)
+        shift
+        exec go "$@"
+        ;;
+    *)
+        echo "Usage: $0 prepare|serve|go" >&2
+        exit 2
+        ;;
+esac

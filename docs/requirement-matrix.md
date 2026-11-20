@@ -8,6 +8,8 @@ This matrix retains all 156 requirements in the [README](../README.md), their le
 
 The [P2 evidence manifest](../tests/conformance/p2-evidence.json) maps requirement groups to executable tests and exact standard revisions. Its CI test rejects missing source/test references and pin drift. The manifest is traceability, not a substitute for executing those tests: `go run ./tools/p0` supplies real PostgreSQL/OpenBao and the complete public protocol/BFF/SDK fixtures; ordinary `go test` skips those integration cases without the harness environment. CI also runs race, vet, formatting, architecture, license and error-contract checks.
 
+The [Niteshift development stack](p1-foundation.md#run-the-isolated-local-stack) uses the reviewed P0 builds. Sandbox verification confirmed that startup applied all 19 migrations, provisioned separate issuers and active keys for `demo` and `demo2`, and returned HTTP 200 for readiness and both discovery documents.
+
 The connected reference BFF and resource API prove read 123, deny 124/write before payload, current ACL removal, refresh rotation/replay and fresh revocation cutoff. Completion tests additionally cover finite budgets shared across replica instances, required PAR/options commits, explicit resource bindings, incremental revisions with frozen old-family ceilings, administered machine authority, connected usage and trusted audit correlation. Operator-owned resource authority requires one physical PostgreSQL database; browser certification, production operations, full OIDC/UserInfo/logout and iframe support retain later gates.
 
 ## CORE

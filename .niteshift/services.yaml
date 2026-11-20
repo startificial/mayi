@@ -1,0 +1,5 @@
+services:
+  - name: mayi
+    command: .niteshift/files/mayi serve
+    port: 18080
+    stopGracePeriod: 20s
