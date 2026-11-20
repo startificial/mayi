@@ -15,6 +15,8 @@ This builds the reviewed PostgreSQL/OpenBao source pins, creates a private dispo
 
 The server listens on `127.0.0.1:8080`. Local inspection endpoints are `/healthz`, `/readyz` and `/metrics`. Public issuer URLs remain HTTPS configuration values, even when inspecting local development over loopback HTTP. The development issuer is `https://auth.localhost/t/demo`.
 
+In Niteshift, setup caches the same reviewed service builds and the supervised `mayi` service migrates and provisions both demo tenants on startup. Use `/readyz` to check the API preview on port 18080. The issuer stays `https://auth.localhost/t/demo`. Each service restart creates a fresh database and fresh Transit keys. The sandbox host must provide the PostgreSQL build tools listed in the P0 report, including Bison and Flex. Run Go commands with the project's pinned toolchain using `.niteshift/files/mayi go`, for example `.niteshift/files/mayi go test -race ./...`.
+
 ## Bring an existing PostgreSQL database
 
 1. Make a copy of [the example configuration](../deploy/example.json) outside version control. Set a fixed canonical HTTPS public origin, a loopback listen address, the runtime role, connection budget, Transit address and explicit tenant/key configuration. Keep `allow_insecure_loopback` false for normal deployments.
